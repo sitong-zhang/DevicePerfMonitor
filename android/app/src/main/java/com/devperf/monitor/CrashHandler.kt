@@ -1,7 +1,7 @@
 package com.devperf.monitor
 
 import android.os.Build
-import java.io.File
+import android.util.Log
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.text.SimpleDateFormat
@@ -23,17 +23,24 @@ import java.util.Locale
 class CrashHandler private constructor(private val app: android.app.Application) :
     Thread.UncaughtExceptionHandler {
 
-    private val delegate = Thread.getDefaultUncaughtExceptionHandler()
-
     fun install() {
         Thread.setDefaultUncaughtExceptionHandler(this)
     }
 
     override fun uncaughtException(thread: Thread, ex: Throwable) {
-        val report = buildReport(thread, ex)
-        writeReport(report)
+        val report = runCatching { buildReport(thread, ex) }
+            .getOrDefault("崩溃报告生成失败（异常：${ex.javaClass.name}）")
+        // 先落盘：这是最可靠的一步。就算下面弹窗被系统拦掉，下次启动也能显示。
+        BootTrace.writeCrash(report)
+        // 再尝试立刻弹窗。Android 10+ 限制后台启动 Activity，这一步可能静默失败，
+        // 失败也没关系——报告已经在文件里，下次进 MainActivity 会显示。
         launchCrashActivity(report)
-        // 不调用 delegate.uncaughtException：避免进程立即被系统杀死，留出截图时间。
+        // 让进程干净退出，避免主线程已死、界面卡住不动。延迟一下，
+        // 保证 startActivity 的 binder 请求先发出去。
+        Thread {
+            runCatching { Thread.sleep(1200) }
+            runCatching { android.os.Process.killProcess(android.os.Process.myPid()) }
+        }.apply { isDaemon = true }.start()
     }
 
     private fun buildReport(thread: Thread, ex: Throwable): String {
@@ -67,27 +74,12 @@ class CrashHandler private constructor(private val app: android.app.Application)
         "${p.versionName} (${p.versionCode})"
     }.getOrDefault("unknown")
 
-    private fun writeReport(report: String) {
-        runCatching {
-            File(app.cacheDir, "crash_report.txt").writeText(report)
-            File(app.filesDir, "crash_pending.txt").writeText(report)
-        }
-    }
-
     private fun launchCrashActivity(report: String) {
         runCatching {
-            val intent = android.content.Intent(app, CrashActivity::class.java).apply {
-                addFlags(
-                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                            or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            or android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                )
-                putExtra(CrashActivity.EXTRA_REPORT, report)
-            }
-            app.startActivity(intent)
+            CrashActivity.showFromCrash(app, report)
         }.onFailure { e ->
-            // 拉起失败则回退系统默认处理，附上原因
-            delegate?.uncaughtException(Thread.currentThread(), e)
+            // 拉不起来就算了：报告已落盘，下次启动会展示。这里只记一行，避免二次崩溃。
+            Log.w("CrashHandler", "崩溃弹窗拉起失败（报告已保存，下次启动展示）", e)
         }
     }
 

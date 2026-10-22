@@ -20,8 +20,8 @@ import java.io.File
  * 不在 Application.onCreate 中直接启动前台服务——从后台进程启动 FGS 可能被系统拒绝；
  * 启动时机放在 MainActivity（前台上下文）与悬浮窗开关处，失败时降级为普通后台采集。
  *
- * 崩溃监测：在业务初始化前安装 [CrashHandler]，拦截任何未捕获异常并弹窗展示技术栈，
- * 方便用户截图反馈。
+ * 崩溃监测：在 attachBaseContext 里就装上（比 ContentProvider 和 onCreate 都早），
+ * 保证 ShizukuProvider 这类最早初始化的组件崩溃也能被记录。
  */
 class MonitorApp : Application() {
 
@@ -31,25 +31,46 @@ class MonitorApp : Application() {
     lateinit var metricsRepository: MetricsRepository
         private set
 
+    override fun attachBaseContext(base: Context?) {
+        super.attachBaseContext(base)
+        // 这里比 ContentProvider.onCreate 和 Application.onCreate 都早，
+        // 是最早能装崩溃钩子的地方。
+        runCatching {
+            BootTrace.beginProcess(this)
+            CrashHandler.install(this)
+        }.onFailure {
+            Log.w("MonitorApp", "崩溃监测器安装失败", it)
+        }
+        BootTrace.mark("进程启动 attachBaseContext")
+    }
+
     override fun onCreate() {
+        BootTrace.mark("Application.onCreate 开始")
         super.onCreate()
         // 崩溃展示进程（:crash）无需业务初始化，直接返回，避免重复初始化与递归崩溃
         if (isCrashProcess()) return
 
-        // 须在业务初始化前安装，才能捕获后续所有未捕获异常（含 Compose 合成崩溃）
-        CrashHandler.install(this)
-
-        settingsRepository = SettingsRepository(this)
-        metricsRepository = MetricsRepository(this, settingsRepository)
+        runCatching {
+            settingsRepository = SettingsRepository(this)
+            BootTrace.mark("SettingsRepository 就绪")
+            metricsRepository = MetricsRepository(this, settingsRepository)
+            BootTrace.mark("MetricsRepository 就绪")
+        }.onFailure {
+            BootTrace.mark("业务初始化失败: ${it.javaClass.simpleName}: ${it.message}")
+            throw it
+        }
 
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             runCatching {
                 val settings = settingsRepository.settings.first()
+                BootTrace.mark("设置读取完成")
                 if (settings.collectInBackground) {
                     CollectionService.start(this@MonitorApp)
+                    BootTrace.mark("后台采集已启动")
                 }
             }.onFailure { Log.w("MonitorApp", "自动启动采集失败（不影响使用）", it) }
         }
+        BootTrace.mark("Application.onCreate 结束")
     }
 
     companion object {

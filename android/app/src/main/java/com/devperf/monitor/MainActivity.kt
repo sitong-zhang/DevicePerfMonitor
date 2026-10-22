@@ -50,10 +50,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        BootTrace.mark("MainActivity.onCreate")
+
+        // 上次启动没走完（崩溃被记录，或崩溃时弹窗被系统拦掉）→ 这次前台补展示报告。
+        // 放在 setContent 之前，保证崩溃报告一定先被看到。
+        BootTrace.pendingReport()?.let { report ->
+            BootTrace.clearPending()
+            runCatching { CrashActivity.showPending(this, report) }
+                .onFailure { Log.w("MainActivity", "崩溃报告展示失败", it) }
+        }
 
         maybeRequestNotifications()
         runCatching { Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
 
+        BootTrace.mark("setContent 开始")
         setContent {
             val settings by viewModel.settings.collectAsState()
             LiquidGlassTheme(settings.themeMode) {
@@ -76,6 +86,8 @@ class MainActivity : ComponentActivity() {
         if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this)) {
             OverlayService.start(this)
         }
+        // 界面已经可见 → 本次启动算成功，清掉崩溃残留与轨迹
+        BootTrace.markBooted()
     }
 
     override fun onDestroy() {

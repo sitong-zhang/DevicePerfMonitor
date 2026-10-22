@@ -14,7 +14,7 @@
 
 ## 版本
 
-当前 **1.0.1**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.2**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -28,7 +28,9 @@
 
 ### 更新记录
 
-**1.0.1**：修掉 Android 上一打开就闪退的问题——内存占用率算出来是 `Double`，泛型擦除后被当成 `Float` 送进 UI，渲染时强转抛 `ClassCastException`（华为 Android 10 上必现）。顺手给 `MetricsRepository` 的取值函数加了实际值类型校验，以后再有采集器写错类型只会降级显示，不会崩。双端都加了崩溃监测器：任何崩溃立刻弹出完整调用栈，能复制、能截图。
+**1.0.2**：修掉 Android 10/11/12 上打开即闪退的真正原因——液态玻璃的实时模糊走 `android.graphics.RuntimeShader`（AGSL），这个类是 **API 33** 才有的，低版本上绘制期直接抛 `NoClassDefFoundError`。现在低于 Android 13 自动切到降级渲染（真实半透明 + 自绘高光/描边/内阴影/噪点，不是假模糊）。另外崩溃监测改成"先落盘、下次启动必弹"：Android 10 起系统限制后台启动 Activity，崩溃当下弹的窗可能被静默拦掉，所以报告会写进文件，下次进主界面（前台）一定显示，并附上一次启动的逐步轨迹，用来定位"死在哪一步"。
+
+**1.0.1**：修掉内存占用率算出来是 `Double`、泛型擦除后被当成 `Float` 送进 UI 导致的 `ClassCastException`。顺手给 `MetricsRepository` 的取值函数加了实际值类型校验，以后再有采集器写错类型只会降级显示，不会崩。
 
 **1.0.0**：首个版本。
 
@@ -56,7 +58,9 @@
 
 **崩溃监测**（双端）
 
-任何没被 catch 的异常都会立刻弹出全屏报告：异常类型、完整调用栈、机型系统版本、全部线程栈，带复制按钮。启动阶段就崩的也能抓到——Android 侧在独立的 `:crash` 进程里用纯 View 画报告，绕开主界面的 Compose 渲染，不会陷入"崩了又崩"；iOS 侧 NSException 实时弹 UIKit 窗口，信号类崩溃写文件、下次启动展示。代码在 `android/.../CrashHandler.kt`、`CrashActivity.kt` 和 `ios/.../CrashReporter.swift`。
+任何没被 catch 的异常都会弹出全屏报告：异常类型、完整调用栈、机型系统版本、全部线程栈，带复制按钮。Android 侧在独立的 `:crash` 进程里用纯 View 画报告，绕开主界面的 Compose 渲染，不会陷入"崩了又崩"；iOS 侧 NSException 实时弹 UIKit 窗口，信号类崩溃写文件、下次启动展示。代码在 `android/.../CrashHandler.kt`、`CrashActivity.kt`、`BootTrace.kt` 和 `ios/.../CrashReporter.swift`。
+
+有一点要说明：Android 10 起系统限制了"后台启动 Activity"，如果崩溃发生在还没有可见界面的时候，当场弹的窗会被静默拦掉。所以 Android 侧是双保险——报告先写进 `filesDir`，下次启动进 `MainActivity`（前台，允许弹窗）时一定补展示，并附带上次启动的逐步轨迹（最后一行就是卡住/崩溃的位置）。这样即使崩溃发生在监测器安装之前、或者是 Java 层捕获不到的 native 崩溃，也能看到"死在哪一步"。
 
 ## 构建
 
@@ -71,7 +75,7 @@ cd android
 
 要发布签名就复制 `android/keystore.properties.template` 为 `keystore.properties`，按模板里的 keytool 命令生成密钥再填进去。这个文件已被 gitignore，不会入库。没配的话 release 包会自动用 debug 签名，构建日志里会说明，这是有意的降级。
 
-已在 Linux 环境验证通过：`:app:assembleDebug`、`:app:assembleRelease`、`:app:lintVitalRelease` 全部成功，release APK 3.28 MB。`releases/` 目录下会放打好的包，可以直接装，但这个目录不入库，正式分发走 GitHub Release。
+已在 Linux 环境验证通过：`:app:assembleDebug`、`:app:assembleRelease`、`:app:lintVitalRelease` 全部成功，release APK 约 3.3 MB。`releases/` 目录下会放打好的包，可以直接装，但这个目录不入库，正式分发走 GitHub Release。
 
 ### iOS
 
@@ -208,6 +212,7 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 1. 电池健康百分比没有公开接口，只展示 EXTRA_HEALTH 的粗粒度档位。
 2. 后台应用内存、各核心频率、GPU 节点要 root 或 Shizuku。普通 App 读不了，这是 Android 8 之后的沙箱规定。
 3. Shizuku 13.1.5 把 `newProcess` 私有化了，改走公开 AIDL。
+4. **Android 12（API 32）及以下没有真玻璃**：backdrop 的模糊走 `RuntimeShader`（AGSL），这是 API 33 才有的类，低版本上调用会在绘制期直接崩。所以低于 Android 13 一律走降级渲染——真实半透明底 + 自绘高光渐变 + 描边 + 内阴影 + 噪点，观感接近但不是真实背景模糊。判定在 `ui/kit/LiquidGlass.kt` 的 `supportsLiquidGlass`。
 
 ## design-tokens.json
 

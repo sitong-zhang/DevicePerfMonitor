@@ -27,6 +27,33 @@ class CrashActivity : Activity() {
 
     companion object {
         const val EXTRA_REPORT = "extra_report"
+
+        /** true = 崩溃当下弹出的（主进程已死，关闭时顺手杀主进程）；false = 下次启动补展示。 */
+        const val EXTRA_KILL_APP = "extra_kill_app"
+
+        /** 崩溃当下调用：独立 task，覆盖当前界面。 */
+        fun showFromCrash(context: Context, report: String) {
+            val intent = Intent(context, CrashActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                )
+                putExtra(EXTRA_REPORT, report)
+                putExtra(EXTRA_KILL_APP, true)
+            }
+            context.startActivity(intent)
+        }
+
+        /** 下次启动补展示：不建新 task、不杀主进程，关掉就回到正常界面。 */
+        fun showPending(context: Context, report: String) {
+            val intent = Intent(context, CrashActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(EXTRA_REPORT, report)
+                putExtra(EXTRA_KILL_APP, false)
+            }
+            context.startActivity(intent)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,8 +61,8 @@ class CrashActivity : Activity() {
 
         val report = intent?.getStringExtra(EXTRA_REPORT)
             ?: runCatching { filesDir.resolve("crash_pending.txt").readText() }.getOrNull()
-            ?: runCatching { cacheDir.resolve("crash_report.txt").readText() }.getOrNull()
-            ?: "（未能读取崩溃详情，请查看 logcat）"
+            ?: "（未能读取崩溃详情）"
+        val killApp = intent?.getBooleanExtra(EXTRA_KILL_APP, true) ?: true
 
         val textView = TextView(this).apply {
             text = report
@@ -59,8 +86,10 @@ class CrashActivity : Activity() {
             }
         }
         val closeBtn = Button(this).apply {
-            text = "关闭应用"
-            setOnClickListener { killApp() }
+            text = if (killApp) "关闭应用" else "关闭，继续使用"
+            setOnClickListener {
+                if (killApp) killApp() else finish()
+            }
         }
 
         val buttonBar = LinearLayout(this).apply {
@@ -71,7 +100,7 @@ class CrashActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "应用崩溃了（Crash）"
+            text = if (killApp) "应用崩溃了（Crash）" else "上次启动崩溃过（补展示报告）"
             textSize = 18f
             setTextColor(0xFFF2B8B5.toInt())
             gravity = Gravity.CENTER

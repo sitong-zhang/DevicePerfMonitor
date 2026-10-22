@@ -1,5 +1,6 @@
 package com.devperf.monitor.ui.kit
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -66,9 +67,21 @@ import com.devperf.monitor.ui.theme.LocalTokenColors
 /** 当前作用域内的 Backdrop 提供者（由 [LiquidGlassScaffold] 提供；悬浮窗中为 null → 走降级路径）。 */
 val LocalBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 
-/** 创建并记住一个 [LayerBackdrop]（主应用根容器使用）。 */
+/**
+ * 是否支持真实液态玻璃。
+ *
+ * backdrop 库的模糊走 `android.graphics.RuntimeShader`（AGSL），这个类是 **API 33** 才有的。
+ * 在 API 32 及以下调用它会在绘制期直接抛 NoClassDefFoundError —— 而且发生在合成/绘制线程，
+ * 表现就是"打开即闪退"。所以低于 33 一律走降级路径 [drawDegradedGlass]，
+ * 视觉上是真实半透明 + 自绘高光/描边/内阴影/噪点，不是假模糊。
+ */
+val supportsLiquidGlass: Boolean
+    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+/** 创建并记住一个 [LayerBackdrop]；不支持实时模糊时返回 null（走降级路径）。 */
 @Composable
-fun rememberLiquidGlassBackdrop(): LayerBackdrop = rememberLayerBackdrop()
+fun rememberLiquidGlassBackdrop(): LayerBackdrop? =
+    if (supportsLiquidGlass) rememberLayerBackdrop() else null
 
 /**
  * 液态玻璃脚手架：录制背景内容，并向子树提供 [LocalBackdrop]。
@@ -81,14 +94,14 @@ fun rememberLiquidGlassBackdrop(): LayerBackdrop = rememberLayerBackdrop()
 fun LiquidGlassScaffold(
     modifier: Modifier = Modifier,
     background: @Composable BoxScope.() -> Unit = { DefaultGlassBackground() },
-    content: @Composable BoxScope.(backdrop: LayerBackdrop) -> Unit,
+    content: @Composable BoxScope.(backdrop: LayerBackdrop?) -> Unit,
 ) {
     val backdrop = rememberLiquidGlassBackdrop()
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(LocalTokenColors.current.background)
-            .layerBackdrop(backdrop),
+            .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
     ) {
         background()
         CompositionLocalProvider(LocalBackdrop provides backdrop) {
