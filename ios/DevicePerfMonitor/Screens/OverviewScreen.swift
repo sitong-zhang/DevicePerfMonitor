@@ -65,7 +65,7 @@ struct OverviewScreen: View {
                     GlassSectionTitle(text: category.rawValue)
                     GlassPanel {
                         VStack(spacing: DesignTokens.Spacing.s8) {
-                            ForEach(metrics, id: \.id) { id in
+                            ForEach(metrics, id: \.self) { id in
                                 MetricRow(id: id, metric: viewModel.snapshot.metricOf(id), tickMs: viewModel.tickMs)
                             }
                         }
