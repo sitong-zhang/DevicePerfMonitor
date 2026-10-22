@@ -26,18 +26,19 @@ final class CrashReporter {
     // MARK: - 安装
 
     func install() {
-        // 1) NSException（多数逻辑崩溃）
+        // 注意：传给 C 函数指针（@convention(c)）的闭包不能捕获动态 Self 类型，
+        // 因此这里统一用具体类型名 CrashReporter 引用单例与静态方法。
         NSSetUncaughtExceptionHandler { exception in
-            let report = Self.format(exception: exception)
-            Self.write(report, to: Self.shared.pendingReportPath)
-            Self.shared.presentCrashWindow(report: report)
+            let report = CrashReporter.format(exception: exception)
+            CrashReporter.write(report, to: CrashReporter.shared.pendingReportPath)
+            CrashReporter.shared.presentCrashWindow(report: report)
         }
 
-        // 2) 底层信号（Swift 运行时崩溃多走这条路）
+        // 底层信号（Swift 运行时崩溃多走这条路）
         for sig in [SIGABRT, SIGILL, SIGSEGV, SIGBUS, SIGTRAP, SIGFPE] {
             signal(sig) { s in
-                let report = Self.formatSignal(s)
-                Self.write(report, to: Self.shared.pendingReportPath)
+                let report = CrashReporter.formatSignal(s)
+                CrashReporter.write(report, to: CrashReporter.shared.pendingReportPath)
                 // 恢复默认处理并重新触发，让系统生成真实崩溃报告
                 signal(s, SIG_DFL)
                 raise(s)
