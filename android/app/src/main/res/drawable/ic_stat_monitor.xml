@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通知栏状态图标：纯白（系统会给通知小图标着色），24dp。
+  与启动图标同构的脉冲线（性能监控语义）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,13 L7,13 L9,6 L12,18 L14,10 L16,13 L21,13 L21,15 L15,15 L14.2,12.4 L12,21 L9.8,8.6 L8,15 L3,15 Z" />
+</vector>

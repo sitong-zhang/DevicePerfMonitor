@@ -1,0 +1,129 @@
+{
+  "$comment": "双端唯一真源 (single source of truth)。Android 由 app/build.gradle.kts 的 generateDesignTokens 任务生成为 DesignTokens.kt；iOS 由 ios/Tools/generate_tokens.py 生成为 DesignTokens.generated.swift。禁止在业务代码中硬编码色值。",
+  "name": "DevicePerfMonitor Design Tokens",
+  "version": "1.0.0",
+  "palette": {
+    "dark": {
+      "name": "Catppuccin Mocha",
+      "url": "https://github.com/catppuccin/catppuccin",
+      "license": "MIT",
+      "semantic": {
+        "background": "#1E1E2E",
+        "surface": "#313244",
+        "surfaceElevated": "#45475A",
+        "textPrimary": "#CDD6F4",
+        "textSecondary": "#A6ADC8",
+        "accent": "#CBA6F7",
+        "accentSecondary": "#94E2D5",
+        "success": "#A6E3A1",
+        "warning": "#F9E2AF",
+        "danger": "#F38BA8"
+      }
+    },
+    "light": {
+      "name": "Catppuccin Latte",
+      "url": "https://github.com/catppuccin/catppuccin",
+      "license": "MIT",
+      "semantic": {
+        "background": "#EFF1F5",
+        "surface": "#E6E9EF",
+        "surfaceElevated": "#DCE0E8",
+        "textPrimary": "#4C4F69",
+        "textSecondary": "#6C6F85",
+        "accent": "#8839EF",
+        "accentSecondary": "#179299",
+        "success": "#40A02B",
+        "warning": "#DF8E1D",
+        "danger": "#D20F39"
+      }
+    }
+  },
+  "radius": {
+    "card": 24,
+    "small": 16,
+    "large": 28,
+    "pill": 999,
+    "$comment": "Android dp / iOS pt 等值"
+  },
+  "spacing": [4, 8, 12, 16, 24, 32],
+  "blur": {
+    "glass": 32,
+    "subtle": 24,
+    "overlayMin": 28,
+    "overlayMax": 36,
+    "$comment": "Android dp / iOS pt 等值；overlay 指悬浮窗场景"
+  },
+  "glass": {
+    "backgroundAlpha": { "min": 0.18, "max": 0.28 },
+    "borderWidth": 1,
+    "borderAlpha": 0.35,
+    "highlightAlphaTop": 0.55,
+    "highlightAlphaBottom": 0.12,
+    "innerShadowAlpha": 0.10,
+    "outerShadowAlpha": 0.22,
+    "outerShadowRadius": 20,
+    "outerShadowOffsetY": 8,
+    "saturationBoost": 1.12,
+    "noiseAlpha": 0.035,
+    "$comment": "液态玻璃材质参数：模糊半径 28~36，背景透明度 18%~28% 随背景明暗自适应，1px 半透明白高光边框（顶亮底暗），顶部微弱内高光 + 底部极淡内阴影，柔和弥散外阴影。禁止纯色半透明冒充。"
+  },
+  "motion": {
+    "enter": {
+      "durationMs": 320,
+      "cubicBezier": [0.05, 0.7, 0.1, 1.0]
+    },
+    "exit": {
+      "durationMs": 240,
+      "cubicBezier": [0.3, 0.0, 0.8, 0.15]
+    },
+    "emphasized": {
+      "durationMs": 300,
+      "cubicBezier": [0.2, 0.0, 0.0, 1.0]
+    },
+    "$comment": "三条曲线替代原单一 300ms；所有页面切换/卡片展开/数值变化/悬浮窗弹出收起必须使用其中之一"
+  },
+  "number": {
+    "$comment": "数值缓动：时长 = min(300ms, 刷新间隔 - 50ms)；新数据到达时从当前显示值继续缓动，不重播动画",
+    "maxDurationMs": 300,
+    "intervalMarginMs": 50
+  },
+  "typography": {
+    "sans": {
+      "family": "Inter",
+      "url": "https://github.com/rsms/inter",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://github.com/rsms/inter/blob/master/LICENSE.txt"
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "url": "https://github.com/JetBrains/JetBrainsMono",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://github.com/JetBrains/JetBrainsMono/blob/master/OFL.txt"
+    },
+    "$comment": "数字一律使用等宽字体，保证数值跳动时不晃动；字体文件随工程打包"
+  },
+  "gesture": {
+    "doubleTapWindowMs": 250,
+    "touchSlopDp": 8,
+    "edgeSnapThresholdDp": 96,
+    "trashZoneHeightDp": 140,
+    "scaleRange": [0.8, 1.6]
+  },
+  "health": {
+    "$comment": "综合评分权重与公式，与 analysis 模块保持一致；任一维度不可用时权重按比例分配给其余可用维度",
+    "weights": { "temperature": 0.4, "frameStability": 0.3, "battery": 0.2, "memory": 0.1 },
+    "temperatureBreakpoints": [
+      { "max": 40, "score": 100 },
+      { "max": 50, "from": 100, "to": 70 },
+      { "max": 60, "from": 70, "to": 35 },
+      { "max": 70, "from": 35, "to": 10 },
+      { "max": null, "score": 0 }
+    ],
+    "grades": [
+      { "min": 90, "label": "优秀" },
+      { "min": 70, "label": "良好" },
+      { "min": 50, "label": "一般" },
+      { "min": 0, "label": "警告" }
+    ]
+  }
+}

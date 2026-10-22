@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 以下的全量备份规则：仅备份设置（datastore），不备份历史数据（可重新采集）。
+     注意：未列入 include 的路径默认即不备份，无需再写 exclude
+     （lint FullBackupContent 会校验 exclude 必须位于 include 路径之内）。 -->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="file" path="datastore" />
+</full-backup-content>

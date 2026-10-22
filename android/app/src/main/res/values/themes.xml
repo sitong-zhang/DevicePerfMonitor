@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 负责全部界面；XML 主题仅提供无 Action Bar 的窗口与深色冷启动背景。
+         业务配色一律来自 design-tokens.json 生成的 DesignTokens，禁止在此硬编码新色值。 -->
+    <style name="Theme.DevicePerfMonitor" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>

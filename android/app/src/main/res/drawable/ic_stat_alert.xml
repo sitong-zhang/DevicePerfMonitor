@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  告警通知小图标：纯白（系统着色），24dp。
+  温度计 + 感叹点（高温告警语义）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <!-- 温度计球体 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10,4 a2,2 0 1 1 4,0 l0,9 a4,4 0 1 1 -4,0 Z" />
+    <!-- 内部液柱 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11,10 h2 v6 a1,1 0 1 1 -2,0 Z" />
+    <!-- 刻度线 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,5 h3 v1.5 h-3 Z M15,8.5 h3 v1.5 h-3 Z M15,12 h3 v1.5 h-3 Z" />
+</vector>
