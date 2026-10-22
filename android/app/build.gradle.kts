@@ -110,8 +110,6 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    // 悬浮窗 ComposeView 由 Service 托管，需要自己提供 LifecycleOwner / SavedStateRegistryOwner
-    implementation(libs.androidx.savedstate)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
 

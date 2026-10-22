@@ -20,8 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.drawCircle
-import androidx.compose.ui.graphics.drawscope.drawRoundRect
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
@@ -116,7 +114,7 @@ fun OverlayContent(
                 ) {
                     HealthBadge(health)
                     Spacer(modifier = Modifier.width(10.dp))
-                    MetricGrid(data, intervalMs)
+                    MetricGrid(data, intervalMs, Modifier.weight(1f))
                 }
             }
         }
@@ -149,7 +147,11 @@ private fun HealthBadge(health: FocusedHealth.Result) {
  * 四个指标按 2×2 排列。只放采得到的，采不到的直接不进列表。
  */
 @Composable
-private fun MetricGrid(data: OverlayData, intervalMs: Long) {
+private fun MetricGrid(
+    data: OverlayData,
+    intervalMs: Long,
+    modifier: Modifier = Modifier,
+) {
     val cells = buildList<GridCell> {
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
@@ -169,7 +171,7 @@ private fun MetricGrid(data: OverlayData, intervalMs: Long) {
     }
 
     Column(
-        modifier = Modifier.weight(1f),
+        modifier = modifier,
         verticalArrangement = Arrangement.SpaceEvenly,
     ) {
         cells.chunked(2).forEach { row ->
