@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		Widget Extension（Live Activity 承载）entitlements。
+
+		说明：
+		- Live Activity 的全部展示数据来自 ActivityKit 的 ContentState
+		  （App 侧 request/update 时下发），不读取共享容器；
+		- 因此本 Extension 不需要任何 entitlement，保留空文件仅为
+		  与 Xcode 构建设置 CODE_SIGN_ENTITLEMENTS 对应。
+	-->
+</dict>
+</plist>

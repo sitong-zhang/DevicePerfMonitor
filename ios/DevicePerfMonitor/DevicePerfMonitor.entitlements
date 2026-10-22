@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		设备性能监控 App（iOS） entitlements。
+
+		说明：
+		- Live Activity（ActivityKit）通过 ContentState 直接下发数据，
+		  App 与 Widget Extension 之间无需共享文件容器，因此不声明
+		  com.apple.security.application-groups；
+		- 悬浮窗为 App 进程内的 UIWindow（level = UIWindow.Level.alert + 1），
+		  不涉及 App Group / 扩展进程数据互通；
+		- 本工程所有采集均使用公开 API（host_statistics64 /
+		  host_processor_info / IOPSCopyPowerSourcesInfo /
+		  ProcessInfo.thermalState / CADisplayLink），无私有 entitlement。
+		  如后续需要 App Group（例如 Widget 读取历史存储），再追加
+		  com.apple.security.application-groups。
+	-->
+</dict>
+</plist>
