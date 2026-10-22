@@ -6,12 +6,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,306 +21,167 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.devperf.monitor.analysis.AdviceEngine
-import com.devperf.monitor.analysis.HealthScorer
-import com.devperf.monitor.core.Metric
-import com.devperf.monitor.core.MetricCategory
-import com.devperf.monitor.core.MetricId
-import com.devperf.monitor.data.collectors.DeviceSnapshot
+import com.devperf.monitor.analysis.FocusedHealth
+import com.devperf.monitor.core.CoreMetricId
+import com.devperf.monitor.core.MetricViewMode
+import com.devperf.monitor.data.defaultMetricViewModes
+import com.devperf.monitor.data.storage.HistoryPoint
 import com.devperf.monitor.ui.MonitorViewModel
-import com.devperf.monitor.ui.kit.GlassChip
-import com.devperf.monitor.ui.kit.GlassPanel
-import com.devperf.monitor.ui.kit.GlassSectionHeader
-import com.devperf.monitor.ui.kit.LiquidGlassScaffold
-import com.devperf.monitor.ui.kit.MetricRow
-import com.devperf.monitor.ui.kit.MetricValueText
-import com.devperf.monitor.ui.kit.MonoNumber
+import com.devperf.monitor.ui.kit.AnimatedNumber
+import com.devperf.monitor.ui.kit.BarSeries
+import com.devperf.monitor.ui.kit.GlassStyle
+import com.devperf.monitor.ui.kit.LiquidGlassSurface
+import com.devperf.monitor.ui.kit.ProgressRing
+import com.devperf.monitor.ui.kit.Sparkline
+import com.devperf.monitor.ui.kit.metricColor
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 
+/** 卡片上的迷你轨迹看最近 1 分钟。 */
+private const val CARD_WINDOW_SEC = 60
+
 /**
- * 首页：健康分大卡片 + 四分卡片 + 智能建议 + 全量指标。
+ * 主界面：综合评判 + 四个核心指标。
  *
- * 数据流：ViewModel.snapshot（采集仓库 StateFlow）→ 组合期重算健康分与建议
- * （纯本地算法）。数据不足时按三态规范显示「数据不足，无法分析」，不造假数据。
+ * 两条硬规则：
+ * 1. 只显示这四个指标，其余一概不进界面；
+ * 2. 采不到的指标不占位、不显示 0——没数据就当它不存在。
  */
-
-/** 从快照中按指标 ID 取值（未追踪/无对应读口的指标返回 null → 显示不可用）。 */
-fun DeviceSnapshot.metricOf(id: MetricId): Metric<Float>? = when (id) {
-    MetricId.FPS -> display.fps
-    MetricId.GLOBAL_FPS -> display.globalFps
-    MetricId.FRAME_TIME -> display.frameTimeMs
-    MetricId.FRAME_STDEV -> display.frameStdevMs
-    MetricId.JANK_RATIO -> display.jankRatio30s
-    MetricId.REFRESH_RATE -> display.refreshRateHz
-    MetricId.CPU_USAGE -> cpu.usagePercent
-    MetricId.CPU_TEMP -> cpu.temperatureC
-    MetricId.GPU_LOAD -> gpu.loadPercent
-    MetricId.GPU_TEMP -> gpu.temperatureC
-    MetricId.BATTERY_TEMP -> battery.temperatureC
-    MetricId.BATTERY_LEVEL -> battery.levelPercent
-    MetricId.MEMORY_USED -> memory.usedMb
-    MetricId.MEMORY_USAGE_RATIO -> memory.usageRatio
-    MetricId.DEVICE_TEMP -> thermal.deviceTempC
-    else -> null
-}
-
 @Composable
 fun OverviewScreen(
     viewModel: MonitorViewModel,
-    onMetricClick: (MetricId) -> Unit,
+    onOpenDetail: (CoreMetricId) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val snapshot by viewModel.snapshot.collectAsState()
-    val alert by viewModel.alert.collectAsState()
+    val focused by viewModel.focused.collectAsState()
+    val settings by viewModel.settings.collectAsState()
     val colors = LocalTokenColors.current
-    val tickMs = viewModel.tickMs()
 
-    LiquidGlassScaffold {
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(
-                start = DesignTokens.Spacing.S16.dp,
-                end = DesignTokens.Spacing.S16.dp,
-                top = DesignTokens.Spacing.S32.dp,
-                // 底部预留玻璃标签栏空间
-                bottom = 96.dp,
+    val visible = focused.readings.filter { it.available }
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(colors.background, colors.surface, colors.background),
+                ),
             ),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
-        ) {
-            // ---- 标题 + 告警态 ----
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item(key = "health") {
+            HealthCard(result = focused.health)
+        }
+
+        items(items = visible, key = { it.id.name }) { reading ->
+            val mode = settings.metricViewModes[reading.id]
+                ?: defaultMetricViewModes()[reading.id]
+                ?: MetricViewMode.NUMBER
+            MetricCard(
+                reading = reading,
+                mode = effectiveMode(reading.id, mode),
+                history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
+                tickMs = viewModel.tickMs(),
+                onClick = { onOpenDetail(reading.id) },
+            )
+        }
+
+        if (visible.isEmpty()) {
+            item(key = "empty") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "设备性能监控",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = colors.textPrimary,
-                        modifier = Modifier.weight(1f),
+                        text = "这台设备暂时读不到这些指标",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center,
                     )
-                    if (alert != null) {
-                        GlassChip(
-                            text = "温度告警",
-                            color = colors.danger,
-                            selected = true,
-                        )
-                    }
-                }
-            }
-
-            // ---- 健康分大卡片 ----
-            item { HealthScoreCard(viewModel = viewModel) }
-
-            // ---- 四分卡片 ----
-            item { GlassSectionHeader(text = "核心指标") }
-            item {
-                FeaturedMetricsGrid(
-                    snapshot = snapshot,
-                    tickMs = tickMs,
-                    onMetricClick = onMetricClick,
-                )
-            }
-
-            // ---- 智能建议 ----
-            item { GlassSectionHeader(text = "智能建议") }
-            item { AdvicePanel(viewModel = viewModel) }
-
-            // ---- 全量指标（按类别分组） ----
-            item { GlassSectionHeader(text = "全部指标") }
-            MetricCategory.entries.forEach { category ->
-                val ids = MetricId.entries.filter { it.category == category }
-                if (ids.isNotEmpty()) {
-                    item(key = "cat-${category.name}") {
-                        Text(
-                            text = category.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colors.textSecondary,
-                            modifier = Modifier.padding(
-                                top = DesignTokens.Spacing.S8.dp,
-                                bottom = DesignTokens.Spacing.S4.dp,
-                            ),
-                        )
-                    }
-                    items(ids, key = { it.name }) { id ->
-                        val metric = snapshot.metricOf(id)
-                            ?: Metric.unavailable("暂无采集", snapshot.timestampMs)
-                        GlassPanel(modifier = Modifier.padding(vertical = 3.dp)) {
-                            MetricRow(
-                                metricId = id,
-                                metric = metric,
-                                modifier = Modifier.padding(
-                                    horizontal = DesignTokens.Spacing.S16.dp,
-                                    vertical = DesignTokens.Spacing.S12.dp,
-                                ),
-                                intervalMs = tickMs,
-                                onPermissionAction = { /* 首页不处理跳转，详情页/设置页处理 */ },
-                            )
-                        }
-                    }
                 }
             }
         }
     }
 }
 
-/** 健康分大卡片：总分大数字 + 等级 + 分维度得分。 */
+/**
+ * 环形只有 0~100 有界的指标用得上（内存占用率）。
+ * 温度 / 刷新率 / 帧率选了环形就回落到波形，避免把没有上限的值硬塞进圆环。
+ */
+private fun effectiveMode(id: CoreMetricId, mode: MetricViewMode): MetricViewMode =
+    if (mode == MetricViewMode.RING && id != CoreMetricId.MEMORY_RATIO) {
+        MetricViewMode.WAVE
+    } else {
+        mode
+    }
+
+// ---------------------------------------------------------------------------
+// 综合评判
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun HealthScoreCard(viewModel: MonitorViewModel) {
+private fun HealthCard(result: FocusedHealth.Result) {
     val colors = LocalTokenColors.current
-    val health = viewModel.health()
-    GlassPanel {
-        Column(
+    val total = result.total
+    val accent = when {
+        total == null -> colors.textSecondary
+        total >= 75f -> colors.success
+        total >= 50f -> colors.accent
+        else -> colors.danger
+    }
+
+    LiquidGlassSurface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(190.dp),
+        shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
+        style = GlassStyle(),
+    ) {
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(DesignTokens.Spacing.S16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "综合健康分",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.textSecondary,
+            ProgressRing(
+                progress = (total ?: 0f) / 100f,
+                centerText = total?.let { "${it.toInt()}" } ?: "—",
+                caption = result.grade?.label ?: "",
+                color = accent,
+                trackColor = accent.copy(alpha = 0.18f),
+                modifier = Modifier.size(128.dp),
             )
-            Spacer(Modifier.height(DesignTokens.Spacing.S4.dp))
-            if (health.total != null && health.grade != null) {
-                MonoNumber(
-                    text = health.total.toInt().toString(),
-                    color = when (health.grade) {
-                        HealthScorer.Grade.EXCELLENT -> colors.success
-                        HealthScorer.Grade.GOOD -> colors.accentSecondary
-                        HealthScorer.Grade.FAIR -> colors.warning
-                        HealthScorer.Grade.WARNING -> colors.danger
-                    },
-                    style = MaterialTheme.typography.displayLarge,
-                )
+            Column(
+                modifier = Modifier
+                    .padding(start = 18.dp)
+                    .weight(1f),
+                verticalArrangement = Arrangement.Center,
+            ) {
                 Text(
-                    text = health.grade.label,
+                    text = "综合评判",
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.textPrimary,
                 )
-                if (health.partial) {
-                    Text(
-                        text = "部分维度不可用，按可用维度加权",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                }
-                Spacer(Modifier.height(DesignTokens.Spacing.S12.dp))
-                health.dimensions.forEach { dim ->
-                    DimensionBar(
-                        label = dim.id.label,
-                        score = dim.score,
-                        weight = dim.weight,
-                        isReference = dim.isReference,
-                    )
-                }
-            } else {
-                MonoNumber(
-                    text = "—",
-                    color = colors.textSecondary,
-                    style = MaterialTheme.typography.displayLarge,
-                )
                 Text(
-                    text = "数据不足，无法分析",
+                    text = result.summary,
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.textSecondary,
+                    modifier = Modifier.padding(top = 6.dp),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DimensionBar(
-    label: String,
-    score: Float?,
-    weight: Float,
-    isReference: Boolean,
-) {
-    val colors = LocalTokenColors.current
-    val fraction = ((score ?: 0f) / 100f).coerceIn(0f, 1f)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = DesignTokens.Spacing.S4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.textSecondary,
-        )
-        Box(
-            modifier = Modifier
-                .padding(horizontal = DesignTokens.Spacing.S8.dp)
-                .weight(1f)
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(colors.surfaceElevated),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(6.dp)
-                    .background(
-                        when {
-                            score == null -> colors.textSecondary
-                            score >= 70 -> colors.success
-                            score >= 40 -> colors.warning
-                            else -> colors.danger
-                        }
-                    ),
-            )
-        }
-        Text(
-            text = buildString {
-                append(score?.toInt()?.toString() ?: "—")
-                if (isReference) append("*")
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.textPrimary,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(28.dp),
-        )
-        Text(
-            text = "权重 ${(weight * 100).toInt()}%",
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(start = DesignTokens.Spacing.S8.dp),
-        )
-    }
-}
-
-/** 四分卡片：FPS / CPU 使用率 / CPU 温度 / 电池温度。 */
-@Composable
-private fun FeaturedMetricsGrid(
-    snapshot: DeviceSnapshot,
-    tickMs: Long,
-    onMetricClick: (MetricId) -> Unit,
-) {
-    val featured = listOf(
-        MetricId.FPS,
-        MetricId.CPU_USAGE,
-        MetricId.CPU_TEMP,
-        MetricId.BATTERY_TEMP,
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp)) {
-        featured.chunked(2).forEach { rowIds ->
-            Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp)) {
-                rowIds.forEach { id ->
-                    val metric = snapshot.metricOf(id)
-                        ?: Metric.unavailable("暂无采集", snapshot.timestampMs)
-                    FeaturedCard(
-                        metricId = id,
-                        metric = metric,
-                        tickMs = tickMs,
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1.15f),
-                        onClick = { onMetricClick(id) },
+                result.weakest?.let { weakest ->
+                    Text(
+                        text = "最短板：${weakest.label}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = accent,
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
             }
@@ -329,91 +189,150 @@ private fun FeaturedMetricsGrid(
     }
 }
 
+// ---------------------------------------------------------------------------
+// 指标卡
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun FeaturedCard(
-    metricId: MetricId,
-    metric: Metric<Float>,
+private fun MetricCard(
+    reading: MonitorViewModel.CoreReading,
+    mode: MetricViewMode,
+    history: List<HistoryPoint>,
     tickMs: Long,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val colors = LocalTokenColors.current
-    GlassPanel(modifier = modifier) {
+    val accent = metricColor(reading.id.source.colorKey)
+    val values = history.map { it.value }
+
+    LiquidGlassSurface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(132.dp),
+        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        style = GlassStyle(),
+        onClick = onClick,
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(DesignTokens.Spacing.S12.dp),
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Text(
-                text = metricId.label,
+                text = reading.id.label,
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.textSecondary,
             )
-            Spacer(Modifier.height(DesignTokens.Spacing.S8.dp))
-            MetricValueText(
-                metricId = metricId,
-                metric = metric,
-                intervalMs = tickMs,
-                showStateHint = false,
-            )
-        }
-    }
-}
 
-/** 智能建议面板：严重度降序；无建议显示「运行正常」。 */
-@Composable
-private fun AdvicePanel(viewModel: MonitorViewModel) {
-    val colors = LocalTokenColors.current
-    val advice = viewModel.advice().sortedByDescending { it.severity.ordinal }
-    GlassPanel {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(DesignTokens.Spacing.S16.dp),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
-        ) {
-            if (advice.isEmpty()) {
-                Text(
-                    text = "运行正常，暂无建议",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.success,
-                )
-            } else {
-                advice.forEach { item -> AdviceItem(item) }
+            when (mode) {
+                MetricViewMode.NUMBER -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        ValueText(reading, tickMs, accent, MaterialTheme.typography.displaySmall)
+                    }
+                }
+
+                MetricViewMode.RING -> {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProgressRing(
+                            progress = (reading.value ?: 0f) / 100f,
+                            centerText = reading.value?.let { "${it.toInt()}" } ?: "—",
+                            caption = reading.id.unit,
+                            color = accent,
+                            trackColor = accent.copy(alpha = 0.18f),
+                            modifier = Modifier.size(76.dp),
+                            strokeWidth = 8.dp,
+                        )
+                        Text(
+                            text = "占用越高越吃力",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(start = 14.dp),
+                        )
+                    }
+                }
+
+                MetricViewMode.WAVE -> {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(modifier = Modifier.weight(0.42f)) {
+                            ValueText(
+                                reading,
+                                tickMs,
+                                accent,
+                                MaterialTheme.typography.headlineSmall,
+                            )
+                        }
+                        Sparkline(
+                            points = values,
+                            color = accent,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                        )
+                    }
+                }
+
+                MetricViewMode.BARS -> {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(modifier = Modifier.weight(0.42f)) {
+                            ValueText(
+                                reading,
+                                tickMs,
+                                accent,
+                                MaterialTheme.typography.headlineSmall,
+                            )
+                        }
+                        BarSeries(
+                            points = values,
+                            color = accent,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AdviceItem(advice: AdviceEngine.Advice) {
+private fun ValueText(
+    reading: MonitorViewModel.CoreReading,
+    tickMs: Long,
+    color: Color,
+    style: TextStyle,
+) {
     val colors = LocalTokenColors.current
-    val severityColor = when (advice.severity) {
-        AdviceEngine.Severity.INFO -> colors.accentSecondary
-        AdviceEngine.Severity.WARNING -> colors.warning
-        AdviceEngine.Severity.CRITICAL -> colors.danger
+    val value = reading.value
+    if (value == null) {
+        Text(text = "—", style = style, color = colors.textSecondary)
+        return
     }
-    Row(modifier = Modifier.fillMaxWidth()) {
-        // 严重度色条（3px 宽，左缘指示）
-        Box(
-            modifier = Modifier
-                .padding(top = 4.dp, end = DesignTokens.Spacing.S8.dp)
-                .width(3.dp)
-                .height(40.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(severityColor),
+    Row(verticalAlignment = Alignment.Bottom) {
+        AnimatedNumber(
+            value = value,
+            intervalMs = tickMs,
+            decimals = reading.id.decimals,
+            color = color,
+            style = style,
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = advice.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.textPrimary,
-            )
-            Text(
-                text = advice.detail,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.textSecondary,
-            )
-        }
+        Text(
+            text = " ${reading.id.unit}",
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.textSecondary,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
     }
 }

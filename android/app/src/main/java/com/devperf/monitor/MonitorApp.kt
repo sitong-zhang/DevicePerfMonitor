@@ -1,12 +1,15 @@
 package com.devperf.monitor
 
 import android.app.Application
+import android.app.Application.ActivityLifecycleCallbacks
 import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.devperf.monitor.data.CollectionService
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.SettingsRepository
+import com.devperf.monitor.overlay.OverlayPermissions
+import com.devperf.monitor.overlay.OverlayService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -71,6 +74,61 @@ class MonitorApp : Application() {
             }.onFailure { Log.w("MonitorApp", "自动启动采集失败（不影响使用）", it) }
         }
         BootTrace.mark("Application.onCreate 结束")
+        watchForeground()
+    }
+
+    /**
+     * 进出前台的切换：退出应用时把悬浮窗挂出来，回到应用时收起来。
+     *
+     * 用 ActivityLifecycleCallbacks 自己数 resumed 的 Activity 数量，
+     * 不引 ProcessLifecycleOwner 依赖；数量从 1 变 0 就是真的退到后台了
+     * （应用内跳转不会触发）。
+     */
+    private fun watchForeground() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var resumed = 0
+
+            override fun onActivityResumed(activity: android.app.Activity) {
+                resumed += 1
+                if (resumed == 1) {
+                    runCatching { OverlayService.hide(this@MonitorApp) }
+                }
+            }
+
+            override fun onActivityPaused(activity: android.app.Activity) {
+                resumed -= 1
+                if (resumed <= 0) {
+                    resumed = 0
+                    showOverlayOnExit()
+                }
+            }
+
+            override fun onActivityCreated(
+                activity: android.app.Activity,
+                savedInstanceState: android.os.Bundle?,
+            ) = Unit
+
+            override fun onActivityStarted(activity: android.app.Activity) = Unit
+            override fun onActivityStopped(activity: android.app.Activity) = Unit
+            override fun onActivitySaveInstanceState(
+                activity: android.app.Activity,
+                outState: android.os.Bundle,
+            ) = Unit
+
+            override fun onActivityDestroyed(activity: android.app.Activity) = Unit
+        })
+    }
+
+    /** 退到后台：开关开着且权限已给才挂悬浮窗，否则安静地什么都不做。 */
+    private fun showOverlayOnExit() {
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            runCatching {
+                val settings = settingsRepository.settings.first()
+                if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this@MonitorApp)) {
+                    OverlayService.start(this@MonitorApp)
+                }
+            }.onFailure { Log.w("MonitorApp", "退到后台显示悬浮窗失败", it) }
+        }
     }
 
     companion object {

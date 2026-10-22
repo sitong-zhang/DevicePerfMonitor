@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.devperf.monitor.core.CoreMetricId
+import com.devperf.monitor.core.MetricViewMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -24,8 +26,18 @@ enum class ThemeMode(val label: String) {
     AUTO("跟随系统"),
 }
 
+/** 每个核心指标默认的可视化模式（占用率用环形、温度和帧率看波动、刷新率看数字）。 */
+fun defaultMetricViewModes(): Map<CoreMetricId, MetricViewMode> = mapOf(
+    CoreMetricId.MEMORY_RATIO to MetricViewMode.RING,
+    CoreMetricId.DEVICE_TEMP to MetricViewMode.WAVE,
+    CoreMetricId.REFRESH_RATE to MetricViewMode.NUMBER,
+    CoreMetricId.FPS to MetricViewMode.WAVE,
+)
+
 /** 全部用户设置（设置页唯一数据源）。 */
 data class MonitorSettings(
+    /** 每个核心指标的可视化模式；缺省项回落到 [defaultMetricViewModes]。 */
+    val metricViewModes: Map<CoreMetricId, MetricViewMode> = defaultMetricViewModes(),
     val overlayEnabled: Boolean = false,
     val collectInBackground: Boolean = true,
     val overlayOpacity: Float = 0.9f,
@@ -49,6 +61,10 @@ class SettingsRepository(private val context: Context) {
 
     val settings: Flow<MonitorSettings> = context.settingsDataStore.data.map { prefs ->
         MonitorSettings(
+            metricViewModes = prefs[KEY_METRIC_MODES]
+                ?.let { parseMetricModes(it) }
+                ?.takeIf { it.isNotEmpty() }
+                ?: defaultMetricViewModes(),
             overlayEnabled = prefs[KEY_OVERLAY_ENABLED] ?: false,
             collectInBackground = prefs[KEY_COLLECT_BACKGROUND] ?: true,
             overlayOpacity = prefs[KEY_OVERLAY_OPACITY] ?: 0.9f,
@@ -69,6 +85,19 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setOverlayEnabled(value: Boolean) = put(KEY_OVERLAY_ENABLED, value)
+
+    /** 切换某个核心指标的可视化模式（数字 / 波形 / 环形 / 柱状）。 */
+    suspend fun setMetricViewMode(id: CoreMetricId, mode: MetricViewMode) {
+        context.settingsDataStore.edit { prefs ->
+            val current = (
+                prefs[KEY_METRIC_MODES]?.let { parseMetricModes(it) }
+                    ?: defaultMetricViewModes()
+                ).toMutableMap()
+            current[id] = mode
+            prefs[KEY_METRIC_MODES] =
+                current.entries.joinToString("|") { "${it.key.name}:${it.value.name}" }
+        }
+    }
     suspend fun setCollectInBackground(value: Boolean) = put(KEY_COLLECT_BACKGROUND, value)
     suspend fun setOverlayOpacity(value: Float) = put(KEY_OVERLAY_OPACITY, value)
     suspend fun setOverlayScale(value: Float) = put(KEY_OVERLAY_SCALE, value)
@@ -86,6 +115,17 @@ class SettingsRepository(private val context: Context) {
     }
 
     private companion object {
+        /** 序列化格式：FPS:WAVE|MEMORY_RATIO:RING|... 缺省项回落到默认模式。 */
+        fun parseMetricModes(raw: String): Map<CoreMetricId, MetricViewMode> =
+            raw.split("|").mapNotNull { part ->
+                val kv = part.split(":")
+                if (kv.size != 2) return@mapNotNull null
+                val id = runCatching { CoreMetricId.valueOf(kv[0]) }.getOrNull() ?: return@mapNotNull null
+                val mode = runCatching { MetricViewMode.valueOf(kv[1]) }.getOrNull() ?: return@mapNotNull null
+                id to mode
+            }.toMap()
+
+        val KEY_METRIC_MODES = stringPreferencesKey("metric_view_modes")
         val KEY_OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
         val KEY_COLLECT_BACKGROUND = booleanPreferencesKey("collect_background")
         val KEY_OVERLAY_OPACITY = floatPreferencesKey("overlay_opacity")

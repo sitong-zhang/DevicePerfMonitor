@@ -81,7 +81,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 从系统设置页返回时同步：设置开启且已获权限 → 确保悬浮窗服务运行
+        // 从系统设置页返回：重新问一次权限，权限给了就把悬浮窗拉起来
+        viewModel.refreshOverlayPermission()
         val settings = viewModel.settings.value
         if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this)) {
             OverlayService.start(this)

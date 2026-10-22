@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -110,6 +110,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // 悬浮窗 ComposeView 由 Service 托管，需要自己提供 LifecycleOwner / SavedStateRegistryOwner
+    implementation(libs.androidx.savedstate)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
 

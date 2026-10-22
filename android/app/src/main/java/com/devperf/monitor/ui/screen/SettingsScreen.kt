@@ -55,7 +55,8 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val snapshot by viewModel.snapshot.collectAsState()
 
-    val overlayGranted = OverlayPermissions.canDrawOverlays(context)
+    // 权限状态跟着系统走：从系统设置页授权后返回，这里要立刻变成"已授权"
+    val overlayGranted by viewModel.overlayGranted.collectAsState()
     val notificationsGranted = OverlayPermissions.canPostNotifications(context)
     val shellBackend = snapshotBackend(viewModel)
 

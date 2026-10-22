@@ -19,9 +19,13 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.ViewTreeViewModelStoreOwner
+import androidx.savedstate.ViewTreeSavedStateRegistryOwner
 import com.devperf.monitor.MainActivity
 import com.devperf.monitor.MonitorApp
 import com.devperf.monitor.R
+import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.Metric
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
@@ -56,6 +60,7 @@ class OverlayService : android.app.Service() {
     private lateinit var settingsRepository: SettingsRepository
 
     private var controller: OverlayController? = null
+    private var composeOwner: ServiceLifecycleOwner? = null
     private var overlayVisible = false
 
     override fun onCreate() {
@@ -96,6 +101,8 @@ class OverlayService : android.app.Service() {
     override fun onDestroy() {
         controller?.detach()
         controller = null
+        composeOwner?.destroy()
+        composeOwner = null
         super.onDestroy()
     }
 
@@ -115,7 +122,15 @@ class OverlayService : android.app.Service() {
 
     private fun createOverlayView(): ComposeView {
         val controllerRef = controller ?: error("controller 未初始化")
+        // 悬浮窗由 Service 经 WindowManager 添加，没有 Activity/Fragment 宿主。
+        // 不挂这三个 ViewTree 宿主，ComposeView.onAttachedToWindow 会直接抛
+        // IllegalStateException("ViewTreeLifecycleOwner not found")，悬浮窗就永远出不来。
+        val owner = ServiceLifecycleOwner().also { composeOwner = it }
         return ComposeView(this).apply {
+            ViewTreeLifecycleOwner.set(this, owner)
+            ViewTreeSavedStateRegistryOwner.set(this, owner)
+            ViewTreeViewModelStoreOwner.set(this, owner)
+            owner.attach()
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool
             )
@@ -137,6 +152,12 @@ class OverlayService : android.app.Service() {
                     snapshot = snapshot,
                 )
                 val callbacks = rememberOverlayCallbacks(controllerRef)
+                val health = FocusedHealth.evaluate(
+                    memoryRatio = data.memoryRatio.value,
+                    deviceTempC = data.deviceTemp.value,
+                    refreshHz = data.refreshHz.value,
+                    fps = data.fps.value,
+                )
                 AlertWatcher(
                     data = data,
                     thresholdC = settings.tempAlertThresholdC,
@@ -147,6 +168,7 @@ class OverlayService : android.app.Service() {
                     OverlayContent(
                         state = state,
                         data = data,
+                        health = health,
                         intervalMs = settings.refreshMode.tickMs,
                         callbacks = callbacks,
                     )
@@ -177,7 +199,7 @@ class OverlayService : android.app.Service() {
         thresholdC: Float,
         controller: OverlayController,
     ) {
-        val temps = listOfNotNull(data.cpuTemp.value, data.batteryTemp.value)
+        val temps = listOfNotNull(data.deviceTemp.value)
         val alert = temps.any { it >= thresholdC }
         LaunchedEffect(alert) { controller.setAlert(alert) }
     }
@@ -302,6 +324,15 @@ class OverlayService : android.app.Service() {
 
         fun stop(context: Context) {
             runCatching { context.stopService(Intent(context, OverlayService::class.java)) }
+        }
+
+        /** 只隐藏窗口，服务保留（通知里还能再叫出来）。回前台时用这个。 */
+        fun hide(context: Context) {
+            runCatching {
+                context.startService(
+                    Intent(context, OverlayService::class.java).setAction(ACTION_HIDE),
+                )
+            }.onFailure { Log.w(TAG, "隐藏悬浮窗失败", it) }
         }
     }
 }

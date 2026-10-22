@@ -14,12 +14,15 @@ import java.util.concurrent.ConcurrentHashMap
 data class HistoryPoint(val timestampMs: Long, val value: Float)
 
 /**
- * 秒级历史存储：每个指标保留最近 30 分钟（1800 点）的环形序列，用于趋势图。
+ * 秒级历史存储：每个指标保留最近 2 小时（7200 点）的环形序列，用于趋势图和回看。
  *
  * - 纯内存环形缓冲 + 可选本地落盘（org.json，无第三方依赖）；
- * - 落盘文件：filesDir/history/history.json，仅保存最近 30 分钟；
+ * - 落盘文件：filesDir/history/history.json，进程重启后自动恢复，可回看；
  * - 极简模式（低端机）下由调用方停止调用 [persist]，停历史落盘；
  * - 全程本地存储，不联网、不上传。
+ *
+ * 保留 2 小时而不是 30 分钟：既然采了就留得住，用户要能往回翻看刚才发生了什么。
+ * 7200 点 × 4 个指标对 JSON 落盘来说是几百 KB 量级，本地读写可接受。
  */
 class HistoryStore(private val context: Context) {
 
@@ -124,7 +127,7 @@ class HistoryStore(private val context: Context) {
     private companion object {
         const val TAG = "HistoryStore"
 
-        /** 30 分钟 × 60 秒 = 1800 个秒级采样点。 */
-        const val CAPACITY = 30 * 60
+        /** 2 小时 × 60 秒 = 7200 个秒级采样点。 */
+        const val CAPACITY = 2 * 60 * 60
     }
 }

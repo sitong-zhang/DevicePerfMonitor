@@ -88,7 +88,7 @@ fun AppNav(
             composable(Routes.OVERVIEW) {
                 OverviewScreen(
                     viewModel = viewModel,
-                    onMetricClick = { id -> navController.navigate(Routes.detail(id.name)) },
+                    onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
                 )
             }
             composable(Routes.SETTINGS) {
@@ -98,15 +98,15 @@ fun AppNav(
                 )
             }
             composable(Routes.DETAIL) { entry ->
-                val metricId = entry.arguments?.getString("metricId")
+                val coreId = entry.arguments?.getString("metricId")
                     ?.let { name ->
                         runCatching {
-                            com.devperf.monitor.core.MetricId.valueOf(name)
+                            com.devperf.monitor.core.CoreMetricId.valueOf(name)
                         }.getOrNull()
                     }
                 MetricDetailScreen(
                     viewModel = viewModel,
-                    metricId = metricId,
+                    coreId = coreId,
                     onBack = { navController.popBackStack() },
                 )
             }

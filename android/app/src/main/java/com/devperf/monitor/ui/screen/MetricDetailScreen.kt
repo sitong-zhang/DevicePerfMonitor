@@ -1,15 +1,18 @@
 package com.devperf.monitor.ui.screen
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,180 +20,261 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.devperf.monitor.core.MetricId
-import com.devperf.monitor.core.PermissionAction
+import com.devperf.monitor.core.CoreMetricId
+import com.devperf.monitor.core.MetricViewMode
+import com.devperf.monitor.data.defaultMetricViewModes
 import com.devperf.monitor.ui.MonitorViewModel
-import com.devperf.monitor.ui.kit.GlassButton
-import com.devperf.monitor.ui.kit.GlassPanel
+import com.devperf.monitor.ui.kit.AnimatedNumber
+import com.devperf.monitor.ui.kit.BarSeries
+import com.devperf.monitor.ui.kit.GlassStyle
 import com.devperf.monitor.ui.kit.GlassTabs
-import com.devperf.monitor.ui.kit.LiquidGlassScaffold
-import com.devperf.monitor.ui.kit.MetricValueText
+import com.devperf.monitor.ui.kit.LiquidGlassSurface
+import com.devperf.monitor.ui.kit.ProgressRing
+import com.devperf.monitor.ui.kit.Sparkline
 import com.devperf.monitor.ui.kit.metricColor
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 
+/** 可回看的时间窗口（秒）。历史保留 2 小时，所以最长 2 小时。 */
+private val WINDOWS = listOf(
+    60 to "1 分钟",
+    300 to "5 分钟",
+    1800 to "30 分钟",
+    7200 to "2 小时",
+)
+
 /**
- * 指标详情页：当前值 + 1/5/30 分钟历史图表 + 峰值查看。
+ * 指标详情：当前值 + 历史轨迹回看 + 显示模式切换。
  *
- * - 时间窗口用 GlassTabs 分段（自封装，非 MD3）；
- * - 图表为 Vico 折线（Apache-2.0），颜色随主题；
- * - 峰值卡片展示窗口内 max/min/avg/latest，样本不足 2 个时显示
- *   「数据不足，无法分析」（三态规范，不插值伪造）；
- * - NEEDS_PERMISSION 指标提供「申请权限」入口（Shizuku 等）。
+ * 历史是实时采集落下来的真实采样，往回翻就能看到刚才发生了什么
+ * （比如帧率什么时候掉的、温度什么时候上去的）。数据不足时说数据不足，不补线。
  */
 @Composable
 fun MetricDetailScreen(
     viewModel: MonitorViewModel,
-    metricId: MetricId?,
+    coreId: CoreMetricId?,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    val snapshot by viewModel.snapshot.collectAsState()
-    val tickMs = viewModel.tickMs()
+    val focused by viewModel.focused.collectAsState()
+    val settings by viewModel.settings.collectAsState()
 
-    if (metricId == null) {
-        // 路由参数非法：显示提示并提供返回
-        LiquidGlassScaffold {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "指标不存在",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.textPrimary,
-                    )
-                    Spacer(Modifier.height(DesignTokens.Spacing.S16.dp))
-                    GlassButton(text = "返回", onClick = onBack)
-                }
-            }
+    if (coreId == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("指标不存在", color = colors.textSecondary)
         }
         return
     }
 
-    var windowIndex by rememberSaveable { mutableIntStateOf(1) } // 默认 5 分钟
-    val windowsSec = listOf(60, 300, 1800)
-    val windowSec = windowsSec[windowIndex]
+    val reading = focused.readings.firstOrNull { it.id == coreId }
+    val accent = metricColor(coreId.source.colorKey)
+    val tickMs = viewModel.tickMs()
 
-    val metric = snapshot.metricOf(metricId)
-    val points = viewModel.history(metricId, windowSec)
-    val peaks = viewModel.peakStats(metricId, windowSec)
-    val accent = metricColor(metricId.colorKey)
+    var windowIndex by remember { mutableIntStateOf(0) }
+    val windowSec = WINDOWS[windowIndex].first
+    val points = viewModel.history(coreId.source, windowSec)
+    val values = points.map { it.value }
 
-    LiquidGlassScaffold {
-        Column(
+    val savedMode = settings.metricViewModes[coreId] ?: defaultMetricViewModes()[coreId] ?: MetricViewMode.NUMBER
+    // 环形只对有界指标开放，其余回落到波形
+    val mode = if (savedMode == MetricViewMode.RING && coreId != CoreMetricId.MEMORY_RATIO) {
+        MetricViewMode.WAVE
+    } else {
+        savedMode
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(colors.background, colors.surface, colors.background),
+                ),
+            )
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // 顶部：返回 + 指标名 + 当前值
+        LiquidGlassSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(
-                    PaddingValues(
-                        start = DesignTokens.Spacing.S16.dp,
-                        end = DesignTokens.Spacing.S16.dp,
-                        top = DesignTokens.Spacing.S32.dp,
-                        bottom = DesignTokens.Spacing.S32.dp,
-                    ),
-                ),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+                .height(120.dp),
+            shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
+            style = GlassStyle(),
         ) {
-            // ---- 顶栏：返回 + 指标名 ----
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                GlassButton(text = "‹ 返回", onClick = onBack, compact = true)
-                Spacer(Modifier.padding(horizontal = DesignTokens.Spacing.S4.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = coreId.label,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.textPrimary,
+                    )
+                    val value = reading?.value
+                    if (value == null) {
+                        Text(
+                            text = reading?.reason ?: "这台设备读不到这个指标",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            modifier = Modifier.padding(top = 6.dp),
+                        ) {
+                            AnimatedNumber(
+                                value = value,
+                                intervalMs = tickMs,
+                                decimals = coreId.decimals,
+                                color = accent,
+                                style = MaterialTheme.typography.displaySmall,
+                            )
+                            Text(
+                                text = " ${coreId.unit}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.textSecondary,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
+                    }
+                }
                 Text(
-                    text = metricId.label,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = colors.textPrimary,
+                    text = "返回",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.accent,
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .background(
+                            color = colors.accent.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(DesignTokens.Radius.PILL.dp),
+                        )
+                        .clickable(onClick = onBack)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
+        }
 
-            // ---- 当前值 ----
-            GlassPanel {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(DesignTokens.Spacing.S16.dp),
-                ) {
-                    Text(
-                        text = "当前值（${metricId.unit}）",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                    Spacer(Modifier.height(DesignTokens.Spacing.S8.dp))
-                    if (metric != null) {
-                        MetricValueText(
-                            metricId = metricId,
-                            metric = metric,
-                            intervalMs = tickMs,
-                            onPermissionAction = { action ->
-                                when (action) {
-                                    PermissionAction.SHIZUKU -> viewModel.requestPrivilege()
-                                    else -> Unit
-                                }
-                            },
-                        )
-                    } else {
+        // 时间窗口：往回翻看
+        SectionLabel("回看")
+        GlassTabs(
+            options = WINDOWS.map { it.second },
+            selectedIndex = windowIndex,
+            onSelect = { windowIndex = it },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        // 轨迹大图
+        LiquidGlassSurface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
+            style = GlassStyle(),
+        ) {
+            when {
+                values.size < 2 -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "该指标无历史采集（仅实时采样，未纳入历史）",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "这个时间段还没有采到数据",
+                            style = MaterialTheme.typography.bodySmall,
                             color = colors.textSecondary,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
-            }
 
-            // ---- 时间窗口切换 ----
-            GlassTabs(
-                options = listOf("1 分钟", "5 分钟", "30 分钟"),
-                selectedIndex = windowIndex,
-                onSelect = { windowIndex = it },
+                mode == MetricViewMode.BARS -> BarSeries(
+                    points = values,
+                    color = accent,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                )
+
+                mode == MetricViewMode.RING -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ProgressRing(
+                        progress = (reading?.value ?: 0f) / 100f,
+                        centerText = reading?.value?.let { "${it.toInt()}" } ?: "—",
+                        caption = coreId.unit,
+                        color = accent,
+                        trackColor = accent.copy(alpha = 0.18f),
+                        modifier = Modifier.size(150.dp),
+                    )
+                }
+
+                mode == MetricViewMode.NUMBER -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AnimatedNumber(
+                        value = reading?.value ?: 0f,
+                        intervalMs = tickMs,
+                        decimals = coreId.decimals,
+                        color = accent,
+                        style = MaterialTheme.typography.displayLarge,
+                    )
+                }
+
+                else -> Sparkline(
+                    points = values,
+                    color = accent,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                )
+            }
+        }
+
+        // 显示模式
+        SectionLabel("显示方式")
+        val modeOptions = MetricViewMode.ordered
+            .filter { it != MetricViewMode.RING || coreId == CoreMetricId.MEMORY_RATIO }
+        val modeIndex = modeOptions.indexOf(mode).coerceAtLeast(0)
+        GlassTabs(
+            options = modeOptions.map { it.label },
+            selectedIndex = modeIndex,
+            onSelect = { index ->
+                viewModel.setMetricViewMode(coreId, modeOptions[index])
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        // 统计
+        val stats = viewModel.peakStats(coreId.source, windowSec)
+        if (stats != null) {
+            LiquidGlassSurface(
                 modifier = Modifier.fillMaxWidth(),
-            )
-
-            // ---- 历史图表 ----
-            GlassPanel {
-                Column(
+                shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+                style = GlassStyle(),
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(DesignTokens.Spacing.S12.dp),
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    MetricChart(points = points, modifier = Modifier.fillMaxWidth())
-                    ChartCaption(points = points, modifier = Modifier.padding(top = DesignTokens.Spacing.S8.dp))
-                }
-            }
-
-            // ---- 峰值查看 ----
-            GlassPanel {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(DesignTokens.Spacing.S16.dp),
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
-                ) {
-                    Text(
-                        text = "窗口峰值（${windowsSec[windowIndex] / 60} 分钟）",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                    if (peaks != null) {
-                        PeakRow("最高", peaks.max, accent)
-                        PeakRow("最低", peaks.min, accent)
-                        PeakRow("平均", peaks.avg, accent)
-                        PeakRow("最新", peaks.latest, accent)
-                        Text(
-                            text = "样本数 ${peaks.samples}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.textSecondary,
-                        )
-                    } else {
-                        Text(
-                            text = "数据不足，无法分析",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.textSecondary,
-                        )
-                    }
+                    StatCell("最高", fmt(stats.max, coreId.decimals, coreId.unit))
+                    StatCell("最低", fmt(stats.min, coreId.decimals, coreId.unit))
+                    StatCell("平均", fmt(stats.avg, coreId.decimals, coreId.unit))
+                    StatCell("采样", "${stats.samples}")
                 }
             }
         }
@@ -198,27 +282,32 @@ fun MetricDetailScreen(
 }
 
 @Composable
-private fun PeakRow(label: String, value: Float, color: androidx.compose.ui.graphics.Color) {
+private fun SectionLabel(text: String) {
     val colors = LocalTokenColors.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = colors.textSecondary,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+    )
+}
+
+@Composable
+private fun StatCell(label: String, value: String) {
+    val colors = LocalTokenColors.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.textPrimary,
+        )
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.labelSmall,
             color = colors.textSecondary,
-            modifier = Modifier.weight(1f),
-        )
-        com.devperf.monitor.ui.kit.MonoNumber(
-            text = formatPeak(value),
-            color = color,
-            style = MaterialTheme.typography.headlineSmall,
         )
     }
 }
 
-private fun formatPeak(value: Float): String =
-    if (value >= 100f || value <= -100f) value.toInt().toString()
-    else if (value == value.toInt().toFloat()) value.toInt().toString()
-    else String.format("%.1f", value)
+private fun fmt(value: Float, decimals: Int, unit: String): String =
+    "${"%.${decimals}f".format(value)}$unit"
