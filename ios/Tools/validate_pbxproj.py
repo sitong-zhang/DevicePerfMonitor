@@ -65,7 +65,39 @@ def main():
     if missing:
         errors.append(f"未定义引用: {missing}")
 
-    # 4. 磁盘一致性
+    # 4. 磁盘一致性：模拟 Xcode 的组链路径解析。
+    # 规则（与 Xcode 一致）：sourceTree=<group> 的文件路径相对其所属组解析；
+    # 组的贡献路径 = 其 path（只有 name 没有 path 的组视为虚拟组，贡献为空，
+    # 子节点相对父组解析）；主组（无 path/name）为容器根（ios/）。
+    # 解析结果必须在磁盘上存在，否则归档期才报 "Build input file cannot be found"。
+    groups = {}   # uuid -> {"children": [...], "path": str|None, "name": str|None}
+    for m in re.finditer(r"^\t\t([0-9A-F]{24}) /\* (.*?) \*/ = \{\n\t\t\tisa = PBXGroup;", body, re.M):
+        seg = body[m.end():m.end() + 2000]
+        seg = seg[:seg.find("\n\t\t};")] if "\n\t\t};" in seg else seg
+        children = re.findall(r"^\t\t\t\t([0-9A-F]{24}),", seg, re.M)
+        path_m = re.search(r"^\t\t\tpath = (.*?);", seg, re.M)
+        name_m = re.search(r"^\t\t\tname = (.*?);", seg, re.M)
+        groups[m.group(1)] = {
+            "children": children,
+            "path": path_m.group(1).strip('"') if path_m else None,
+            "name": name_m.group(1).strip('"') if name_m else None,
+        }
+    parent_of = {}
+    for gid, g in groups.items():
+        for c in g["children"]:
+            parent_of[c] = gid
+
+    def resolve(uuid):
+        """从主组向下收集路径段（不含文件自身 path）。"""
+        parts = []
+        cur = parent_of.get(uuid)
+        while cur is not None and cur in groups:
+            g = groups[cur]
+            if g["path"]:
+                parts.append(g["path"])
+            cur = parent_of.get(cur)
+        return list(reversed(parts))
+
     file_refs = re.findall(
         r"^\t\t([0-9A-F]{24}) /\* (.*?) \*/ = \{isa = PBXFileReference;.*?path = \"(.*?)\"; sourceTree = \"(.*?)\";",
         body, re.M)
@@ -77,19 +109,14 @@ def main():
     for u, name, path, tree in file_refs:
         if tree == "BUILT_PRODUCTS_DIR":
             continue
-        # sourceTree=<group>：相对所属组解析；此处以 ios/ 为根做存在性粗校验
-        cand = os.path.join(IOS_ROOT, path)
-        if not os.path.exists(cand):
-            # 组相对路径：在 ios/ 下按目录名/文件名递归查找
-            found = False
-            for root, dirs, files in os.walk(IOS_ROOT):
-                if os.path.basename(path) in files or os.path.basename(path) in dirs:
-                    found = True
-                    break
-            if not found:
-                errors.append(f"fileRef 磁盘缺失: {name} (path={path})")
+        if u not in parent_of:
+            errors.append(f"fileRef {name} 不属于任何组（sourceTree=<group> 必须有父组）")
+            continue
+        full = os.path.join(IOS_ROOT, *resolve(u), path)
+        if not os.path.exists(full):
+            errors.append(f"fileRef 解析后磁盘缺失: {name} -> {os.path.relpath(full, IOS_ROOT)}")
         checked += 1
-    print(f"fileRef 校验数: {checked}")
+    print(f"fileRef 校验数: {checked}（组链路径解析）")
 
     # 5. Sources 阶段文件数 vs 源文件总数
     swift_total = 0

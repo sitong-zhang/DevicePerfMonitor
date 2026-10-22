@@ -276,50 +276,37 @@ def main():
     bf_charts = buildfile("charts", charts_product, "DGCharts", "in Frameworks", ref_key="productRef")
 
     # ------------------------------------------------------------------
-    # Groups（子组优先）
+    # Groups（目录树，子组优先）
     # ------------------------------------------------------------------
-    def make_app_group(rel_dir):
-        if rel_dir == "":
-            return None
-        # 只支持一层嵌套（Theme/UIKit/... + Collection/Collectors）
-        if "/" in rel_dir:
-            parent, child = rel_dir.split("/", 1)
-            keys = app_group_file_keys.get(rel_dir, [])
-            children = [file_refs[k] for k in keys]
-            gid = group("app:" + rel_dir, child, children, path=None)
-            group_ids["app:" + rel_dir] = gid
-            group_ids[rel_dir] = gid
-            return gid
-        keys = app_group_file_keys.get(rel_dir, [])
-        children = [file_refs[k] for k in keys]
-        gid = group("app:" + rel_dir, rel_dir, children, path=rel_dir)
-        group_ids[rel_dir] = gid
-        group_ids["app:" + rel_dir] = gid
+    # 统一目录树：目录 -> [文件 key...]。Resources 子树没有源文件，手动并入。
+    # 每个目录组的 path/name 都取目录名，并挂到父目录组下 —— 缺 path 或少挂一层，
+    # Xcode 就会把文件解析到错误目录，归档报 "Build input file cannot be found"。
+    # 注意 Assets.xcassets 是文件不是目录，直接挂在 Resources 组下，
+    # 不能给它建组（否则组 path 与文件 path 重复，解析出 .../Assets.xcassets/Assets.xcassets）。
+    dir_tree = {rel: list(keys) for rel, keys in app_group_file_keys.items()}
+    dir_tree.setdefault("Resources", []).append(assets_key)
+    dir_tree["Resources/Fonts"] = font_keys
+
+    def build_dir_group(rel):
+        if rel in group_ids:
+            return group_ids[rel]
+        children = [file_refs[k] for k in dir_tree.get(rel, [])]
+        prefix = rel + "/" if rel else ""
+        for other in sorted(dir_tree):
+            if not other or other == rel:
+                continue
+            if other.startswith(prefix) and "/" not in other[len(prefix):]:
+                children.append(build_dir_group(other))
+        name = rel.split("/")[-1] if rel else "DevicePerfMonitor"
+        gid = group("app:" + rel, name, children, path=name)
+        group_ids[rel] = gid
+        group_ids["app:" + rel] = gid
         return gid
 
-    # 先建所有子组
-    for rel_dir in sorted(app_group_file_keys):
-        make_app_group(rel_dir)
-
-    # Fonts / Assets 资源组
-    grp_fonts = group("app:Resources/Fonts", "Fonts", [file_refs[k] for k in font_keys], path=None)
-    grp_assets = group("app:Resources/Assets.xcassets", "Assets.xcassets", [file_refs[assets_key]], path=None)
-    grp_resources = group("app:Resources", "Resources",
-                          [grp_fonts, grp_assets], path="Resources")
-    group_ids["Resources"] = grp_resources
-
-    # App 根组
-    root_keys = app_group_file_keys.get("", [])
-    root_children = [file_refs[k] for k in root_keys]
-    for rel_dir in sorted(app_group_file_keys):
-        if rel_dir == "":
-            continue
-        if "/" in rel_dir:
-            parent, child = rel_dir.split("/", 1)
-            root_children.append(group_ids["app:" + rel_dir])
-        else:
-            root_children.append(group_ids[rel_dir])
-    root_children.append(grp_resources)
+    root_children = [file_refs[k] for k in dir_tree.get("", [])]
+    for other in sorted(dir_tree):
+        if other and "/" not in other:
+            root_children.append(build_dir_group(other))
     root_children.append(app_plist)
     grp_app = group("app", "DevicePerfMonitor", root_children, path="DevicePerfMonitor")
 
