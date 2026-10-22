@@ -38,7 +38,8 @@ class MemoryCollector(
         val totalMb = if (ok && info.totalMem > 0L) info.totalMem / (1024.0 * 1024.0) else null
         val availMb = if (ok && info.availMem >= 0L) info.availMem / (1024.0 * 1024.0) else null
         val usedMb = if (totalMb != null && availMb != null) totalMb - availMb else null
-        val ratio = if (totalMb != null && usedMb != null && totalMb > 0f) usedMb / totalMb * 100f else null
+        val ratio = if (totalMb != null && usedMb != null && totalMb > 0.0)
+            (usedMb / totalMb * 100.0).toFloat() else null
 
         val perApp = readPerAppMemory()
 

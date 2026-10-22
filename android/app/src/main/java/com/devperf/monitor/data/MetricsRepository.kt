@@ -157,11 +157,20 @@ class MetricsRepository(
         fun <T> metric(id: MetricId): Metric<T> =
             (m[id] as? Metric<T>) ?: Metric.unavailable("本次采样未返回", now)
 
+        // 注意：m 为 Map<MetricId, Metric<*>>，泛型擦除后 as? Metric<Float> 对持有 Double 的
+        // 指标也会成功（运行时都是 Metric），导致下游强转 Float 时崩溃。
+        // 因此这里额外校验"实际值类型"才是 Float/Int，否则回退到上一次快照值。
         val floatOr = { id: MetricId, fallback: Metric<Float> ->
-            (m[id] as? Metric<Float>) ?: fallback
+            val candidate = m[id]
+            if (candidate != null && candidate.value is Float) {
+                @Suppress("UNCHECKED_CAST") candidate as Metric<Float>
+            } else fallback
         }
         val intOr = { id: MetricId, fallback: Metric<Int> ->
-            (m[id] as? Metric<Int>) ?: fallback
+            val candidate = m[id]
+            if (candidate != null && candidate.value is Int) {
+                @Suppress("UNCHECKED_CAST") candidate as Metric<Int>
+            } else fallback
         }
 
         return DeviceSnapshot(
