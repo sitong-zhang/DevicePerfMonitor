@@ -12,6 +12,26 @@
 - 不申请 INTERNET 权限，没有任何联网代码路径
 - 平台做不到的功能，直接说做不到，降级方案写进文档
 
+## 版本
+
+当前 **1.0.1**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+
+发版要改的地方就这几处，漏一处两边就对不上：
+
+| 位置 | 字段 |
+| --- | --- |
+| `android/app/build.gradle.kts` | `versionCode` / `versionName` |
+| `ios/DevicePerfMonitor.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`，各 4 处 |
+| `ios/Tools/generate_xcodeproj.py` | 同样两个字段，各 2 处；重跑生成脚本时靠它写进 pbxproj |
+| `README.md` | 本节版本号，和构建小节里的包体积 |
+| Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
+
+### 更新记录
+
+**1.0.1**：修掉 Android 上一打开就闪退的问题——内存占用率算出来是 `Double`，泛型擦除后被当成 `Float` 送进 UI，渲染时强转抛 `ClassCastException`（华为 Android 10 上必现）。顺手给 `MetricsRepository` 的取值函数加了实际值类型校验，以后再有采集器写错类型只会降级显示，不会崩。双端都加了崩溃监测器：任何崩溃立刻弹出完整调用栈，能复制、能截图。
+
+**1.0.0**：首个版本。
+
 ## 功能
 
 **全局悬浮窗**（Android 系统级，iOS 应用内）
@@ -34,6 +54,10 @@
 
 温度分取 CPU 和电池温度的较大值，40℃ 以下满分，40~70℃ 线性降到 10，超过 70 归零。帧率稳定性优先用全局掉帧率算，没有全局 FPS 时降级用本 App 帧时间标准差，但会标成"参考值"。哪个维度不可用，它的权重按比例分给其他维度；全不可用就显示"数据不足"，不编分数。
 
+**崩溃监测**（双端）
+
+任何没被 catch 的异常都会立刻弹出全屏报告：异常类型、完整调用栈、机型系统版本、全部线程栈，带复制按钮。启动阶段就崩的也能抓到——Android 侧在独立的 `:crash` 进程里用纯 View 画报告，绕开主界面的 Compose 渲染，不会陷入"崩了又崩"；iOS 侧 NSException 实时弹 UIKit 窗口，信号类崩溃写文件、下次启动展示。代码在 `android/.../CrashHandler.kt`、`CrashActivity.kt` 和 `ios/.../CrashReporter.swift`。
+
 ## 构建
 
 ### Android
@@ -47,7 +71,7 @@ cd android
 
 要发布签名就复制 `android/keystore.properties.template` 为 `keystore.properties`，按模板里的 keytool 命令生成密钥再填进去。这个文件已被 gitignore，不会入库。没配的话 release 包会自动用 debug 签名，构建日志里会说明，这是有意的降级。
 
-已在 Linux 环境验证通过：`:app:assembleDebug`、`:app:assembleRelease`、`:app:lintVitalRelease` 全部成功，release APK 3.26 MB。`releases/` 目录下放了打好的包，可以直接装。
+已在 Linux 环境验证通过：`:app:assembleDebug`、`:app:assembleRelease`、`:app:lintVitalRelease` 全部成功，release APK 3.28 MB。`releases/` 目录下会放打好的包，可以直接装，但这个目录不入库，正式分发走 GitHub Release。
 
 ### iOS
 
@@ -63,7 +87,7 @@ cd android
 ├── design-tokens.json     # 双端唯一真源：色板/玻璃参数/动效/健康分公式
 ├── Tools/check_tokens.py  # 校验双端生成产物一致
 ├── licenses/              # Inter 与 JetBrains Mono 的 OFL 许可证
-├── releases/              # 打好的 Android APK
+├── releases/              # 打好的 APK / IPA（本地副本，gitignore，不在仓库里）
 ├── android/
 │   ├── buildSrc/          # design-tokens 代码生成任务（编译型，兼容配置缓存）
 │   ├── build-apk.sh       # 一键打包
