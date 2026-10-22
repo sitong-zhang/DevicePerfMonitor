@@ -301,7 +301,7 @@ final class OverviewViewModel: ObservableObject {
         MetricsRepository.shared.sampleOnce()
 
         timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            Task { [weak self] @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 let repository = MetricsRepository.shared
                 self.snapshot = repository.snapshot

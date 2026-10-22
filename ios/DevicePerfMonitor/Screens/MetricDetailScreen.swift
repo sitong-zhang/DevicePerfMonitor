@@ -139,7 +139,7 @@ final class MetricDetailViewModel: ObservableObject {
         self.metricId = metricId
         if timer == nil {
             let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-                Task { [weak self] @MainActor in self?.refresh() }
+                Task { @MainActor [weak self] in self?.refresh() }
             }
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer

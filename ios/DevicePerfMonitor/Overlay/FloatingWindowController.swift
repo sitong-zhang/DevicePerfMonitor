@@ -57,7 +57,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
         return CGPoint(x: bounds.width - 70, y: bounds.midY)
     }
 
-    private init() {}
+    private override init() {}
 
     // MARK: - 显示 / 隐藏
 
@@ -246,7 +246,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
     private func startUpdateTimer() {
         stopUpdateTimer()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { [weak self] @MainActor in
+            Task { @MainActor [weak self] in
                 self?.refresh()
             }
         }
