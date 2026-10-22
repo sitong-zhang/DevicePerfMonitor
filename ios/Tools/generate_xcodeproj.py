@@ -323,15 +323,16 @@ def main():
     root_children.append(app_plist)
     grp_app = group("app", "DevicePerfMonitor", root_children, path="DevicePerfMonitor")
 
-    # Widget 组（含共享文件 MonitorActivityAttributes.swift 的同一 fileRef）
+    # Widget 组。共享文件 MonitorActivityAttributes.swift 的 fileRef 只属于
+    # App 侧 LiveActivity 组（物理位置），widget 只在 Sources 阶段多挂一个
+    # PBXBuildFile —— 与 Xcode「Add to Targets」多选的行为一致。
+    # 注意：不要把同一 fileRef 再插进本组，否则 Xcode 会按本组 path 解析文件
+    # 位置，得到 DevicePerfMonitorWidget/MonitorActivityAttributes.swift 这种
+    # 不存在的路径，归档直接报 "Build input file cannot be found"。
     widget_children = []
     for rel_dir, keys in widget_group_file_keys.items():
         for k in keys:
-            if k == "widget-src:MonitorActivityAttributes.swift":
-                # 共享文件：复用 App 侧 fileRef（不重复创建）
-                continue
             widget_children.append(file_refs[k])
-    widget_children.insert(0, file_refs[shared_key])
     widget_children.append(widget_plist)
     grp_widget = group("widget", "DevicePerfMonitorWidget", widget_children, path="DevicePerfMonitorWidget")
 
