@@ -541,7 +541,7 @@ def main():
         "MARKETING_VERSION": "1.0.0",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.devperf.monitor",
         "PRODUCT_NAME": "\"$(TARGET_NAME)\"",
-        "TARGETED_DEVICE_FAMILY": "1,2",
+        "TARGETED_DEVICE_FAMILY": "\"1,2\"",
     }
     widget_debug_extra = {
         "CODE_SIGN_ENTITLEMENTS": "DevicePerfMonitorWidget/DevicePerfMonitorWidget.entitlements",
@@ -553,7 +553,7 @@ def main():
         "PRODUCT_BUNDLE_IDENTIFIER": "com.devperf.monitor.widget",
         "PRODUCT_NAME": "\"$(TARGET_NAME)\"",
         "SKIP_INSTALL": "YES",
-        "TARGETED_DEVICE_FAMILY": "1,2",
+        "TARGETED_DEVICE_FAMILY": "\"1,2\"",
     }
 
     cfg_app_debug = build_config("app-debug", "Debug", {**debug_extra, **app_debug_extra})
