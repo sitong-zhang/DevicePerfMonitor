@@ -34,6 +34,13 @@
         android:theme="@style/Theme.DevicePerfMonitor"
         tools:targetApi="34">
 
+        <!-- 崩溃展示页：独立进程，纯 View 实现，避免与主进程相同渲染崩溃 -->
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:process=":crash"
+            android:theme="@style/Theme.Crash" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -43,6 +43,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // 崩溃监测器须最先安装，才能捕获后续所有崩溃（含采集启动）
+        CrashReporter.shared.install()
+        // 展示上一次（信号类）崩溃记录，若有
+        CrashReporter.shared.checkPendingCrash()
         MetricsRepository.shared.start()
         return true
     }

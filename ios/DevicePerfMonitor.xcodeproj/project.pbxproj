@@ -10,6 +10,10 @@
 
 		F6D6181048EE57AD9281C3AA /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8F6A2ABC085027ADD6E46C /* ContentView.swift */; };
 
+		F58C14EC4EFD5470998858A2 /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CrashReporter.swift"; path = "CrashReporter.swift"; sourceTree = "<group>"; };
+
+		153F88A807C2500F9B8E6CDC /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58C14EC4EFD5470998858A2 /* CrashReporter.swift */; };
+
 		716F826CFA9A540D9E9157EC /* DevicePerfMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DevicePerfMonitorApp.swift"; path = "DevicePerfMonitorApp.swift"; sourceTree = "<group>"; };
 
 		A132D94A6DD2596A9B54DDA4 /* DevicePerfMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 716F826CFA9A540D9E9157EC /* DevicePerfMonitorApp.swift */; };
@@ -304,6 +308,7 @@
 			isa = PBXGroup;
 			children = (
 				5A8F6A2ABC085027ADD6E46C,
+				F58C14EC4EFD5470998858A2,
 				716F826CFA9A540D9E9157EC,
 				998B264CA6445C70A41F1B23,
 				A2C3BD55587050E6B2626697,
@@ -363,6 +368,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F6D6181048EE57AD9281C3AA,
+				153F88A807C2500F9B8E6CDC,
 				A132D94A6DD2596A9B54DDA4,
 				C17EF0441CB5566CA418337C,
 				38AD2C919F145EE48B61D21B,
