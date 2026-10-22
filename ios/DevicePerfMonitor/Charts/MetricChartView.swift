@@ -2,7 +2,7 @@
 //  MetricChartView.swift
 //  DevicePerfMonitor
 //
-//  指标历史折线图：danielgindi/Charts（Apache-2.0）。
+//  指标历史折线图：danielgindi/Charts（Apache-2.0，SPM 产品名为 DGCharts，4.0 起更名）。
 //
 //  设计约束（与 Android 端 Vico 封装一致）：
 //  - 线条/文字颜色跟随液态玻璃主题（Catppuccin 语义色），不使用库默认蓝；
@@ -12,7 +12,7 @@
 //
 
 import SwiftUI
-import Charts
+import DGCharts
 
 struct MetricChartView: View {
     @Environment(\.colors) private var colors

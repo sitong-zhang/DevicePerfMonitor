@@ -153,13 +153,13 @@
 			};
 		};
 
-		CBD0F54A8C995ACCB4FF2279 /* Charts */ = {
+		CBD0F54A8C995ACCB4FF2279 /* DGCharts */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C055D366E18F581FAF05ED04 /* XCRemoteSwiftPackageReference "Charts" */;
-			productName = Charts;
+			productName = DGCharts;
 		};
 
-		EDF8A3704EFE53F397BD5C30 /* Charts in Frameworks */ = {isa = PBXBuildFile; productRef = CBD0F54A8C995ACCB4FF2279 /* Charts */; };
+		EDF8A3704EFE53F397BD5C30 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = CBD0F54A8C995ACCB4FF2279 /* DGCharts */; };
 
 		998B264CA6445C70A41F1B23 /* Analysis */ = {
 			isa = PBXGroup;

@@ -267,13 +267,13 @@ def main():
         "\t\t};",
     ])
     charts_product = add("prod:charts", "XCSwiftPackageProductDependency", [
-        f"\t\t{uid('prod:charts')} /* Charts */ = {{",
+        f"\t\t{uid('prod:charts')} /* DGCharts */ = {{",
         "\t\t\tisa = XCSwiftPackageProductDependency;",
         f"\t\t\tpackage = {pkg_ref} /* XCRemoteSwiftPackageReference \"Charts\" */;",
-        "\t\t\tproductName = Charts;",
+        "\t\t\tproductName = DGCharts;",
         "\t\t};",
     ])
-    bf_charts = buildfile("charts", charts_product, "Charts", "in Frameworks", ref_key="productRef")
+    bf_charts = buildfile("charts", charts_product, "DGCharts", "in Frameworks", ref_key="productRef")
 
     # ------------------------------------------------------------------
     # Groups（子组优先）

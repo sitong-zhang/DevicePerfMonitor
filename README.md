@@ -104,7 +104,7 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 | backdrop | 2.0.0-alpha03 | Apache-2.0 | 液态玻璃材质。2.0.0 正式版 AAR 要 compileSdk 37（AGP 9.1），alpha03 只要 36，API 一样，所以锁 alpha03。这个库只有材质，没有高级组件，组件全部自封装 |
 | Vico | 3.2.3 | Apache-2.0 | Compose 图表。3.3.x 要 compileSdk 37 |
 | Shizuku | 13.1.5 | Apache-2.0 | 免 root 提权通道，可选。13.1.5 起 `Shizuku.newProcess` 私有化了，改成走公开 AIDL `IShizukuService.Stub.asInterface(...)` |
-| Charts (iOS) | 5.0.0+ | Apache-2.0 | iOS 图表，对应 Android 的 Vico |
+| Charts (iOS) | 5.0.0+ | Apache-2.0 | iOS 图表，对应 Android 的 Vico。注意：这个库 4.0 起把包名和 SPM 产品名改成了 `DGCharts`，所以 import 和 pbxproj 里的 productName 都用 DGCharts |
 
 ## 采集指标对照表
 
