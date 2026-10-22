@@ -54,9 +54,12 @@ def fileref(key, display, path, ftype, source_tree="<group>"):
     return add(key, "PBXFileReference", lines)
 
 
-def buildfile(key, fileref_uuid, display, note="in Sources"):
+def buildfile(key, fileref_uuid, display, note="in Sources", ref_key="fileRef"):
+    """PBXBuildFile。普通文件用 fileRef（须指向 PBXReference）；
+    SPM 包产品（XCSwiftPackageProductDependency）必须用 productRef——
+    Xcode 校验 fileRef 必须是 PBXReference，否则报项目文件无效。"""
     lines = [
-        f"\t\t{uid('bf:' + key)} /* {display} {note} */ = {{isa = PBXBuildFile; fileRef = {fileref_uuid} /* {display} */; }};"
+        f"\t\t{uid('bf:' + key)} /* {display} {note} */ = {{isa = PBXBuildFile; {ref_key} = {fileref_uuid} /* {display} */; }};"
     ]
     return add("bf:" + key, "PBXBuildFile", lines)
 
@@ -270,7 +273,7 @@ def main():
         "\t\t\tproductName = Charts;",
         "\t\t};",
     ])
-    bf_charts = buildfile("charts", charts_product, "Charts", "in Frameworks")
+    bf_charts = buildfile("charts", charts_product, "Charts", "in Frameworks", ref_key="productRef")
 
     # ------------------------------------------------------------------
     # Groups（子组优先）

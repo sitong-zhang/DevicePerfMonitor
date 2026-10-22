@@ -201,12 +201,16 @@ Android 侧生成逻辑放在 buildSrc 的编译型 Task 而不是 `doLast` 闭�
 ## 校验
 
 ```bash
-python3 Tools/check_tokens.py            # 双端 token 与字体一致性
-python3 ios/Tools/validate_pbxproj.py    # pbxproj 引用完整性与磁盘一致性
-python3 ios/Tools/check_swift_syntax.py  # Swift 括号配对与 import 汇总
+python3 Tools/check_tokens.py              # 双端 token 与字体一致性
+python3 ios/Tools/check_plist_syntax.py    # pbxproj 的 old-style plist 全量语法解析
+python3 ios/Tools/validate_pbxproj.py      # pbxproj 引用完整性、磁盘一致性、BuildFile 引用类型
+python3 ios/Tools/check_swift_syntax.py    # Swift 括号配对与 import 汇总
 ```
 
-后两个是给没有 macOS 的环境兜底用的，真正常驻校验还是 `check_tokens.py`。
+Xcode 的 plist 解析器遇到第一个语法错误就中止，只报一个行号，所以本地用 `check_plist_syntax.py`
+做全量解析一次报全；`validate_pbxproj.py` 管语义层，比如 PBXBuildFile 的 fileRef 必须指向
+PBXReference，SPM 包产品得用 productRef。这几个脚本是给没有 macOS 的环境兜底用的，
+真正常驻校验还是 `check_tokens.py`。
 
 ## License
 

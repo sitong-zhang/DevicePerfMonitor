@@ -22,7 +22,9 @@ IOS_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 
 
 def main():
-    text = open(PBX, encoding="utf-8").read()
+    # 支持传入待校验的 pbxproj 路径（默认工程内文件），便于对生成中间产物做反向测试
+    pbx = sys.argv[1] if len(sys.argv) > 1 else PBX
+    text = open(pbx, encoding="utf-8").read()
     errors = []
 
     # 1. 括号配对
@@ -97,6 +99,31 @@ def main():
     src_phase = re.search(r"/\* Sources \*/ = \{\s*isa = PBXSourcesBuildPhase;.*?files = \((.*?)\);",
                           body, re.S)
     print(f"磁盘 .swift 总数: {swift_total}")
+
+    # 6. PBXBuildFile 引用类型语义：fileRef 必须指向 PBXReference 家族
+    # （PBXFileReference / PBXReferenceProxy），SPM 包产品必须用 productRef
+    # 指向 XCSwiftPackageProductDependency。Xcode 对违反此规则的项目直接报
+    # "invalid project file ... fileReference is not a PBXReference"。
+    isa_of = {}
+    for m in re.finditer(r"^\t\t([0-9A-F]{24}) /\* .*? \*/ = \{", body, re.M):
+        # 对象定义起点，向后找第一个 isa = X;（单行/多行定义都兼容）
+        seg = body[m.end():m.end() + 400]
+        isa_m = re.search(r"isa = (\w+);", seg)
+        if isa_m:
+            isa_of[m.group(1)] = isa_m.group(1)
+    REF_OK = {"PBXFileReference", "PBXReferenceProxy", "PBXGroup"}
+    for m in re.finditer(
+            r"^\t\t([0-9A-F]{24}) /\* .*? \*/ = \{isa = PBXBuildFile; fileRef = ([0-9A-F]{24})", body, re.M):
+        bf, ref = m.group(1), m.group(2)
+        if isa_of.get(ref) not in REF_OK:
+            errors.append(f"PBXBuildFile {bf} 的 fileRef {ref} 类型为 "
+                          f"{isa_of.get(ref)}，不是 PBXReference（SPM 产品应改用 productRef）")
+    for m in re.finditer(
+            r"^\t\t([0-9A-F]{24}) /\* .*? \*/ = \{isa = PBXBuildFile; productRef = ([0-9A-F]{24})", body, re.M):
+        bf, ref = m.group(1), m.group(2)
+        if isa_of.get(ref) != "XCSwiftPackageProductDependency":
+            errors.append(f"PBXBuildFile {bf} 的 productRef {ref} 类型为 "
+                          f"{isa_of.get(ref)}，不是 XCSwiftPackageProductDependency")
 
     if errors:
         print("\n[FAIL]")
