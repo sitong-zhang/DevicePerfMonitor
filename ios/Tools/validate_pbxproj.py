@@ -5,6 +5,8 @@ project.pbxproj 静态校验器。
 
 检查项：
 1. 语法：花括号/圆括号配对、对象定义唯一性；
+   old-style plist 值合法性：不允许两个相邻引号串（= "A" "B"; 是 Xcode 解析报
+   "missing semicolon in dictionary" 的常见原因，必须是单个字符串或数组）；
 2. 引用完整性：所有 24 位大写十六进制 UUID 引用都能在 objects 段找到定义；
 3. 孤儿对象：除被 rootObject/主组/阶段引用链可达的对象外报警；
 4. 磁盘一致性：PBXFileReference（sourceTree=<group>）的 path 能在磁盘上定位；
@@ -40,6 +42,12 @@ def main():
             errors.append(f"UUID 重复定义: {u}")
         defined[u] = comment
     print(f"对象定义数: {len(defined)}")
+
+    # 2b. old-style plist 值合法性：相邻引号串（"A" "B";）会让 Xcode 解析器报
+    # "missing semicolon in dictionary"，本地必须先抓出来
+    for ln, line in enumerate(text.splitlines(), 1):
+        if re.search(r'= "[^"]*"\s+"[^"]*";', line):
+            errors.append(f"第 {ln} 行: 相邻引号串非法（old-style plist 要求单个字符串）: {line.strip()}")
 
     # 3. 引用完整性（排除注释里的）
     refs = set()

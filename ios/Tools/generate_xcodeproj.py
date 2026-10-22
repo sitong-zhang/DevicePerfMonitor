@@ -516,7 +516,8 @@ def main():
     debug_extra = {
         "GCC_DYNAMIC_NO_PIC": "NO",
         "GCC_OPTIMIZATION_LEVEL": "0",
-        "GCC_PREPROCESSOR_DEFINITIONS": "\"DEBUG=1\" \"$(inherited)\"",
+        # old-style plist 里不允许两个相邻引号串（"A" "B" 非法，必须是单个字符串或数组）
+        "GCC_PREPROCESSOR_DEFINITIONS": "\"DEBUG=1 $(inherited)\"",
         "MTL_ENABLE_DEBUG_INFO": "INCLUDE_SOURCE",
         "ONLY_ACTIVE_ARCH": "YES",
         "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG",
