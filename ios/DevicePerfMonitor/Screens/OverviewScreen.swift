@@ -44,17 +44,7 @@ struct OverviewScreen: View {
 
                 // 全量指标分组
                 ForEach(MetricCategory.allCases, id: \.self) { category in
-                    let metrics = viewModel.metrics(for: category)
-                    if !metrics.isEmpty {
-                        GlassSectionTitle(text: category.rawValue)
-                        GlassPanel {
-                            VStack(spacing: DesignTokens.Spacing.s8) {
-                                ForEach(metrics, id: \.id) { id in
-                                    MetricRow(id: id, metric: viewModel.snapshot.metricOf(id), tickMs: viewModel.tickMs)
-                                }
-                            }
-                        }
-                    }
+                    categorySection(category)
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.s16)
@@ -62,6 +52,27 @@ struct OverviewScreen: View {
             .padding(.bottom, 96) // 底部标签栏空间
         }
         .background(colors.background.ignoresSafeArea())
+    }
+
+    /// 单个指标类别分组：标题 + 指标列表面板。抽到方法里是为了让标题视图
+    /// 脱离 ForEach 闭包的构建器上下文（之前直接写在闭包里会导致编译器
+    /// 把 GlassSectionTitle 解析错成非 View）。
+    private func categorySection(_ category: MetricCategory) -> some View {
+        let metrics = viewModel.metrics(for: category)
+        return Group {
+            if !metrics.isEmpty {
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
+                    GlassSectionTitle(text: category.rawValue)
+                    GlassPanel {
+                        VStack(spacing: DesignTokens.Spacing.s8) {
+                            ForEach(metrics, id: \.id) { id in
+                                MetricRow(id: id, metric: viewModel.snapshot.metricOf(id), tickMs: viewModel.tickMs)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

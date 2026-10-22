@@ -155,13 +155,13 @@ extension ClosedRange where Bound == Double {
     /// 归一化到 0...1。
     func spanFraction(_ value: Double) -> Double {
         guard upperBound > lowerBound else { return 0 }
-        return (min(max(value, lowerBound), upperBound) - lowerBound) / (upperBound - lowerBound)
+        return (Swift.min(Swift.max(value, lowerBound), upperBound) - lowerBound) / (upperBound - lowerBound)
     }
 }
 
 extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
-        min(max(self, range.lowerBound), range.upperBound)
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 
     /// 按步数量化（steps 为总档位数 - 1）。
