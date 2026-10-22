@@ -21,7 +21,7 @@ import SwiftUI
 import UIKit
 
 @MainActor
-final class FloatingWindowController: ObservableObject {
+final class FloatingWindowController: NSObject, ObservableObject {
 
     static let shared = FloatingWindowController()
 
@@ -246,7 +246,7 @@ final class FloatingWindowController: ObservableObject {
     private func startUpdateTimer() {
         stopUpdateTimer()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { [weak self] @MainActor in
                 self?.refresh()
             }
         }

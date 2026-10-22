@@ -55,15 +55,9 @@ struct VisualEffectBlur: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        // 样式变化时重建 effect（UIVisualEffectView 要求 effect 整体替换）
-        if uiView.effect == nil || !effectEquals(uiView.effect, material) {
-            uiView.effect = UIBlurEffect(style: material)
-        }
-    }
-
-    private func effectEquals(_ effect: UIVisualEffect?, _ style: UIBlurEffect.Style) -> Bool {
-        guard let blur = effect as? UIBlurEffect else { return false }
-        return blur.style == style
+        // UIVisualEffectView 要求 effect 整体替换；UIBlurEffect 没有公开的
+        // style 属性可比较，样式变化时直接重建（重复赋值同样式无副作用）
+        uiView.effect = UIBlurEffect(style: material)
     }
 }
 
@@ -138,10 +132,10 @@ struct LiquidGlassSurface: ViewModifier {
                         .fill(
                             LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(g.HighlightAlphaTop), location: 0),
-                                    .init(color: Color.white.opacity(g.HighlightAlphaTop * 0.25), location: 0.35),
+                                    .init(color: Color.white.opacity(g.highlightAlphaTop), location: 0),
+                                    .init(color: Color.white.opacity(g.highlightAlphaTop * 0.25), location: 0.35),
                                     .init(color: Color.clear, location: 0.6),
-                                    .init(color: Color.black.opacity(g.InnerShadowAlpha), location: 1),
+                                    .init(color: Color.black.opacity(g.innerShadowAlpha), location: 1),
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -153,21 +147,21 @@ struct LiquidGlassSurface: ViewModifier {
                         .strokeBorder(
                             LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(g.BorderAlpha), location: 0),
-                                    .init(color: Color.white.opacity(g.BorderAlpha * 0.25), location: 0.5),
-                                    .init(color: Color.black.opacity(g.BorderAlpha * 0.3), location: 1),
+                                    .init(color: Color.white.opacity(g.borderAlpha), location: 0),
+                                    .init(color: Color.white.opacity(g.borderAlpha * 0.25), location: 0.5),
+                                    .init(color: Color.black.opacity(g.borderAlpha * 0.3), location: 1),
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             ),
-                            lineWidth: g.BorderWidth
+                            lineWidth: g.borderWidth
                         )
                         .allowsHitTesting(false)
 
                     // 7. 程序化噪点（overlay 混合，真实纹理）
                     Image(uiImage: NoiseTexture.tile)
                         .resizable(resizingMode: .tile)
-                        .opacity(g.NoiseAlpha)
+                        .opacity(g.noiseAlpha)
                         .blendMode(.overlay)
                         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                         .allowsHitTesting(false)
@@ -175,10 +169,10 @@ struct LiquidGlassSurface: ViewModifier {
             )
             .compositingGroup()
             .shadow(
-                color: Color.black.opacity(style.outerShadow ? g.OuterShadowAlpha : 0),
-                radius: style.outerShadow ? g.OuterShadowRadius : 0,
+                color: Color.black.opacity(style.outerShadow ? g.outerShadowAlpha : 0),
+                radius: style.outerShadow ? g.outerShadowRadius : 0,
                 x: 0,
-                y: style.outerShadow ? g.OuterShadowOffsetY : 0
+                y: style.outerShadow ? g.outerShadowOffsetY : 0
             )
     }
 }

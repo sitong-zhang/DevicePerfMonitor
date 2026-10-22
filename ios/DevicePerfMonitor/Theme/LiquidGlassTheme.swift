@@ -120,7 +120,9 @@ enum Typography {
         let attrs: [CFString: Any] = [kCTFontVariationAttribute: [AppFont.sansVariationAxis: wght]]
         let varied = CTFontDescriptorCreateCopyWithAttributes(base, attrs as CFDictionary)
         let font = CTFontCreateWithFontDescriptor(varied, size, nil)
-        if font.familyName.isEmpty {
+        // CTFont 没有 familyName 属性，取字体族要用 CTFontCopyFamilyName
+        let family = CTFontCopyFamilyName(font) as String? ?? ""
+        if family.isEmpty {
             // 字体缺失（未注册）：回退系统字体，保证 UI 可用
             return UIFont.systemFont(ofSize: size, weight: Self.uiWeight(weight))
         }

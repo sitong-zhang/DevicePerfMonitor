@@ -145,7 +145,7 @@ enum MetricId: String, CaseIterable {
         case .jankFrames: return "帧"
         case .jankRatio: return "%"
         case .refreshRate: return "Hz"
-        case .cpuUsage, .cpuCoreUsage: return "%"
+        case .cpuUsage, .cpuCoreUsage, .gpuLoad: return "%"
         case .cpuCoreFreq, .gpuFreq: return "MHz"
         case .cpuTemp, .gpuTemp, .batteryTemp, .deviceTemp: return "℃"
         case .batteryCurrent: return "mA"

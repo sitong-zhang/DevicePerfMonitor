@@ -4,7 +4,7 @@
 生成 ios/DevicePerfMonitor.xcodeproj/project.pbxproj。
 
 双 target：
-  1. DevicePerfMonitor（App，iOS 16.1+，依赖 Charts SPM）
+  1. DevicePerfMonitor（App，iOS 17.0+，依赖 Charts SPM）
   2. DevicePerfMonitorWidget（Widget Extension，承载 Live Activity）
 
 设计说明：
@@ -487,7 +487,7 @@ def main():
             "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
             "GCC_WARN_UNUSED_FUNCTION": "YES",
             "GCC_WARN_UNUSED_VARIABLE": "YES",
-            "IPHONEOS_DEPLOYMENT_TARGET": "16.1",
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
             "MTL_FAST_MATH": "YES",
             "SDKROOT": "iphoneos",
             "SWIFT_VERSION": "5.0",

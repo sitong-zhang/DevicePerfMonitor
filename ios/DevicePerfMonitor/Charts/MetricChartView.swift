@@ -26,7 +26,7 @@ struct MetricChartView: View {
                 .frame(height: 180)
                 .frame(maxWidth: .infinity)
         } else {
-            LineChartRepresentable(points: points, lineColor: colors.accent, textColor: colors.textSecondary)
+            LineChartRepresentable(points: points, lineColor: UIColor(colors.accent), textColor: UIColor(colors.textSecondary))
                 .frame(height: 180)
         }
     }

@@ -17,8 +17,9 @@ struct DevicePerfMonitorApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .liquidGlassTheme(mode: ThemeMode(rawValue: themeModeRaw) ?? .dark)
+            LiquidGlassTheme(mode: ThemeMode(rawValue: themeModeRaw) ?? .dark) {
+                ContentView()
+            }
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
