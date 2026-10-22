@@ -142,8 +142,8 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 | 各核心频率 | 无公开 API，沙箱读不了 sysfs | | U | |
 | CPU 温度 | 无公开 API | | U | |
 | GPU 负载 / 频率 / 温度 | 无公开 API | | U | |
-| 电量 / 充电状态 | IOPSCopyPowerSourcesInfo | 无 | A | |
-| 电池温度 / 电流 / 电压 | IOKit 相关键未公开 | | U | |
+| 电量 / 充电状态 | UIDevice.batteryLevel / batteryState | 无 | A | |
+| 电池温度 / 电流 / 电压 | 无公开 API（iOS 无 IOKit） | | U | |
 | 电池健康（百分比） | 无公开 API | | U | |
 | 总 / 已用 / 可用内存 / 占用率 | host_statistics64 + ProcessInfo.physicalMemory | 无 | A | 口径与 Android 一致：可用 = (free + inactive) × 页大小 |
 | 后台应用内存 | 无公开 API | | U | iOS 沙箱比 Android 更严 |

@@ -2,71 +2,47 @@
 //  BatteryCollector.swift
 //  DevicePerfMonitor
 //
-//  电池采集器：IOPSCopyPowerSourcesInfo（公开 IOKit API，始终可用）。
+//  电池采集器：UIDevice 公开 API（电量 / 充电状态）。
+//  注：IOPSCopyPowerSourcesInfo 那套 IOKit API 只有 macOS 有，iOS SDK
+//  链接不到 IOKit，编译直接报 no such module。
 //
 //  三态说明（iOS 平台限制，README「降级说明」同步记录）：
-//  - 电量 / 充电状态：kIOPSCurrentCapacityKey / kIOPSIsChargingKey（公开）；
-//  - 电流 / 电压 / 电池温度：iOS 无公开 API（kIOPSAmperageKey 等未公开）
-//    → 常态 UNAVAILABLE（禁止用估算值冒充）；
+//  - 电量 / 充电状态：UIDevice.batteryLevel / batteryState（公开）；
+//  - 电流 / 电压 / 电池温度：iOS 无公开 API → 常态 UNAVAILABLE
+//    （禁止用估算值冒充）；
 //  - 电池健康百分比：iOS 无公开 API → 常态 UNAVAILABLE。
 //
 
 import Foundation
-import IOKit
+import UIKit
 
 final class BatteryCollector {
 
-    private let kIOPSIsChargingKey = "Is Charging"
-    private let kIOPSCurrentCapacityKey = "Current Capacity"
-    private let kIOPSMaxCapacityKey = "Max Capacity"
-    private let kIOPSPowerSourceStateKey = "Power Source State"
-
     func sample(now: TimeInterval) -> BatteryMetrics {
-        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef],
-              let source = sources.first,
-              let desc = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any]
-        else {
-            let reason = "无法读取电源信息（IOPSCopyPowerSourcesInfo 失败）"
-            return BatteryMetrics(
-                temperatureC: .unavailable(reason: reason, at: now),
-                currentMa: .unavailable(reason: reason, at: now),
-                voltageV: .unavailable(reason: reason, at: now),
-                levelPercent: .unavailable(reason: reason, at: now),
-                chargingState: .unknown,
-                healthPercent: .unavailable(reason: "iOS 无电池健康百分比公开 API", at: now)
-            )
-        }
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        defer { UIDevice.current.isBatteryMonitoringEnabled = false }
 
-        // 电量百分比
-        let level: Float?
-        if let current = desc[kIOPSCurrentCapacityKey] as? Int,
-           let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0 {
-            level = Float(current) / Float(max) * 100
-        } else {
-            level = nil
-        }
+        let level = UIDevice.current.batteryLevel
+        let state = UIDevice.current.batteryState
 
-        // 充电状态（Power Source State + Is Charging 联合判断）
-        let charging: Bool = (desc[kIOPSIsChargingKey] as? Bool) ?? false
-        let onAC: Bool = (desc[kIOPSPowerSourceStateKey] as? String) == "AC Power"
-        let state: ChargingState
-        if charging && (level ?? 0) >= 100 {
-            state = .full
-        } else if charging {
-            state = .charging
-        } else if onAC {
-            state = .notCharging
-        } else {
-            state = .discharging
+        // batteryLevel 在拿不到时返回 -1
+        let percent: Float? = level >= 0 ? level * 100 : nil
+
+        let charging: ChargingState
+        switch state {
+        case .charging: charging = .charging
+        case .full: charging = .full
+        case .unplugged: charging = .discharging
+        case .unknown: charging = .unknown
+        @unknown default: charging = .unknown
         }
 
         return BatteryMetrics(
             temperatureC: .unavailable(reason: "iOS 无电池温度公开 API", at: now),
             currentMa: .unavailable(reason: "iOS 无电流公开 API", at: now),
             voltageV: .unavailable(reason: "iOS 无电压公开 API", at: now),
-            levelPercent: Metric.make(level, at: now, unavailableReason: "无法读取电量"),
-            chargingState: state,
+            levelPercent: Metric.make(percent, at: now, unavailableReason: "无法读取电量"),
+            chargingState: charging,
             healthPercent: .unavailable(reason: "iOS 无电池健康百分比公开 API", at: now)
         )
     }

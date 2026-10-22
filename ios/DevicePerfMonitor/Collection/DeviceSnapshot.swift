@@ -7,8 +7,8 @@
 //
 //  iOS 平台指标可用性总览（详见 README「API-权限-可用性-降级」对照表）：
 //  - 内存：host_statistics64 / vm_statistics64（公开 mach API，始终可用）；
-//  - 电池：IOPSCopyPowerSourcesInfo（公开 IOKit API，始终可用；
-//    注意 iOS 无电流/电压/真实温度公开 API → 相应指标常态 UNAVAILABLE）；
+//  - 电池：UIDevice.batteryLevel / batteryState（公开；iOS 无 IOKit，
+//    电流/电压/真实温度无公开 API → 相应指标常态 UNAVAILABLE）；
 //  - 温度：ProcessInfo.thermalState（公开，粗粒度）+ 无传感器直读；
 //  - FPS：CADisplayLink（本 App 绘制帧，始终可用；全局 FPS iOS 无公开 API
 //    → UNAVAILABLE，不用本 App 帧率冒充全局值）；
