@@ -1,0 +1,40 @@
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/*.keystore
+android/*.jks
+android/captures/
+android/.cxx/
+
+# Xcode
+ios/build/
+ios/DerivedData/
+ios/*.xcuserstate
+ios/xcuserdata/
+ios/.swiftpm/
+ios/DevicePerfMonitor.xcodeproj/project.xcworkspace/xcuserdata/
+ios/DevicePerfMonitor.xcodeproj/xcuserdata/
+
+# 构建产物（releases/ 下手动放入的交付包除外）
+*.apk
+*.aab
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+!releases/*.apk
+!releases/*.ipa
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# 其他
+*.log
+.gradle/
+.kotlin/

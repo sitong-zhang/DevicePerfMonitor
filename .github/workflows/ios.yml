@@ -1,0 +1,55 @@
+name: iOS IPA
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve Swift packages (Charts)
+        run: |
+          xcodebuild -project ios/DevicePerfMonitor.xcodeproj \
+            -scheme DevicePerfMonitor \
+            -resolvePackageDependencies
+
+      # 未签名构建：CI 里没有开发者证书，用 CODE_SIGNING_ALLOWED=NO 出归档。
+      # 产物可以拿回本地用 codesign/xcodebuild -exportArchive 重签名后装机，
+      # 或在仓库 Secrets 里配好证书后自行改成本地 export 流程。
+      - name: Archive (unsigned)
+        run: |
+          xcodebuild -project ios/DevicePerfMonitor.xcodeproj \
+            -scheme DevicePerfMonitor \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/DevicePerfMonitor.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            archive
+
+      # 打成 .ipa（Payload/ 布局 + zip）。未签名，装机前需重签名。
+      - name: Package IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R "build/DevicePerfMonitor.xcarchive/Products/Applications/DevicePerfMonitor.app" \
+            build/Payload/
+          (cd build && zip -qry DevicePerfMonitor-unsigned.ipa Payload)
+          ls -lh build/DevicePerfMonitor-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: DevicePerfMonitor-iOS-${{ github.sha }}
+          path: |
+            build/DevicePerfMonitor-unsigned.ipa
+            build/DevicePerfMonitor.xcarchive
+          if-no-files-found: error
