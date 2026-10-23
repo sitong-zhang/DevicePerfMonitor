@@ -151,7 +151,7 @@ private struct NumbersStrip: View {
         } else {
             HStack(spacing: 12) {
                 ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                    HStack(spacing: 2, alignment: .lastTextBaseline) {
+                    HStack(alignment: .lastTextBaseline, spacing: 2) {
                         AnimatedNumber(
                             value: Double(cell.value),
                             decimals: cell.id.decimals,
