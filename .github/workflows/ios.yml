@@ -16,9 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 固定到 Xcode 26 稳定版：镜像上并存多个 Xcode，默认选中项可能不是 26。
+      # 固定到 Xcode 26：macos-15 镜像上 26 系的真实路径是
+      # /Applications/Xcode_26.0.app（指向 26.0.1 的软链），没有 Xcode_26.app。
+      # 选不到必须让构建失败——不能静默回落到默认的 16.4（iOS 18 SDK），
+      # LiquidGlassKit 的原生玻璃路径（glassEffect / GlassEffectContainer）
+      # 编译期就要 iOS 26 SDK。
       - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.app || xcodebuild -version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.0.app
+          xcodebuild -version
+          xcodebuild -version | grep -q "^Xcode 26" || {
+            echo "::error::Xcode 26 未选中，LiquidGlassKit 无法编译"; exit 1; }
 
       - name: Resolve Swift packages (Charts, LiquidGlassKit)
         run: |
