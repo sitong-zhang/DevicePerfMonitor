@@ -2,19 +2,20 @@
 
 一个设备性能监控 App，Android 和 iOS 双端。核心是三块：全局悬浮窗看实时数据、四个核心硬件指标实时采集、本地综合评判。全程不联网，数据只存本地。
 
-两个端的界面是同一套设计：`design-tokens.json` 是唯一真源，色板用 Catppuccin Mocha/Latte，Android 端液态玻璃材质来自 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)，iOS 端用 `UIVisualEffectView` 加图层叠加实现同样的质感。
+两个端的界面是同一套设计：`design-tokens.json` 是唯一真源，色板用 Catppuccin Mocha/Latte。**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），不再叠液态玻璃——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
 
 几条从一开始就定下的规矩：
 
 - 采不到的数据就显示"不可用"并说明原因，不拿估算值冒充
-- 液态玻璃是真模糊加高光阴影叠出来的，不是半透明纯色
+- 液态玻璃（iOS）走开源库 LiquidGlassKit 的真实材质：iOS 26 上是原生 `glassEffect`（折射 + 高光 + 交互形变），低版本是库的纯 SwiftUI fallback，不是半透明纯色
+- Android 用 Material 3 Expressive：官方稳定组件（NavigationBar / SegmentedButton / Card）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API
 - 不用系统默认控件和默认蓝，按钮卡片开关滑块全部自己封装
 - 不申请 INTERNET 权限，没有任何联网代码路径
 - 平台做不到的功能，直接说做不到，降级方案写进文档
 
 ## 版本
 
-当前 **1.0.7**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.8**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -29,7 +30,16 @@
 
 ### 更新记录
 
-**1.0.7**：修掉悬浮窗服务创建阶段即崩的问题。
+**1.0.8**：双端视觉重构 + 悬浮窗交互重做。
+
+- **iOS 换开源液态玻璃库**：弃用 `UIVisualEffectView` + 7 层自绘叠加（模糊半径只能取系统固定档位、追不上 iOS 26 原生质感），改走 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 2.1.0+）。iOS 26 上自动走原生 `glassEffect`，iOS 17~25 走库的纯 SwiftUI fallback，Reduce Transparency / Increase Contrast / Reduce Motion 由库内置适配。适配层在 `ios/DevicePerfMonitor/UIKit/LiquidGlass.swift`，19 处调用方零改动。
+- **Android 换 Material 3 Expressive**：移除 backdrop 液态玻璃（Kyant0/AndroidLiquidGlass），换 Compose Material3 稳定版 1.4.0 的公开组件——NavigationBar 底栏、SingleChoiceSegmentedButtonRow 分段选择、可点击 Card。动效与 androidx `ExpressiveMotionTokens` 对齐：按压、形态切换走 fastSpatial 弹簧（dampingRatio 0.6 / stiffness 800）。1.4.0 稳定版的 `MaterialExpressiveTheme` / `MotionScheme` 还是 internal（1.5.0-beta 才公开），所以按官方同参数自行实现，bom 锁定的稳定版不受影响。
+- **悬浮窗三态**：完整卡片 → 纯数字（无容器，只留四个数）→ 收起（竖线），单击循环。默认稳定显示卡片，不再自动收窄；拖完只吸附不再改形态。
+- **退出应用自动挂出**：不用再去设置里手动打开（双端：Android `MainActivity.onStop` 幂等拉起，iOS 回前台自动挂出）。
+- **悬浮窗不透明度可调**：0.4~1.0，双端实时接线（Android `params.alpha`，iOS `window.alpha`），默认 1.0 不透明。
+- **悬浮窗动效修复**：删掉对窗口宽高的逐帧动画——那会让"不要动它"的卡片在切换时被拉伸形变。现在窗口尺寸瞬切，内容形变全交给内容层过渡（Compose `AnimatedContent` / SwiftUI spring，token：`motion.spring.defaultSpatial`）。
+- **适配补全**：旋转屏幕、改系统字体大小后悬浮窗重新夹取位置，不会跑出屏幕（Android `Service.onConfigurationChanged` 转发）。
+- `design-tokens.json` 新增 `motion.spring` 三档（fastSpatial / defaultSpatial / slowSpatial，参数同 androidx ExpressiveMotionTokens），双端生成器同步扩展，业务代码不再写死弹簧参数。
 
 - 1.0.6 补 ViewTree 宿主时调用顺序写反了：先推 lifecycle 到 CREATED 再
   `performRestore`，而 savedstate 1.4.0 的 `SavedStateRegistryImpl.performAttach`
@@ -150,7 +160,9 @@
 
 **全局悬浮窗**（Android 系统级，iOS 应用内）
 
-左侧综合评判小环，右侧四个指标 2×2 排开。**退到后台自动挂出来，回到应用自动收起。** 长按拖动、靠边吸附、拖到垃圾桶关闭、双击隐藏，窗口外触摸穿透到下层应用。采不到的指标在悬浮窗里同样不占位，悬浮窗寸土寸金，宁可少一格也不放「—」。
+左侧综合评判小环，右侧四个指标 2×2 排开。**退到后台自动挂出来，回到应用自动收起**（iOS 是回前台自动挂出）。长按拖动、靠边吸附、拖到垃圾桶关闭、双击隐藏，窗口外触摸穿透到下层应用。采不到的指标在悬浮窗里同样不占位，悬浮窗寸土寸金，宁可少一格也不放「—」。
+
+**三态形态**：单击在「完整卡片 → 纯数字 → 收起」之间循环——纯数字只留四个数值没有容器，收起变成一条竖线。默认显示完整卡片，拖动只吸附不改形态；不透明度可在设置里 0.4~1.0 连续调节。切换时窗口尺寸瞬切、内容层做 spring 过渡，不会出现卡片被拉伸形变的半成品画面。
 
 **崩溃监测**（双端）
 
@@ -171,20 +183,20 @@ cd android
 
 要发布签名就复制 `android/keystore.properties.template` 为 `keystore.properties`，按模板里的 keytool 命令生成密钥再填进去。这个文件已被 gitignore，不会入库。没配的话 release 包会自动用 debug 签名，构建日志里会说明，这是有意的降级。
 
-已在 Linux 环境验证通过：`:app:assembleDebug`、`:app:assembleRelease`、`:app:lintVitalRelease` 全部成功，release APK 约 3.3 MB。`releases/` 目录下会放打好的包，可以直接装，但这个目录不入库，正式分发走 GitHub Release。
+已在 Linux 环境验证通过：`:app:testDebugUnitTest`、`:app:assembleRelease`、`:app:lintVitalRelease` 全部成功，release APK 约 3.2 MB。`releases/` 目录下会放打好的包，可以直接装，但这个目录不入库，正式分发走 GitHub Release。
 
 ### iOS
 
-用 Xcode 打开 `ios/DevicePerfMonitor.xcodeproj`，选 `DevicePerfMonitor` scheme 跑起来。首次打开会去拉 Charts（danielgindi/Charts）的 SPM 依赖，需要联网。
+用 Xcode 打开 `ios/DevicePerfMonitor.xcodeproj`，选 `DevicePerfMonitor` scheme 跑起来。首次打开会去拉两个 SPM 依赖（danielgindi/Charts、muhittincamdali/LiquidGlassKit），需要联网。
 
-要求 Xcode 15+，部署目标 iOS 17.0（用到了 iOS 17 的 API：`navigationDestination(item:)`、`.numericText` 等）。这个工程是 `ios/Tools/generate_xcodeproj.py` 生成的，UUID 确定性生成，重复生成不会漂移，不建议手改 pbxproj。
+要求 **Xcode 26+**（iOS 26 SDK，液态玻璃在 iOS 26 上走原生 `glassEffect`），部署目标 iOS 17.0（用到了 iOS 17 的 API：`navigationDestination(item:)`、`.numericText` 等）。这个工程是 `ios/Tools/generate_xcodeproj.py` 生成的，UUID 确定性生成，重复生成不会漂移，不建议手改 pbxproj。
 
 **iOS 安装包（IPA）**：交付环境是 Linux，没有 Xcode，本地打不出 IPA。仓库里放了 `.github/workflows/ios.yml`，push 代码后 GitHub 的 macOS runner 会自动构建 IPA 并上传为 artifact。这个流程产物是未签名的，要装到手机上需要自己重签名（或者有开发者账号的话配好证书 secret，workflow 里有开关）。真机上 Live Activity 和应用内悬浮窗的完整效果建议在真机验证，模拟器行为不一致。
 
 ## 目录结构
 
 ```
-├── design-tokens.json     # 双端唯一真源：色板/玻璃参数/动效/健康分公式
+├── design-tokens.json     # 双端唯一真源：色板/玻璃参数(仅 iOS)/动效(曲线+弹簧)/健康分公式
 ├── Tools/check_tokens.py  # 校验双端生成产物一致
 ├── licenses/              # Inter 与 JetBrains Mono 的 OFL 许可证
 ├── releases/              # 打好的 APK / IPA（本地副本，gitignore，不在仓库里）
@@ -195,8 +207,8 @@ cd android
 │       ├── core/          # 指标定义与三态模型
 │       ├── data/          # 采集器、特权通道（root/Shizuku）、本地存储与滤波
 │       ├── analysis/      # 综合评判、健康分、告警
-│       ├── overlay/       # 悬浮窗服务、手势、垃圾桶
-│       ├── ui/kit/        # 自封装液态玻璃组件
+│       ├── overlay/       # 悬浮窗服务、三态手势、垃圾桶
+│       ├── ui/kit/        # 自封装 M3 Expressive 组件
 │       └── ui/            # 首页、详情、设置、主题
 └── ios/
     ├── Tools/             # pbxproj 生成与校验脚本
@@ -206,16 +218,16 @@ cd android
     │   ├── Overlay/       # 应用内悬浮窗
     │   ├── LiveActivity/  # 实时活动（App 与 Widget 共享）
     │   ├── Charts/        # Charts 图表封装
-    │   ├── UIKit/         # 自绘波形 / 柱状 / 环形组件
-    │   ├── Storage/       # 本地历史存储
-    │   ├── Theme/         # 液态玻璃主题与生成的 tokens
+│   ├── UIKit/         # 自绘波形 / 柱状 / 环形组件、LiquidGlassKit 适配层
+│   ├── Storage/       # 本地历史存储
+│   ├── Theme/         # 玻璃主题（LiquidGlassKit 封装）与生成的 tokens
     │   └── Screens/       # 首页、详情、设置
     └── DevicePerfMonitorWidget/  # Widget 扩展（灵动岛/锁屏）
 ```
 
 ## 依赖与版本
 
-Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 走 SPM。
+Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 和 LiquidGlassKit 走 SPM（`ios/Tools/generate_xcodeproj.py` 里锁版本）。
 
 | 依赖 | 版本 | 协议 | 说明 |
 | --- | --- | --- | --- |
@@ -226,12 +238,13 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 | activity-compose | 1.12.4 | Apache-2.0 | minAGP 8.9.1 |
 | lifecycle | 2.9.4 | Apache-2.0 | |
 | navigation-compose | 2.9.4 | Apache-2.0 | 2.10.x 硬依赖 lifecycle 2.11.0，要 AGP 9.1，所以不升 |
-| compose-bom | 2026.06.01 | Apache-2.0 | compose 1.11.4 + material3 1.4.0 |
+| compose-bom | 2026.06.01 | Apache-2.0 | compose 1.11.4 + material3 1.4.0（M3 Expressive 视觉的载体） |
 | datastore-preferences | 1.3.0 | Apache-2.0 | 本地存储 |
-| backdrop | 2.0.0-alpha03 | Apache-2.0 | 液态玻璃材质。2.0.0 正式版 AAR 要 compileSdk 37（AGP 9.1），alpha03 只要 36，API 一样，所以锁 alpha03。这个库只有材质，没有高级组件，组件全部自封装 |
+| material-icons-core | 1.7.8（bom 管） | Apache-2.0 | 底栏图标。material3 1.4.0 起不再传递依赖 icons，需显式声明；R8 会裁掉未用图标，所以不引 extended |
 | Vico | 3.2.3 | Apache-2.0 | Compose 图表。3.3.x 要 compileSdk 37 |
 | Shizuku | 13.1.5 | Apache-2.0 | 免 root 提权通道，可选。13.1.5 起 `Shizuku.newProcess` 私有化了，改成走公开 AIDL `IShizukuService.Stub.asInterface(...)` |
 | Charts (iOS) | 5.0.0+ | Apache-2.0 | iOS 图表，对应 Android 的 Vico。注意：这个库 4.0 起把包名和 SPM 产品名改成了 `DGCharts`，所以 import 和 pbxproj 里的 productName 都用 DGCharts |
+| LiquidGlassKit (iOS) | 2.1.0+ | MIT | iOS 液态玻璃（muhittincamdali/LiquidGlassKit，SPM）。iOS 26 走原生 `glassEffect`，低版本走库的纯 SwiftUI fallback。Android 端 1.0.8 起不用玻璃，走 Material 3 Expressive |
 
 ## 采集指标对照表
 
@@ -284,10 +297,10 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 
 **iOS**
 
-1. 没有系统级全局悬浮窗，iOS 不允许第三方应用悬浮在其他 App 上面。改成应用内 `UIWindow` 悬浮窗，手势、收窄、垃圾桶这些交互都按 Android 的规格做了，App 退后台自动隐藏。
+1. 没有系统级全局悬浮窗，iOS 不允许第三方应用悬浮在其他 App 上面。改成应用内 `UIWindow` 悬浮窗，手势、三态切换、垃圾桶这些交互都按 Android 的规格做了；App 回前台自动挂出、退后台自动隐藏。
 2. 机身温度（℃）没有传感器直读 API，只有 `ProcessInfo.thermalState` 的四档热状态。不拿档位换算冒充温度值，该指标在 iOS 上不进入界面，综合评判的温度维度缺席、权重按比例折算。帧率只看本应用前台绘制（CADisplayLink），读不到其他进程的渲染帧。
-3. 本地打不了 IPA（没有 Xcode），用 GitHub Actions 的 macOS runner 构建，产物未签名，装机要重签名。
-4. `UIVisualEffectView` 不给精确指定模糊半径，只能选系统预设材质。玻璃效果靠预设模糊加自绘高光、内外阴影、弥散外阴影和噪点叠出来，参数对齐 token，视觉上跟 Android 一致，但不是同一个 API 路径。
+3. 本地打不了 IPA（没有 Xcode），用 GitHub Actions 的 macOS runner（macos-15 + Xcode 26）构建，产物未签名，装机要重签名。
+4. 液态玻璃分两档：iOS 26 及以上走原生 `glassEffect`（真折射 + 交互形变），iOS 17~25 走 LiquidGlassKit 的纯 SwiftUI fallback（Material blur + tint + 边缘高光），观感接近但不是同一个 API 路径。Reduce Transparency 下自动换不透明底。
 
 **Android**
 
@@ -296,11 +309,11 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 1. 电池健康百分比没有公开接口，只展示 EXTRA_HEALTH 的粗粒度档位。
 2. 后台应用内存、各核心频率、GPU 节点要 root 或 Shizuku。普通 App 读不了，这是 Android 8 之后的沙箱规定。
 3. Shizuku 13.1.5 把 `newProcess` 私有化了，改走公开 AIDL。
-4. **Android 12（API 32）及以下没有真玻璃**：backdrop 的模糊走 `RuntimeShader`（AGSL），这是 API 33 才有的类，低版本上调用会在绘制期直接崩。所以低于 Android 13 一律走降级渲染——真实半透明底 + 自绘高光渐变 + 描边 + 内阴影 + 噪点，观感接近但不是真实背景模糊。判定在 `ui/kit/LiquidGlass.kt` 的 `supportsLiquidGlass`。
+4. **Android 没有液态玻璃**（1.0.8 起的刻意决策）：安卓这边真实背景模糊要么走 API 33 的 `RuntimeShader`（Android 12 及以下直接崩）、要么观感与服务端合成对不上，所以 Android 全面换 Material 3 Expressive——Compose 的 M3 组件不依赖系统版本，从 minSdk 24 起视觉与动效完全一致。玻璃质感只在 iOS 端保留（LiquidGlassKit）。
 
 ## design-tokens.json
 
-色板、圆角、间距、玻璃参数（模糊 28~36、背景透明度 18%~28%、边框高光阴影饱和度噪点）、三条动效曲线（enter/exit/emphasized）、数值缓动规则、健康分权重和分段点，全在这个文件里。双端各自生成代码：
+色板、圆角、间距、玻璃参数（仅 iOS 使用：模糊 28~36、背景透明度 18%~28%、边框高光阴影饱和度噪点）、动效（三条曲线 enter/exit/emphasized + 三档空间弹簧 fastSpatial/defaultSpatial/slowSpatial）、数值缓动规则、健康分权重和分段点，全在这个文件里。双端各自生成代码：
 
 - Android：`buildSrc/GenerateDesignTokensTask.kt` → `ui/theme/DesignTokens.kt`
 - iOS：`ios/Tools/generate_tokens.py` → `Theme/DesignTokens.generated.swift`

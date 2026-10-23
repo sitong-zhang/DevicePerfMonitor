@@ -36,10 +36,9 @@ import com.devperf.monitor.data.defaultMetricViewModes
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.AnimatedNumber
 import com.devperf.monitor.ui.kit.BarSeries
-import com.devperf.monitor.ui.kit.GlassStyle
 import com.devperf.monitor.ui.kit.EnterStagger
 import com.devperf.monitor.ui.kit.GlassTabs
-import com.devperf.monitor.ui.kit.LiquidGlassSurface
+import com.devperf.monitor.ui.kit.GlassCard
 import com.devperf.monitor.ui.kit.ProgressRing
 import com.devperf.monitor.ui.kit.Sparkline
 import com.devperf.monitor.ui.kit.enterSpec
@@ -117,12 +116,11 @@ fun MetricDetailScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
         // 顶部：返回 + 指标名 + 当前值
-        LiquidGlassSurface(
+        GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp),
             shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
-            style = GlassStyle(),
         ) {
             Row(
                 modifier = Modifier
@@ -202,12 +200,11 @@ fun MetricDetailScreen(
         )
 
         // 轨迹大图
-        LiquidGlassSurface(
+        GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp),
             shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
-            style = GlassStyle(),
         ) {
             // 切换显示方式时交叉淡入，不要硬切
             Crossfade(
@@ -297,10 +294,9 @@ fun MetricDetailScreen(
         // 统计
         val stats = viewModel.peakStats(coreId.source, windowSec)
         if (stats != null) {
-            LiquidGlassSurface(
+            GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
-                style = GlassStyle(),
             ) {
                 Row(
                     modifier = Modifier

@@ -116,6 +116,17 @@ internal object DesignTokens {
         val ENTER = MotionCurveSpec(0.05f, 0.7f, 0.1f, 1.0f, 320)
         val EXIT = MotionCurveSpec(0.3f, 0.0f, 0.8f, 0.15f, 240)
         val EMPHASIZED = MotionCurveSpec(0.2f, 0.0f, 0.0f, 1.0f, 300)
+
+        // Material 3 Expressive 空间弹簧（androidx ExpressiveMotionTokens 同参数）。
+        // 组件级交互（按压、形态切换）走 spring，页面切换走上面的曲线。
+        object Spring {
+            const val FAST_SPATIAL_DAMPING = 0.6f
+            const val FAST_SPATIAL_STIFFNESS = 800f
+            const val DEFAULT_SPATIAL_DAMPING = 0.8f
+            const val DEFAULT_SPATIAL_STIFFNESS = 380f
+            const val SLOW_SPATIAL_DAMPING = 0.8f
+            const val SLOW_SPATIAL_STIFFNESS = 200f
+        }
     }
 
     object Gesture {

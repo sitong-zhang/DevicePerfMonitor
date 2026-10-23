@@ -28,7 +28,7 @@ import com.devperf.monitor.core.Metric
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.SettingsRepository
-import com.devperf.monitor.ui.theme.LiquidGlassTheme
+import com.devperf.monitor.ui.theme.DevicePerfTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,6 +75,9 @@ class OverlayService : android.app.Service() {
 
     private var controller: OverlayController? = null
     private var overlayVisible = false
+
+    /** 设置页默认缩放的上次应用值；用于区分「用户双指缩放」与「设置变更」。 */
+    private var lastAppliedScale = Float.NaN
 
     /**
      * 自己管理的合成器：悬浮窗没有 Activity 宿主，
@@ -134,6 +137,16 @@ class OverlayService : android.app.Service() {
             else -> showOverlay()
         }
         return START_STICKY
+    }
+
+    /**
+     * 屏幕配置变化（旋转 / 分屏 / 折叠屏 / 多窗口）。
+     * Service 作为 ContextWrapper 会收到系统回调；转发给控制器重新夹取窗口，
+     * 修复旋转后悬浮窗跑出屏幕（适配不完整）。
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        controller?.onScreenConfigChanged()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -209,7 +222,7 @@ class OverlayService : android.app.Service() {
                     controller = controllerRef,
                 )
 
-                LiquidGlassTheme(settings.themeMode) {
+                DevicePerfTheme(settings.themeMode) {
                     OverlayContent(
                         state = state,
                         data = data,
@@ -258,13 +271,29 @@ class OverlayService : android.app.Service() {
             settingsRepository.settings
                 .distinctUntilChanged { a, b ->
                     a.overlayEnabled == b.overlayEnabled &&
-                        a.overlayMiniMode == b.overlayMiniMode
+                        a.overlayMiniMode == b.overlayMiniMode &&
+                        a.overlayOpacity == b.overlayOpacity &&
+                        a.overlayScale == b.overlayScale
                 }
                 .collect { s ->
                     if (!s.overlayEnabled) {
                         stopSelf()
                     } else {
-                        controller?.setDefaultMiniMode(s.overlayMiniMode)
+                        // 窗口透明度（设置页滑杆 0.4~1.0，1.0.8 起真正接线）
+                        controller?.setOpacity(s.overlayOpacity)
+                        // 默认形态：迷你开关 = 默认纯数字；否则默认完整卡片
+                        controller?.setDefaultMode(
+                            if (s.overlayMiniMode) {
+                                OverlayController.Mode.NUMBERS
+                            } else {
+                                OverlayController.Mode.CARD
+                            }
+                        )
+                        // 默认缩放：仅在设置值变化时应用（不覆盖用户双指缩放的临时值）
+                        if (s.overlayScale != lastAppliedScale) {
+                            lastAppliedScale = s.overlayScale
+                            controller?.setScaleFromSettings(s.overlayScale)
+                        }
                     }
                 }
         }

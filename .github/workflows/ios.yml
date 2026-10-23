@@ -10,11 +10,17 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macos-15：LiquidGlassKit 的原生玻璃路径编译依赖 iOS 26 SDK（Xcode 26+），
+    # macos-14 镜像的 Xcode 15/16 无法编译（见 UIKit/LiquidGlass.swift 说明）。
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve Swift packages (Charts)
+      # 固定到 Xcode 26 稳定版：镜像上并存多个 Xcode，默认选中项可能不是 26。
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.app || xcodebuild -version
+
+      - name: Resolve Swift packages (Charts, LiquidGlassKit)
         run: |
           xcodebuild -project ios/DevicePerfMonitor.xcodeproj \
             -scheme DevicePerfMonitor \

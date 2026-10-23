@@ -38,10 +38,23 @@ fun defaultMetricViewModes(): Map<CoreMetricId, MetricViewMode> = mapOf(
 data class MonitorSettings(
     /** 每个核心指标的可视化模式；缺省项回落到 [defaultMetricViewModes]。 */
     val metricViewModes: Map<CoreMetricId, MetricViewMode> = defaultMetricViewModes(),
-    val overlayEnabled: Boolean = false,
+    /**
+     * 悬浮窗总开关。1.0.8 起默认 true：用户要求「一退出应用悬浮窗就出现，
+     * 不需要手动打开」。老用户升级后保留其已有选择（DataStore 里存过值）。
+     */
+    val overlayEnabled: Boolean = true,
     val collectInBackground: Boolean = true,
-    val overlayOpacity: Float = 0.9f,
+    /**
+     * 悬浮窗窗口透明度（0.4~1.0，WindowManager 层 alpha）。
+     * 1.0.8 起真正接线到 params.alpha；默认 1.0 = 稳定完整显示。
+     */
+    val overlayOpacity: Float = 1f,
+    /** 双指缩放 / 默认缩放（0.8~1.6）。 */
     val overlayScale: Float = 1f,
+    /**
+     * 默认形态开关：true = 启动悬浮窗时默认纯数字（只要数字不要卡片），
+     * false = 默认完整卡片（用户主路径：「等它显示那张卡片」）。
+     */
     val overlayMiniMode: Boolean = false,
     val snapToEdge: Boolean = true,
     val refreshMode: RefreshMode = RefreshMode.NORMAL,
@@ -65,9 +78,9 @@ class SettingsRepository(private val context: Context) {
                 ?.let { parseMetricModes(it) }
                 ?.takeIf { it.isNotEmpty() }
                 ?: defaultMetricViewModes(),
-            overlayEnabled = prefs[KEY_OVERLAY_ENABLED] ?: false,
+            overlayEnabled = prefs[KEY_OVERLAY_ENABLED] ?: true,
             collectInBackground = prefs[KEY_COLLECT_BACKGROUND] ?: true,
-            overlayOpacity = prefs[KEY_OVERLAY_OPACITY] ?: 0.9f,
+            overlayOpacity = prefs[KEY_OVERLAY_OPACITY] ?: 1f,
             overlayScale = prefs[KEY_OVERLAY_SCALE] ?: 1f,
             overlayMiniMode = prefs[KEY_OVERLAY_MINI] ?: false,
             snapToEdge = prefs[KEY_SNAP_EDGE] ?: true,

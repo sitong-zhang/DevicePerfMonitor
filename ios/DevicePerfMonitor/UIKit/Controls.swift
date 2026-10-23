@@ -45,7 +45,7 @@ struct GlassButton: View {
             .padding(.horizontal, compact ? DesignTokens.Spacing.s12 : DesignTokens.Spacing.s16)
             .padding(.vertical, compact ? DesignTokens.Spacing.s8 : DesignTokens.Spacing.s12)
             .liquidGlass(GlassStyle(
-                material: .systemThinMaterial,
+                material: .frosted,
                 surfaceAlpha: DesignTokens.Glass.BackgroundAlpha.min,
                 cornerRadius: compact ? DesignTokens.Radius.small : DesignTokens.Radius.card,
                 outerShadow: false
@@ -78,7 +78,7 @@ struct GlassSwitch: View {
             }
             .frame(width: 52, height: 32)
             .liquidGlass(GlassStyle(
-                material: .systemThinMaterial,
+                material: .frosted,
                 surfaceAlpha: DesignTokens.Glass.BackgroundAlpha.min,
                 cornerRadius: DesignTokens.Radius.pill,
                 outerShadow: false
@@ -208,7 +208,7 @@ struct GlassTabs: View {
         }
         .padding(DesignTokens.Spacing.s4)
         .liquidGlass(GlassStyle(
-            material: .systemThinMaterial,
+            material: .frosted,
             surfaceAlpha: DesignTokens.Glass.BackgroundAlpha.min,
             cornerRadius: DesignTokens.Radius.small,
             outerShadow: false

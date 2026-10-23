@@ -26,7 +26,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import com.devperf.monitor.ui.theme.LiquidGlassTheme
+import com.devperf.monitor.ui.theme.DevicePerfTheme
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.devperf.monitor.ui.theme.DesignTokens
 
@@ -138,7 +138,7 @@ class TrashController(
 private fun TrashIcon(active: Boolean) {
     val colors = LocalTokenColors.current
     val tint = if (active) colors.danger else colors.textSecondary
-    LiquidGlassTheme {
+    DevicePerfTheme {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -204,7 +204,7 @@ internal object ComposeViewFactory {
             androidx.compose.ui.platform.ViewCompositionStrategy
                 .DisposeOnDetachedFromWindowOrReleasedFromPool
         )
-        view.setContent { LiquidGlassTheme { content() } }
+        view.setContent { DevicePerfTheme { content() } }
         return view
     }
 }

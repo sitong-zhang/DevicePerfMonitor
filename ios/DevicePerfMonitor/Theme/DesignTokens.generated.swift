@@ -112,6 +112,40 @@ enum DesignTokens {
             }
             static var duration: Double { durationMs / 1000.0 }
         }
+
+        // MARK: - Material 3 Expressive 空间弹簧（与 Android DesignTokens.Motion.Spring 同构）
+        enum Spring {
+
+
+            enum FastSpatial {
+                static let dampingRatio: CGFloat = 0.6
+                static let stiffness: CGFloat = 800
+                /// SwiftUI response = 2π/√stiffness（秒）
+                static var response: Double { 2 * Double.pi / Double(stiffness).squareRoot() }
+                /// SwiftUI dampingFraction = dampingRatio（同一 ζ，原样互换）
+                static var dampingFraction: Double { Double(dampingRatio) }
+            }
+
+
+            enum DefaultSpatial {
+                static let dampingRatio: CGFloat = 0.8
+                static let stiffness: CGFloat = 380
+                /// SwiftUI response = 2π/√stiffness（秒）
+                static var response: Double { 2 * Double.pi / Double(stiffness).squareRoot() }
+                /// SwiftUI dampingFraction = dampingRatio（同一 ζ，原样互换）
+                static var dampingFraction: Double { Double(dampingRatio) }
+            }
+
+
+            enum SlowSpatial {
+                static let dampingRatio: CGFloat = 0.8
+                static let stiffness: CGFloat = 200
+                /// SwiftUI response = 2π/√stiffness（秒）
+                static var response: Double { 2 * Double.pi / Double(stiffness).squareRoot() }
+                /// SwiftUI dampingFraction = dampingRatio（同一 ζ，原样互换）
+                static var dampingFraction: Double { Double(dampingRatio) }
+            }
+        }
     }
 
     // MARK: - 数值缓动

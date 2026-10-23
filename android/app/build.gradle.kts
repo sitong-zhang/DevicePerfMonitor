@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -125,6 +125,9 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
+    // 底栏 NavigationBar 的图标走 material-icons-core（bom 管版本，仅 Home/Settings 两个，
+    // R8 + 资源压缩会把其余图标裁掉；material-icons-extended 体积过大，不引）
+    implementation(libs.compose.material.icons.core)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
@@ -135,8 +138,8 @@ dependencies {
 
     // 图表（Apache-2.0）
     implementation(libs.vico.compose.m3)
-    // 液态玻璃材质（Apache-2.0，Kyant0/AndroidLiquidGlass）
-    implementation(libs.backdrop)
+    // 底栏图标（compose-bom 管版本；R8 会裁掉未用图标，不引 extended）
+    implementation(libs.compose.material.icons.core)
     // Shizuku（可选提权通道，用于全局 FPS / 后台内存）
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

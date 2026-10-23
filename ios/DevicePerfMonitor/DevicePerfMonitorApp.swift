@@ -14,6 +14,9 @@ struct DevicePerfMonitorApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("themeMode") private var themeModeRaw = ThemeMode.dark.rawValue
+    // 1.0.8 起默认 true：回应用即自动挂出悬浮窗（用户「不需要手动打开」；
+    // iOS 平台上限是应用内窗口，退后台仍会隐藏）
+    @AppStorage("overlayEnabled") private var overlayEnabled = true
 
     var body: some Scene {
         WindowGroup {
@@ -25,6 +28,10 @@ struct DevicePerfMonitorApp: App {
             switch phase {
             case .active:
                 MetricsRepository.shared.sampleOnce()
+                // 回前台：设置开着就自动挂出（隐藏过的也在此恢复）
+                if overlayEnabled {
+                    FloatingWindowController.shared.show()
+                }
             case .background:
                 // 退后台：隐藏应用内悬浮窗 + 立即落盘历史
                 FloatingWindowController.shared.hide()

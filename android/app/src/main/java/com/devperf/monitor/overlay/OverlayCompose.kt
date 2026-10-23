@@ -1,5 +1,12 @@
 package com.devperf.monitor.overlay
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,16 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
 import com.devperf.monitor.core.Metric
-import com.devperf.monitor.core.MetricState
 import com.devperf.monitor.data.collectors.DeviceSnapshot
 import com.devperf.monitor.ui.kit.AnimatedNumber
-import com.devperf.monitor.ui.kit.GlassStyle
-import com.devperf.monitor.ui.kit.LiquidGlassSurface
+import com.devperf.monitor.ui.kit.GlassCard
 import com.devperf.monitor.ui.kit.ProgressRing
 import com.devperf.monitor.ui.kit.metricColor
 import com.devperf.monitor.ui.theme.DesignTokens
@@ -63,10 +67,17 @@ data class OverlayData(
 private data class GridCell(val id: CoreMetricId, val value: Float)
 
 /**
- * 悬浮窗内容：左侧综合评判小环，右侧四个指标（2×2）。
+ * 悬浮窗内容：三态（卡片 / 纯数字 / 收起），单击循环切换。
+ *
+ * - CARD：默认形态。左侧综合评判小环 + 右侧四个指标 2×2。一退出应用就稳定
+ *   显示这张卡片，不自动变形（用户原话：「等它显示那张卡片，不要动它」）；
+ * - NUMBERS：只要卡片上的数字——去掉卡片容器、阴影、小环，四个数字横排；
+ * - COLLAPSED：收成一条竖线，点一下恢复完整卡片。
+ *
+ * 形态切换的形变动效在内容层完成（[AnimatedContent] + Expressive 弹簧），
+ * 窗口尺寸本身只瞬切（见 OverlayController.applyLayout）。
  *
  * 采不到的指标不占位——悬浮窗寸土寸金，宁可少一格也不放「—」。
- * 贴边收窄时只留一条竖条，点一下或拖出来就恢复。
  */
 @Composable
 fun OverlayContent(
@@ -78,8 +89,6 @@ fun OverlayContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    val cardShape = RoundedCornerShape(DesignTokens.Radius.CARD.dp)
-    val alertTint = if (state.alert) colors.danger else colors.surface
 
     Box(
         modifier = modifier
@@ -88,35 +97,67 @@ fun OverlayContent(
             .overlayGestures(callbacks),
         contentAlignment = Alignment.Center,
     ) {
-        // 悬浮窗采不到背后画面，走降级玻璃：真实半透明，能透视后面的应用
-        LiquidGlassSurface(
-            modifier = Modifier.fillMaxSize(),
-            backdrop = null,
-            shape = cardShape,
-            tint = alertTint,
-            style = GlassStyle(
-                blurRadiusDp = DesignTokens.Blur.OVERLAY_MIN,
-                surfaceAlpha = if (state.alert) {
-                    DesignTokens.Glass.BACKGROUND_ALPHA.MAX
-                } else {
-                    DesignTokens.Glass.BACKGROUND_ALPHA.MIN
-                },
-            ),
-        ) {
-            if (state.collapsed) {
-                CollapsedStrip(state)
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    HealthBadge(health)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    MetricGrid(data, intervalMs, Modifier.weight(1f))
-                }
+        AnimatedContent(
+            targetState = state.mode,
+            transitionSpec = {
+                // 形态切换：淡入 + 轻微放大（Expressive 默认空间弹簧 0.8/380）
+                val springSpec = spring<Float>(
+                    dampingRatio = 0.8f,
+                    stiffness = 380f,
+                )
+                (
+                    fadeIn(animationSpec = springSpec) +
+                        scaleIn(initialScale = 0.92f, animationSpec = springSpec)
+                    ) togetherWith fadeOut(animationSpec = tween(durationMillis = 120))
+            },
+            label = "overlayMode",
+        ) { mode ->
+            when (mode) {
+                OverlayController.Mode.COLLAPSED -> CollapsedStrip(state)
+
+                OverlayController.Mode.NUMBERS -> NumbersStrip(data, intervalMs)
+
+                OverlayController.Mode.CARD -> CardContent(
+                    state = state,
+                    data = data,
+                    health = health,
+                    intervalMs = intervalMs,
+                )
             }
+        }
+    }
+}
+
+/** 卡片态：完整内容（小环 + 2×2 指标）。告警时容器整体转危险色。 */
+@Composable
+private fun CardContent(
+    state: OverlayController.UiState,
+    data: OverlayData,
+    health: FocusedHealth.Result,
+    intervalMs: Long,
+) {
+    val colors = LocalTokenColors.current
+    // 悬浮窗采不到背后画面，容器用主题表面色（真实半透明，能透视后面的应用）；
+    // 高温告警时整张卡片转危险色低透明度，数字保持各自的指标色。
+    val container = if (state.alert) {
+        colors.danger.copy(alpha = 0.22f)
+    } else {
+        colors.surface
+    }
+    GlassCard(
+        modifier = Modifier.fillMaxSize(),
+        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        containerColor = container,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            HealthBadge(health)
+            Spacer(modifier = Modifier.width(10.dp))
+            MetricGrid(data, intervalMs, Modifier.weight(1f))
         }
     }
 }
@@ -222,7 +263,65 @@ private fun MetricCell(
     }
 }
 
-/** 收窄态：贴边后的窄条 + 提示点，点击或拖出恢复。 */
+/**
+ * 纯数字态：只要卡片上的数字，不要卡片。
+ *
+ * 无容器、无阴影、无小环——四个数字直接横排浮在屏幕上，
+ * 每个数字保持自己的指标色；告警时统一转危险色（没有卡片可染，染数字）。
+ */
+@Composable
+private fun NumbersStrip(
+    data: OverlayData,
+    intervalMs: Long,
+) {
+    val colors = LocalTokenColors.current
+    val cells = buildList<GridCell> {
+        data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
+        data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
+        data.refreshHz.value?.let { add(GridCell(CoreMetricId.REFRESH_RATE, it)) }
+        data.fps.value?.let { add(GridCell(CoreMetricId.FPS, it)) }
+    }
+
+    if (cells.isEmpty()) {
+        // 纯数字态没有容器，缺数据时给一行小字兜底（避免空白窗口看不出所以然）
+        Text(
+            text = "读不到指标",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.textSecondary,
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        cells.forEach { cell ->
+            val numberColor = metricColor(cell.id.source.colorKey)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                AnimatedNumber(
+                    value = cell.value,
+                    intervalMs = intervalMs,
+                    decimals = cell.id.decimals,
+                    color = numberColor,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = cell.id.unit,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary,
+                )
+            }
+        }
+    }
+}
+
+/** 收起态：贴边后的窄条 + 提示点，点击恢复完整卡片。 */
 @Composable
 private fun CollapsedStrip(state: OverlayController.UiState) {
     val colors = LocalTokenColors.current

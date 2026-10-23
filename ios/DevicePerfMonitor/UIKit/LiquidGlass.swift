@@ -2,185 +2,82 @@
 //  LiquidGlass.swift
 //  DevicePerfMonitor
 //
-//  液态玻璃材质：iOS 原生实现（与 Android 端 1:1 同款质感）。
+//  液态玻璃材质：照搬开源库 LiquidGlassKit（MIT，muhittincamdali/LiquidGlassKit，
+//  SPM 依赖，版本见 generate_xcodeproj.py 的 LIQUIDGLASS_MIN_VERSION）。
 //
-//  图层构成（对应 design-tokens.json glass 参数，禁止纯色半透明冒充）：
-//   1. UIVisualEffectView 系统毛玻璃（真实模糊，非假效果）；
-//   2. 半透明色底（backgroundAlpha 18%~28%，随告警态/主题取值）；
-//   3. 1px 半透明白高光描边（顶亮底暗渐变）；
-//   4. 顶部内高光（highlightAlphaTop 0.55 → 0 渐变，裁剪在圆角内）；
-//   5. 底部极淡内阴影（innerShadowAlpha 0.10）；
-//   6. 柔和弥散外阴影（outerShadowRadius 20 / offsetY 8 / alpha 0.22）；
-//   7. 程序化噪点（noiseAlpha 0.035，seeded 生成 64×64 tile 缓存复用，
-//      overlay 混合模式 —— 真实纹理，非预置贴图）。
+//  为什么换掉自绘实现：旧版是 UIVisualEffectView + 7 层自绘叠加（半透明底 /
+//  高光渐变 / 描边 / 噪点 / 内阴影 / 外阴影），有两个绕不开的短板——
+//  1. UIVisualEffectView 没有公开的模糊半径 API，只能取系统固定档位，
+//     与 design-tokens 的 28~36pt 对不上；
+//  2. iOS 26 起苹果官方推出真正的液态玻璃（glassEffect：折射 + 高光 +
+//     交互形变），自绘叠加永远追不平原生质感。
 //
-//  降级说明（README 同步记录）：
-//   - iOS 系统毛玻璃档位固定（UIVisualEffectView 无公开半径 API），
-//     无法像 Android backdrop 那样精确指定 28~36pt 半径，取最接近档位；
-//   - 系统级悬浮窗在 iOS 不存在（平台限制），应用内悬浮窗同样走本材质，
-//     因窗口层级在 App 内，UIVisualEffectView 可真实采样背后画面。
+//  库的行为（照搬，不重造）：
+//  - iOS 26+：走 SwiftUI 原生 glassEffect（库内 #available 判断，自动）；
+//  - iOS 17~25：走库的纯 SwiftUI fallback（Material blur + tint + 边缘高光 + 阴影）；
+//  - 无障碍：Reduce Transparency 自动换不透明底、Increase Contrast 加强边缘、
+//    Reduce Motion 停高光动画——这些旧版自绘全都没有。
+//
+//  本文件只做三件事：把我们的语义参数（GlassStyle）映射到库的
+//  GlassMaterial / GlassShape，保留 GlassPanel 容器 API，让 19 处
+//  @Environment(\.colors) 调用方与全部 Screens/UIKit/Overlay 零改动。
+//
+//  归因（MIT 要求）：随附库的 LICENSE 见 SPM 检出目录；本文件为适配层，
+//  非库代码衍生。
 //
 
 import SwiftUI
+import LiquidGlassKit
 
 // MARK: - 玻璃样式参数
 
 struct GlassStyle {
-    /// 系统毛玻璃档位（半径由系统决定，见文件头降级说明）。
-    var material: UIBlurEffect.Style = .systemThinMaterial
-    /// 底色透明度（design-tokens glass.backgroundAlpha）。
-    var surfaceAlpha: CGFloat = (DesignTokens.Glass.BackgroundAlpha.min + DesignTokens.Glass.BackgroundAlpha.max) / 2
-    /// 圆角。
+    /// 玻璃材质（库的四种档位：clear / frosted / tinted / dark）。
+    var material: GlassMaterial = .frosted
+    /// 染色基色透明度（tinted 材质使用，取值 design-tokens glass.backgroundAlpha）。
+    var surfaceAlpha: CGFloat = DesignTokens.Glass.BackgroundAlpha.min
+    /// 圆角（design-tokens radius；>= 999 映射为胶囊形）。
     var cornerRadius: CGFloat = DesignTokens.Radius.card
-    /// 告警态整体染色（nil = 不染色）。
+    /// 告警态整体染色（nil = 不染色，用语义 surface 色）。
     var alertTint: Color? = nil
     /// 是否绘制外阴影（嵌入父卡片时通常关闭）。
     var outerShadow: Bool = true
 
     static let card = GlassStyle()
+
+    /// 悬浮窗预设：最透明的 clear 档，透视后方应用。
     static let overlay = GlassStyle(
-        material: .systemThinMaterial,
+        material: .clear,
         surfaceAlpha: DesignTokens.Glass.BackgroundAlpha.min,
         cornerRadius: DesignTokens.Radius.card
     )
 }
 
-// MARK: - 原生毛玻璃（UIVisualEffectView 封装）
-
-struct VisualEffectBlur: UIViewRepresentable {
-    var material: UIBlurEffect.Style
-
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        UIVisualEffectView(effect: UIBlurEffect(style: material))
-    }
-
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        // UIVisualEffectView 要求 effect 整体替换；UIBlurEffect 没有公开的
-        // style 属性可比较，样式变化时直接重建（重复赋值同样式无副作用）
-        uiView.effect = UIBlurEffect(style: material)
-    }
+/// Radius.pill（999）→ 胶囊形；其余 → 连续圆角矩形。与旧自绘版的取形逻辑一致。
+private func glassShape(cornerRadius: CGFloat) -> GlassShape {
+    cornerRadius >= DesignTokens.Radius.pill - 1 ? .capsule : .roundedRectangle(cornerRadius: cornerRadius)
 }
 
-// MARK: - 程序化噪点（seeded 生成 + 缓存）
-
-enum NoiseTexture {
-    /// 64×64 灰度噪点 tile，seeded 生成保证每次运行一致。
-    static let tile: UIImage = {
-        let side = 64
-        var generator = SeededGenerator(seed: 20_260_102)
-        UIGraphicsBeginImageContextWithOptions(CGSize(width: side, height: side), false, 0)
-        for y in 0..<side {
-            for x in 0..<side {
-                // -1.0 ~ 1.0 的确定性伪随机灰度
-                let v = CGFloat(generator.next() % 256) / 255.0
-                UIColor(white: v, alpha: 1).setFill()
-                UIRectFill(CGRect(x: x, y: y, width: 1, height: 1))
-            }
-        }
-        let image = UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
-        UIGraphicsEndImageContext()
-        return image
-    }()
-}
-
-/// xorshift 确定性随机源（避免每次采样变化导致噪点闪烁）。
-struct SeededGenerator: RandomNumberGenerator {
-    private var state: UInt64
-
-    init(seed: UInt64) {
-        state = seed == 0 ? 0x9E3779B97F4A7C15 : seed
-    }
-
-    mutating func next() -> UInt64 {
-        state ^= state << 13
-        state ^= state >> 7
-        state ^= state << 17
-        return state
-    }
-}
-
-// MARK: - 液态玻璃表面（ViewModifier）
-
-struct LiquidGlassSurface: ViewModifier {
-    let style: GlassStyle
-    /// 染色基色（默认 surface 语义色；告警态由调用方传 danger）。
-    var tint: Color
-
-    init(style: GlassStyle, tint: Color? = nil) {
-        self.style = style
-        self.tint = tint ?? DesignTokens.Dark.surface
-    }
-
-    func body(content: Content) -> some View {
-        let base = tint
-        let radius = style.cornerRadius
-        let g = DesignTokens.Glass.self
-
-        content
-            .background(
-                ZStack {
-                    // 1. 原生毛玻璃（真实模糊）
-                    VisualEffectBlur(material: style.material)
-                        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-
-                    // 2. 半透明色底
-                    base.opacity(style.surfaceAlpha)
-                        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-
-                    // 3 + 4 + 5. 描边 / 内高光 / 内阴影（裁剪在圆角内）
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: Color.white.opacity(g.highlightAlphaTop), location: 0),
-                                    .init(color: Color.white.opacity(g.highlightAlphaTop * 0.25), location: 0.35),
-                                    .init(color: Color.clear, location: 0.6),
-                                    .init(color: Color.black.opacity(g.innerShadowAlpha), location: 1),
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .allowsHitTesting(false)
-
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: Color.white.opacity(g.borderAlpha), location: 0),
-                                    .init(color: Color.white.opacity(g.borderAlpha * 0.25), location: 0.5),
-                                    .init(color: Color.black.opacity(g.borderAlpha * 0.3), location: 1),
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: g.borderWidth
-                        )
-                        .allowsHitTesting(false)
-
-                    // 7. 程序化噪点（overlay 混合，真实纹理）
-                    Image(uiImage: NoiseTexture.tile)
-                        .resizable(resizingMode: .tile)
-                        .opacity(g.noiseAlpha)
-                        .blendMode(.overlay)
-                        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-                        .allowsHitTesting(false)
-                }
-            )
-            .compositingGroup()
-            .shadow(
-                color: Color.black.opacity(style.outerShadow ? g.outerShadowAlpha : 0),
-                radius: style.outerShadow ? g.outerShadowRadius : 0,
-                x: 0,
-                y: style.outerShadow ? g.outerShadowOffsetY : 0
-            )
-    }
-}
+// MARK: - 液态玻璃表面（View 扩展，API 与旧版兼容）
 
 extension View {
-    /// 套用液态玻璃材质。
+    /// 套用液态玻璃材质（库驱动：iOS 26 原生 glassEffect，旧系统 Material fallback）。
     func liquidGlass(_ style: GlassStyle = .card, tint: Color? = nil) -> some View {
-        modifier(LiquidGlassSurface(style: style, tint: tint))
+        let base = tint ?? DesignTokens.Dark.surface
+        let material: GlassMaterial
+        if let alert = style.alertTint {
+            material = .tinted(alert)
+        } else {
+            material = .tinted(base.opacity(style.surfaceAlpha))
+        }
+        return self
+            .glassSurface(material, in: glassShape(cornerRadius: style.cornerRadius))
+            .shadow(
+                color: Color.black.opacity(style.outerShadow ? DesignTokens.Glass.outerShadowAlpha : 0),
+                radius: style.outerShadow ? DesignTokens.Glass.outerShadowRadius : 0,
+                x: 0,
+                y: style.outerShadow ? DesignTokens.Glass.outerShadowOffsetY : 0
+            )
     }
 }
 
@@ -202,11 +99,12 @@ struct GlassPanel<Content: View>: View {
         content
             .padding(DesignTokens.Spacing.s16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .liquidGlass(alert ? GlassStyle(material: style.material,
-                                            surfaceAlpha: DesignTokens.Glass.BackgroundAlpha.max,
-                                            cornerRadius: style.cornerRadius,
-                                            alertTint: colors.danger,
-                                            outerShadow: style.outerShadow) : style,
+            .liquidGlass(alert
+                         ? GlassStyle(material: .tinted(colors.danger),
+                                      surfaceAlpha: DesignTokens.Glass.BackgroundAlpha.max,
+                                      cornerRadius: style.cornerRadius,
+                                      outerShadow: style.outerShadow)
+                         : style,
                          tint: alert ? colors.danger : colors.surface)
     }
 }

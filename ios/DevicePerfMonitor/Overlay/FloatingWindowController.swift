@@ -8,13 +8,15 @@
 //  iOS 无 FLAG_NOT_TOUCH_MODAL 概念 —— UIWindow 只接收自身 bounds 内的
 //  触摸，区域外自动穿透到下层窗口，语义等价。
 //
-//  手势优先级（与 Android 端一致）：拖动(单指) > 缩放(双指) > 双击隐藏 > 单击展开；
-//  贴边收窄：拖动结束位置距屏幕边缘 < edgeSnapThreshold 时收窄为窄条；
+//  手势优先级（与 Android 端一致）：拖动(单指) > 缩放(双指) > 双击隐藏 > 单击循环；
+//  三态循环（单击切换）：card 完整卡片 → numbers 纯数字 → collapsed 收起；
+//  贴边只吸附位置，不再自动收窄（收窄只由用户显式操作触发，1.0.8 起）；
 //  垃圾桶：拖动过程中悬停底部垃圾桶区域（高亮），松手关闭。
 //
 //  平台限制（README「降级说明」记录）：iOS 不允许第三方应用创建系统级
 //  全局悬浮窗（无 SYSTEM_ALERT_WINDOW 等价物），故仅在应用内显示；
-//  App 退后台时窗口自动隐藏（scenePhase 驱动）。
+//  App 退后台时窗口自动隐藏（scenePhase 驱动），回前台自动挂出
+//  （用户要求「不需要手动打开」——iOS 上能做到的上限是回应用即显示）。
 //
 
 import SwiftUI
@@ -43,11 +45,23 @@ final class FloatingWindowController: NSObject, ObservableObject {
     /// 各形态的窗口尺寸（含阴影安全边距：窗口尺寸 = 可见区域 + 阴影，对应需求）。
     private func windowSize(for mode: OverlayUiState.Mode) -> CGSize {
         switch mode {
-        case .mini: return CGSize(width: 252, height: 64)
-        // 标准模式 = 综合评判行 + 最多两行指标格（收敛后只有 3~4 个核心指标）
-        case .standard: return CGSize(width: 340, height: 180)
+        // 完整卡片 = 综合评判行 + 最多两行指标格（默认形态，稳定显示不变形）
+        case .card: return CGSize(width: 340, height: 180)
+        // 纯数字：只要数字、不要卡片——无玻璃无阴影的一横排
+        case .numbers: return CGSize(width: 264, height: 52)
         case .collapsed: return CGSize(width: 44, height: 64)
         }
+    }
+
+    /// 启动时的默认形态：设置页「默认纯数字」开关（overlayMiniMode）。
+    private var defaultMode: OverlayUiState.Mode {
+        UserDefaults.standard.bool(forKey: "overlayMiniMode") ? .numbers : .card
+    }
+
+    /// 窗口透明度（设置页滑杆 0.4~1.0，UserDefaults「overlayOpacity」；未设置 = 1.0）。
+    private var overlayOpacity: Double {
+        let v = UserDefaults.standard.double(forKey: "overlayOpacity")
+        return (v == 0 || v < 0.4) ? 1.0 : min(v, 1.0)
     }
 
     private var initialCenter: CGPoint {
@@ -65,6 +79,8 @@ final class FloatingWindowController: NSObject, ObservableObject {
     func show() {
         guard !isVisible, let scene = activeWindowScene() else { return }
         isVisible = true
+        // 启动形态取设置页默认值（卡片 / 纯数字）
+        state.mode = defaultMode
 
         let rootView = OverlayRootView(controller: self)
         let hosting = UIHostingController(rootView: rootView)
@@ -75,6 +91,8 @@ final class FloatingWindowController: NSObject, ObservableObject {
         window.windowLevel = UIWindow.Level.alert + 1
         window.backgroundColor = .clear
         window.rootViewController = hosting
+        // 窗口透明度：设置页滑杆接线（1.0.8 起真正生效）
+        window.alpha = overlayOpacity
         window.frame = frame(for: state.mode, center: initialCenter)
         window.isHidden = false
 
@@ -92,13 +110,24 @@ final class FloatingWindowController: NSObject, ObservableObject {
         window = nil
         hostingController = nil
         isVisible = false
-        state.mode = .mini
+        state.mode = defaultMode
         currentScale = 1.0
         baseScale = 1.0
     }
 
     func toggle() {
         isVisible ? hide() : show()
+    }
+
+    /// 设置页透明度滑杆变更时调用（窗口未显示时下次 show 生效）。
+    func applyOpacity() {
+        window?.alpha = overlayOpacity
+    }
+
+    /// 设置页「默认纯数字」开关变更时调用（立即切换当前形态）。
+    func applyDefaultMode() {
+        state.mode = defaultMode
+        applyFrame(center: window?.center ?? initialCenter, animated: false)
     }
 
     // MARK: - 窗口布局
@@ -164,7 +193,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
         doubleTap.numberOfTouchesRequired = 1
         view.addGestureRecognizer(doubleTap)
 
-        // 单击：展开（需等双击判定失败后触发 → 双击优先）
+        // 单击：三态循环（需等双击判定失败后触发 → 双击优先）
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
         singleTap.numberOfTapsRequired = 1
         singleTap.numberOfTouchesRequired = 1
@@ -177,6 +206,11 @@ final class FloatingWindowController: NSObject, ObservableObject {
         switch gesture.state {
         case .began:
             dragStartCenter = window.center
+            // 收起态下拖动即展开（让位给拖动，优先级最低）
+            if state.mode == .collapsed {
+                state.mode = .card
+                applyFrame(center: window.center, animated: false)
+            }
         case .changed:
             let translation = gesture.translation(in: window)
             let newCenter = CGPoint(x: dragStartCenter.x + translation.x,
@@ -198,12 +232,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
             overTrash = false
 
             let center = window.center
-            // 贴边收窄：距左右边缘 < 阈值时收窄
-            if center.x < DesignTokens.Gesture.edgeSnapThreshold {
-                state.mode = .collapsed
-            } else if center.x > UIScreen.main.bounds.width - DesignTokens.Gesture.edgeSnapThreshold {
-                state.mode = .collapsed
-            }
+            // 贴边只吸附位置，不改变形态（用户原话「不要动它」，1.0.8 起）
             applyFrame(center: center)
         default:
             break
@@ -229,11 +258,24 @@ final class FloatingWindowController: NSObject, ObservableObject {
     }
 
     @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
-        // 收窄态：点击展开；迷你态：点击展开为标准面板
-        withAnimation(.easeOut(duration: 0.3)) {
-            state.mode = state.mode == .collapsed ? .mini : .standard
+        // 三态循环：card → numbers → collapsed → card。
+        // 内容形变交给 SwiftUI 过渡（spring），窗口尺寸瞬切——不拿窗口动画
+        // 去形变用户正在看的卡片（与 Android applyLayout 同一原则）。
+        let next: OverlayUiState.Mode
+        switch state.mode {
+        case .card: next = .numbers
+        case .numbers: next = .collapsed
+        case .collapsed: next = .card
         }
-        applyFrame(center: window?.center ?? initialCenter)
+        withAnimation(
+            .spring(
+                response: DesignTokens.Motion.Spring.DefaultSpatial.response,
+                dampingFraction: DesignTokens.Motion.Spring.DefaultSpatial.dampingFraction
+            )
+        ) {
+            state.mode = next
+        }
+        applyFrame(center: window?.center ?? initialCenter, animated: false)
     }
 
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
@@ -270,7 +312,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
         AlertManager.shared.evaluate(snapshot: snapshot, overlay: overlay)
         state.alert = AlertManager.shared.alertActive
 
-        // 形态切换时同步窗口尺寸
+        // 形态切换时同步窗口尺寸（瞬切；内容过渡由 SwiftUI 负责）
         if window?.frame.size != windowSize(for: state.mode) {
             applyFrame(center: window?.center ?? initialCenter, animated: false)
         }

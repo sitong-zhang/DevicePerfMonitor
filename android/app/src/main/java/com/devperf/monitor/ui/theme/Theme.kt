@@ -1,10 +1,16 @@
 // 可变字体 variationSettings 在部分 Compose 版本仍标记为实验 API，显式 OptIn
+// Material 3 Expressive 说明：compose-bom 2026.06.01 锁定的 material3 1.4.0 稳定版里，
+// Expressive 主题入口（MaterialExpressiveTheme / MotionScheme）仍是 internal，1.5.0-beta 才公开。
+// 本项目跟随 stable（1.4.0），改用公开的 4 参 MaterialTheme 承载 Expressive 视觉：
+// 形状/配色/字体全部由 design-tokens.json 生成；组件级弹簧动效（按压、形态切换）在
+// ui/kit/Motion.kt 用与 androidx ExpressiveMotionTokens 同参数的 spring 实现。
 @file:OptIn(ExperimentalTextApi::class)
 
 package com.devperf.monitor.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -21,19 +27,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontWeight.Companion.Bold
 import androidx.compose.ui.text.font.FontWeight.Companion.Medium
 import androidx.compose.ui.text.font.FontWeight.Companion.Normal
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.devperf.monitor.R
 import com.devperf.monitor.data.ThemeMode
 
 /**
- * 主题：液态玻璃视觉体系。
+ * 主题：Material 3 Expressive 视觉体系（1.0.8 起，取代此前的液态玻璃方案）。
  *
  * 设计原则（对应需求「禁止系统默认控件与默认蓝」）：
- * 1. 禁用 Material3 动态取色（dynamicColor = false），配色完全来自 design-tokens.json
- *    （Catppuccin Mocha / Latte），由 generateDesignTokens 任务生成 [DesignTokens]；
- * 2. Material3 仅作为基础控件载体（Scaffold / 无障碍 / 状态），所有视觉表现由
- *    ui/kit 自封装组件（液态玻璃）覆盖，不出现 MD3 默认样式控件；
- * 3. 字体：Inter（界面）+ JetBrains Mono（数值），均随工程打包（OFL 许可见 licenses/）。
+ * 1. 视觉底座换成 Google 官方开源设计语言 Material 3 Expressive
+ *    （androidx Material3 1.4+，随 compose-bom 升级获得）：弹簧物理动效
+ *    （MotionScheme.expressive()）、形状体系、新组件集；
+ * 2. 仍然禁用 Material3 动态取色（dynamicColor = false），配色完全来自
+ *    design-tokens.json（Catppuccin Mocha / Latte），由 generateDesignTokens
+ *    任务生成 [DesignTokens]——品牌色不跟壁纸漂移；
+ * 3. 语义色（[LocalTokenColors]）与 MD3 ColorScheme 双轨并存：MD3 组件读
+ *    ColorScheme，自绘可视化（环形/波形/柱状）与悬浮窗读语义色，同一套取值；
+ * 4. 字体：Inter（界面）+ JetBrains Mono（数值），均随工程打包（OFL 许可见 licenses/）。
  *    Inter 为可变字体，通过 FontVariation 取 400/500/700 字重；
  *    API < 26 时 variationSettings 被系统忽略，字形仍可正常渲染（降级为默认字重）。
  */
@@ -76,7 +87,7 @@ internal val LocalTokenColors = staticCompositionLocalOf { DesignTokens.DarkColo
 /** 当前是否深色主题（用于自绘高光/阴影强度微调）。 */
 internal val LocalIsDarkTheme = staticCompositionLocalOf { true }
 
-/** 动效曲线（design-tokens.json 三条曲线）。 */
+/** 动效曲线（design-tokens.json 三条曲线；M3 Expressive 组件的弹簧动效走 motionScheme）。 */
 @Immutable
 data class AppMotion(
     val enter: androidx.compose.animation.core.CubicBezierEasing,
@@ -156,12 +167,12 @@ private fun typography(mono: FontFamily, sans: FontFamily) = Typography(
 // ---------------------------------------------------------------------------
 
 /**
- * 应用主题。
+ * 应用主题（Material 3 Expressive）。
  *
  * @param themeMode 深色 / 浅色 / 跟随系统
  */
 @Composable
-fun LiquidGlassTheme(
+fun DevicePerfTheme(
     themeMode: ThemeMode = ThemeMode.DARK,
     content: @Composable () -> Unit,
 ) {
@@ -210,6 +221,17 @@ fun LiquidGlassTheme(
         )
     }
 
+    // 形状体系对齐 design-tokens radius（card 24 / small 16 / large 28 / pill 胶囊）
+    val shapes = Shapes(
+        extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(
+            (DesignTokens.Radius.SMALL / 2f).dp,
+        ),
+        small = androidx.compose.foundation.shape.RoundedCornerShape(DesignTokens.Radius.SMALL.dp),
+        medium = androidx.compose.foundation.shape.RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        large = androidx.compose.foundation.shape.RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
+        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
+    )
+
     CompositionLocalProvider(
         LocalTokenColors provides tokens,
         LocalIsDarkTheme provides dark,
@@ -217,6 +239,7 @@ fun LiquidGlassTheme(
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
+            shapes = shapes,
             typography = typography(JetBrainsMonoFamily, InterFamily),
             content = content,
         )

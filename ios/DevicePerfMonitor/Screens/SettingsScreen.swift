@@ -17,11 +17,16 @@ import UserNotifications
 struct SettingsScreen: View {
     @Environment(\.colors) private var colors
     @AppStorage("refreshMode") private var refreshModeRaw = RefreshMode.realtime.rawValue
-    @AppStorage("overlayEnabled") private var overlayEnabled = false
+    // 1.0.8 起默认 true：回应用自动挂出悬浮窗，不需要手动打开
+    @AppStorage("overlayEnabled") private var overlayEnabled = true
     @AppStorage("alertNotification") private var alertNotification = true
     @AppStorage("liveActivity") private var liveActivity = false
     @AppStorage("themeMode") private var themeModeRaw = ThemeMode.dark.rawValue
     @AppStorage("backgroundCollection") private var backgroundCollection = true
+    /// 默认纯数字：启动悬浮窗时只要数字、不显示卡片（对应 Android overlayMiniMode）。
+    @AppStorage("overlayMiniMode") private var overlayMiniMode = false
+    /// 悬浮窗窗口透明度 0.4~1.0（1.0.8 起接线到 window.alpha）。
+    @AppStorage("overlayOpacity") private var overlayOpacity = 1.0
 
     @StateObject private var viewModel = SettingsViewModel()
 
@@ -63,8 +68,15 @@ struct SettingsScreen: View {
                 GlassSectionTitle(text: "悬浮窗")
                 GlassPanel {
                     VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
-                        ToggleRow(title: "应用内悬浮窗", subtitle: "显示实时指标小窗（仅在应用内可见）", isOn: $overlayEnabled)
-                        Text("iOS 平台限制：系统不允许第三方应用创建全局悬浮窗（无 SYSTEM_ALERT_WINDOW 等价物），本悬浮窗仅在 DevicePerfMonitor 内显示，退后台自动隐藏。详见 README「降级说明」。")
+                        ToggleRow(title: "应用内悬浮窗", subtitle: "回应用自动挂出实时指标小窗（仅在应用内可见）", isOn: $overlayEnabled)
+                        ToggleRow(title: "默认纯数字模式", subtitle: "启动时只要数字、不显示卡片；单击可在 卡片 → 纯数字 → 收起 间循环", isOn: $overlayMiniMode)
+                        GlassSlider(
+                            value: $overlayOpacity,
+                            range: 0.4...1.0,
+                            label: "悬浮窗不透明度",
+                            valueText: "\(Int((overlayOpacity * 100).rounded()))%"
+                        )
+                        Text("iOS 平台限制：系统不允许第三方应用创建全局悬浮窗（无 SYSTEM_ALERT_WINDOW 等价物），本悬浮窗仅在 DevicePerfMonitor 内显示，退后台自动隐藏、回前台自动挂出。详见 README「降级说明」。")
                             .font(Typography.labelMedium())
                             .foregroundStyle(colors.warning)
                     }
@@ -137,6 +149,12 @@ struct SettingsScreen: View {
         }
         .onChange(of: overlayEnabled) { newValue in
             newValue ? FloatingWindowController.shared.show() : FloatingWindowController.shared.hide()
+        }
+        .onChange(of: overlayOpacity) { _ in
+            FloatingWindowController.shared.applyOpacity()
+        }
+        .onChange(of: overlayMiniMode) { _ in
+            FloatingWindowController.shared.applyDefaultMode()
         }
         .onChange(of: alertNotification) { newValue in
             if newValue { AlertManager.shared.requestNotificationPermission() }

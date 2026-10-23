@@ -9,6 +9,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -30,11 +31,26 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
 
 /** 列表项依次入场的错峰步长；设上限避免长列表尾部等太久。 */
 private const val STAGGER_MS = 45
 private const val STAGGER_MAX_MS = 240
+
+/**
+ * Expressive 快速空间弹簧（fastSpatial）：按压、形态切换这类改边界的短促动效。
+ *
+ * 参数与 androidx ExpressiveMotionTokens.SpringFastSpatial* 完全一致
+ * （dampingRatio 0.6 / stiffness 800），真源在 design-tokens.json 的
+ * motion.spring.fastSpatial，双端共用。compose-bom 锁定的 material3 1.4.0 稳定版
+ * 没有公开 MotionScheme（1.5.0-beta 才公开），这里按同一套物理曲线自行实现，
+ * 保证与 Material 3 Expressive 官方规范同手感。
+ */
+private val ExpressiveFastSpatialSpring = spring<Float>(
+    dampingRatio = DesignTokens.Motion.Spring.FAST_SPATIAL_DAMPING,
+    stiffness = DesignTokens.Motion.Spring.FAST_SPATIAL_STIFFNESS,
+)
 
 /**
  * 入场动画规格（淡入用）。曲线和时长取自 [LocalAppMotion]（真源 design-tokens.json，
@@ -54,21 +70,21 @@ fun <T> enterSpec(delayMs: Int = 0): FiniteAnimationSpec<T> {
  * 按压缩放反馈：按下缩到 [pressedScale]，松手弹回。
  *
  * 走 graphicsLayer 而不是改 padding/尺寸，避免触发重新测量——列表里连续点按不掉帧。
+ * 动效用 Material 3 Expressive 的 fastSpatial 弹簧（[ExpressiveFastSpatialSpring]，
+ * 参数同 androidx ExpressiveMotionTokens），与 MD3 标准件的按压反馈同一套物理曲线。
  *
  * 注意：这里只做视觉缩放，**不消费点击事件**。调用方要把同一个 [interactionSource]
- * 传给实际响应点击的组件（[LiquidGlassSurface] 的 interactionSource 参数），
- * 否则按压状态收集不到。
+ * 传给实际响应点击的组件，否则按压状态收集不到。
  */
 @Composable
 fun Modifier.pressScale(
     interactionSource: MutableInteractionSource,
     pressedScale: Float = 0.965f,
 ): Modifier {
-    val motion = LocalAppMotion.current
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
-        animationSpec = tween(motion.emphasizedDurationMs, easing = motion.emphasized),
+        animationSpec = ExpressiveFastSpatialSpring,
         label = "pressScale",
     )
     return this.graphicsLayer {

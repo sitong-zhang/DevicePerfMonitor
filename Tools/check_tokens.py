@@ -47,7 +47,7 @@ def main():
             if ios_expect not in sw:
                 errors.append(f"[iOS] 缺少 {scheme}.{name} = {hexv}")
 
-    # 2. 动效曲线
+    # 2. 动效曲线 + 空间弹簧（spring 段无 cubicBezier，是 dampingRatio/stiffness 对）
     import re as _re
 
     def upper_snake(name):
@@ -55,6 +55,22 @@ def main():
 
     for name, spec in t["motion"].items():
         if name.startswith("$"):
+            continue
+        if name == "spring":
+            # motion.spring.*：嵌套段，每项是 dampingRatio/stiffness 对
+            for sname, sspec in spec.items():
+                if sname.startswith("$"):
+                    continue
+                # Kotlin 侧命名以后缀映射（生成器 springConsts 同款）：
+                # dampingRatio → _DAMPING，stiffness → _STIFFNESS
+                for key, suffix in (("dampingRatio", "DAMPING"), ("stiffness", "STIFFNESS")):
+                    val = sspec[key]
+                    kt_tok = f"const val {upper_snake(sname)}_{suffix} = {val}f"
+                    if kt_tok not in kt:
+                        errors.append(f"[Android] motion.spring {sname}.{key} = {val} 缺失（期望 {kt_tok}）")
+                    sw_tok = f"static let {key}: CGFloat = {val}"
+                    if sw_tok not in sw:
+                        errors.append(f"[iOS] motion.spring {sname}.{key} = {val} 缺失（期望 {sw_tok}）")
             continue
         bezier = spec["cubicBezier"]
         for tok in bezier:

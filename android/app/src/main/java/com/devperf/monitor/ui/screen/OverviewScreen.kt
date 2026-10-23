@@ -41,8 +41,7 @@ import com.devperf.monitor.ui.kit.AnimatedNumber
 import com.devperf.monitor.ui.kit.BarSeries
 import com.devperf.monitor.ui.kit.EnterStagger
 import com.devperf.monitor.ui.kit.enterSpec
-import com.devperf.monitor.ui.kit.GlassStyle
-import com.devperf.monitor.ui.kit.LiquidGlassSurface
+import com.devperf.monitor.ui.kit.GlassCard
 import com.devperf.monitor.ui.kit.ProgressRing
 import com.devperf.monitor.ui.kit.Sparkline
 import com.devperf.monitor.ui.kit.metricColor
@@ -238,12 +237,11 @@ private fun HealthCard(result: FocusedHealth.Result) {
         else -> colors.danger
     }
 
-    LiquidGlassSurface(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(190.dp),
         shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
-        style = GlassStyle(),
     ) {
         Row(
             modifier = Modifier
@@ -308,13 +306,12 @@ private fun MetricCard(
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
 
-    LiquidGlassSurface(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(132.dp)
             .pressScale(interactionSource),
         shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
-        style = GlassStyle(),
         onClick = {
             haptics.tick()
             onClick()

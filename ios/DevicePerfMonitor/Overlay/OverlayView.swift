@@ -4,22 +4,24 @@
 //
 //  应用内悬浮窗内容（对应 Android 端 overlay/OverlayCompose.kt）。
 //
-//  形态（与 Android 端一致）：
-//  - 迷你模式：综合评判小环 + 最多三项核心数据；
-//  - 标准模式：综合评判小环 + 核心指标网格（2 列）；
-//  - 收窄态：贴边窄条，点击展开；
-//  - 告警态：整体变红（边框/数值）。
+//  形态（与 Android 端一致，1.0.8 起三态）：
+//  - card 完整卡片：综合评判小环 + 核心指标网格（默认形态，稳定显示不变形）；
+//  - numbers 纯数字：只要卡片上的数字——无玻璃、无阴影、无小环的一横排；
+//  - collapsed 收起：一条竖线，点一下恢复完整卡片；
+//  - 单击循环切换 card → numbers → collapsed → card；
+//  - 告警态：卡片整体转危险色 / 数字转危险色。
 //
 //  硬规则（与 Android 一致）：只保留内存占用率 / 设备温度 / 屏幕刷新率 /
 //  帧率四个核心指标；采不到的指标不占位、不显示「—」，直接不进列表。
 //  iOS 无机身温度公开 API → 温度格在 iOS 上常态不出现。
 //
-//  玻璃材质：走 LiquidGlassSurface（UIVisualEffectView 真实毛玻璃；
-//  窗口层级在 App 内，可真实采样背后画面）。
+//  玻璃材质：card 态走 LiquidGlassKit 的 glassSurface（iOS 26+ 原生
+//  glassEffect，17~25 纯 SwiftUI fallback；窗口层级在 App 内，
+//  可真实采样背后画面）；numbers 态不要卡片，直接浮数字。
 //
 //  iOS 平台限制（README「降级说明」记录）：iOS 不允许第三方应用创建
 //  系统级全局悬浮窗（无 SYSTEM_ALERT_WINDOW 等价物），故本悬浮窗仅在
-//  DevicePerfMonitor 应用内显示，退后台即隐藏。
+//  DevicePerfMonitor 应用内显示，退后台即隐藏、回前台自动挂出。
 //
 
 import SwiftUI
@@ -45,11 +47,12 @@ struct OverlayData {
 
 /// 悬浮窗 UI 状态（由 FloatingWindowController 驱动）。
 struct OverlayUiState {
+    /// 三态：完整卡片 / 纯数字 / 收起。顺序即单击循环顺序。
     enum Mode {
-        case mini, standard, collapsed
+        case card, numbers, collapsed
     }
 
-    var mode: Mode = .mini
+    var mode: Mode = .card
     var alert: Bool = false
 }
 
@@ -65,50 +68,30 @@ struct OverlayView: View {
             switch state.mode {
             case .collapsed:
                 CollapsedStrip(alert: state.alert)
-            case .mini:
-                MiniRow(data: data, intervalMs: intervalMs)
-            case .standard:
-                StandardGrid(data: data, intervalMs: intervalMs)
+            case .numbers:
+                NumbersStrip(data: data, alert: state.alert, intervalMs: intervalMs)
+            case .card:
+                CardContent(data: data, alert: state.alert, intervalMs: intervalMs)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .liquidGlass(
-            GlassStyle(
-                material: .systemThinMaterial,
-                surfaceAlpha: state.alert
-                    ? DesignTokens.Glass.BackgroundAlpha.max
-                    : DesignTokens.Glass.BackgroundAlpha.min,
-                cornerRadius: DesignTokens.Radius.card
+        // 形态切换的形变在内容层完成（spring，token：motion.spring.defaultSpatial），
+        // 窗口尺寸瞬切——不拿窗口动画去形变用户正在看的卡片（与 Android 同一原则）
+        .animation(
+            .spring(
+                response: DesignTokens.Motion.Spring.DefaultSpatial.response,
+                dampingFraction: DesignTokens.Motion.Spring.DefaultSpatial.dampingFraction
             ),
-            tint: state.alert ? colors.danger : colors.surface
+            value: state.mode
         )
     }
 }
 
-// MARK: - 迷你模式：综合评判小环 + 最多三项
+// MARK: - 完整卡片：综合评判小环 + 指标网格（液态玻璃容器）
 
-private struct MiniRow: View {
+private struct CardContent: View {
     @Environment(\.colors) private var colors
     let data: OverlayData
-    var intervalMs: Double
-
-    var body: some View {
-        HStack(spacing: 12) {
-            HealthBadge(health: data.health, diameter: 44, lineWidth: 4)
-            ForEach(Array(data.cells.prefix(3).enumerated()), id: \.offset) { index, cell in
-                if index > 0 { MiniDivider() }
-                MiniCell(label: cell.id.shortLabel, metricValue: cell.value, id: cell.id, intervalMs: intervalMs)
-            }
-        }
-    }
-}
-
-// MARK: - 标准模式：综合评判小环 + 指标网格
-
-private struct StandardGrid: View {
-    @Environment(\.colors) private var colors
-    let data: OverlayData
+    let alert: Bool
     var intervalMs: Double
 
     var body: some View {
@@ -131,6 +114,58 @@ private struct StandardGrid: View {
                     }
                 }
             }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .liquidGlass(
+            GlassStyle(
+                material: .frosted,
+                surfaceAlpha: alert
+                    ? DesignTokens.Glass.BackgroundAlpha.max
+                    : DesignTokens.Glass.BackgroundAlpha.min,
+                cornerRadius: DesignTokens.Radius.card
+            ),
+            tint: alert ? colors.danger : colors.surface
+        )
+    }
+}
+
+// MARK: - 纯数字：只要卡片上的数字，不要卡片
+//
+// 无玻璃、无阴影、无小环、无标签——四个数字直接横排浮在屏幕上，
+// 每个数字保持自己的指标色；告警时统一转危险色（没有卡片可染，染数字）。
+
+private struct NumbersStrip: View {
+    @Environment(\.colors) private var colors
+    let data: OverlayData
+    let alert: Bool
+    var intervalMs: Double
+
+    var body: some View {
+        let cells = data.cells
+        if cells.isEmpty {
+            // 纯数字态没有容器，缺数据时给一行小字兜底
+            Text("读不到指标")
+                .font(Typography.mono(10))
+                .foregroundStyle(colors.textSecondary)
+        } else {
+            HStack(spacing: 12) {
+                ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                    HStack(spacing: 2, alignment: .lastTextBaseline) {
+                        AnimatedNumber(
+                            value: Double(cell.value),
+                            decimals: cell.id.decimals,
+                            color: alert ? colors.danger : colors.metricColor(cell.id.colorKey),
+                            font: Typography.mono(17, .semibold),
+                            intervalMs: intervalMs
+                        )
+                        Text(cell.id.unit)
+                            .font(Typography.mono(9))
+                            .foregroundStyle(colors.textSecondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 6)
         }
     }
 }
@@ -170,29 +205,6 @@ private struct HealthBadge: View {
 
 // MARK: - 单元格
 
-private struct MiniCell: View {
-    @Environment(\.colors) private var colors
-    let label: String
-    let metricValue: Float
-    let id: MetricId
-    var intervalMs: Double
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(Typography.mono(10))
-                .foregroundStyle(colors.textSecondary)
-            AnimatedNumber(
-                value: Double(metricValue),
-                decimals: id.decimals,
-                color: colors.metricColor(id.colorKey),
-                font: Typography.mono(16, .medium),
-                intervalMs: intervalMs
-            )
-        }
-    }
-}
-
 private struct GridCell: View {
     @Environment(\.colors) private var colors
     let label: String
@@ -219,22 +231,7 @@ private struct GridCell: View {
     }
 }
 
-private struct MiniDivider: View {
-    @Environment(\.colors) private var colors
-    var body: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [.clear, colors.textSecondary.opacity(0.35), .clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(width: 1, height: 26)
-    }
-}
-
-// MARK: - 收窄态：贴边窄条
+// MARK: - 收起态：竖线 + 提示点
 
 private struct CollapsedStrip: View {
     @Environment(\.colors) private var colors

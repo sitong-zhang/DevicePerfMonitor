@@ -169,6 +169,23 @@
 
 		EDF8A3704EFE53F397BD5C30 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = CBD0F54A8C995ACCB4FF2279 /* DGCharts */; };
 
+		5E99A818DFC151ECBF6FFC67 /* XCRemoteSwiftPackageReference "LiquidGlassKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/muhittincamdali/LiquidGlassKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.1.0;
+			};
+		};
+
+		C48591896F485227A967C957 /* LiquidGlassKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E99A818DFC151ECBF6FFC67 /* XCRemoteSwiftPackageReference "LiquidGlassKit" */;
+			productName = LiquidGlassKit;
+		};
+
+		D3CD792F46945F02B6F297E0 /* LiquidGlassKit in Frameworks */ = {isa = PBXBuildFile; productRef = C48591896F485227A967C957 /* LiquidGlassKit */; };
+
 		998B264CA6445C70A41F1B23 /* Analysis */ = {
 			isa = PBXGroup;
 			children = (
@@ -409,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EDF8A3704EFE53F397BD5C30,
+				D3CD792F46945F02B6F297E0,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -483,6 +501,7 @@
 			name = DevicePerfMonitor;
 			packageProductDependencies = (
 				CBD0F54A8C995ACCB4FF2279 /* Charts */,
+				C48591896F485227A967C957 /* LiquidGlassKit */,
 			);
 			productName = DevicePerfMonitor;
 			productReference = 7F1C30CC536453E4A2DD523D /* DevicePerfMonitor.app */;
@@ -555,7 +574,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitor/DevicePerfMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -572,7 +591,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitor/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.0.8;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -621,7 +640,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitor/DevicePerfMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -636,7 +655,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitor/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.0.8;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -684,7 +703,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitorWidget/DevicePerfMonitorWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -701,7 +720,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitorWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.0.8;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -750,7 +769,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitorWidget/DevicePerfMonitorWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -765,7 +784,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitorWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.0.8;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -944,7 +963,7 @@
 				"zh-Hans",
 			);
 			mainGroup = 571CE5DF9839503883847AED;
-			packageReferences = (C055D366E18F581FAF05ED04 /* XCRemoteSwiftPackageReference "Charts" */,);
+			packageReferences = (C055D366E18F581FAF05ED04 /* XCRemoteSwiftPackageReference "Charts" */, 5E99A818DFC151ECBF6FFC67 /* XCRemoteSwiftPackageReference "LiquidGlassKit" */);
 			productRefGroup = 296857F2B30B53F09F82E72B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";

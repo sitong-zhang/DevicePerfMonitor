@@ -128,6 +128,34 @@ def main() -> int:
         lines.append(f"            }}")
         lines.append(f"            static var duration: Double {{ durationMs / 1000.0 }}")
         lines.append("        }")
+
+    # Material 3 Expressive 空间弹簧（androidx ExpressiveMotionTokens 同参数）。
+    # SwiftUI 的 spring 用 response/dampingFraction，由 stiffness/dampingRatio 换算：
+    # stiffness = (2π/response)² ⟹ response = 2π/√stiffness；
+    # dampingRatio 与 dampingFraction 是同一无量纲量（ζ），原样互换、不除 2
+    # （多个跨端规范实证：RunAnywhere/Tday motion 规范、nandha.design 弹簧实验室）。
+    spring = data["motion"].get("spring", {})
+    if spring:
+        # 与 Kotlin DesignTokens.Motion.Spring 同构：先套一层 Spring 容器
+        lines.append("")
+        lines.append("        // MARK: - Material 3 Expressive 空间弹簧（与 Android DesignTokens.Motion.Spring 同构）")
+        lines.append("        enum Spring {")
+    for name, spec in spring.items():
+        if name.startswith("$"):
+            continue
+        enum_name = name[0].upper() + name[1:]
+        lines.append("")
+        lines.append(f"            // {spec.get('$comment', '')}" if "$comment" in spec else "")
+        lines.append(f"            enum {enum_name} {{")
+        lines.append(f"                static let dampingRatio: CGFloat = {spec['dampingRatio']}")
+        lines.append(f"                static let stiffness: CGFloat = {spec['stiffness']}")
+        lines.append(f"                /// SwiftUI response = 2π/√stiffness（秒）")
+        lines.append(f"                static var response: Double {{ 2 * Double.pi / Double(stiffness).squareRoot() }}")
+        lines.append(f"                /// SwiftUI dampingFraction = dampingRatio（同一 ζ，原样互换）")
+        lines.append(f"                static var dampingFraction: Double {{ Double(dampingRatio) }}")
+        lines.append("            }")
+    if spring:
+        lines.append("        }")
     lines.append("    }")
 
     # ---- Number ----

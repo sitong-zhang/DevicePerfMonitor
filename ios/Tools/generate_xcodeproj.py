@@ -14,6 +14,9 @@
   与 Xcode「Add to Targets」多选行为一致；
 - Charts 通过 XCRemoteSwiftPackageReference 引入（danielgindi/Charts，
   Apache-2.0）；
+- LiquidGlassKit 同样走 SPM（muhittincamdali/LiquidGlassKit，MIT）：
+  iOS 26+ 用苹果原生 glassEffect，17-25 走库的 SwiftUI fallback，
+  取代自绘的 UIVisualEffectView 分层叠加（见 UIKit/LiquidGlass.swift）；
 - 字体（Inter / JetBrains Mono，OFL-1.1）以资源方式打入 App；
 - 生成后提交入库；增删源文件后重跑本脚本。
 """
@@ -30,6 +33,9 @@ OUT = os.path.join(PROJECT_DIR, "project.pbxproj")
 
 CHARTS_REPO = "https://github.com/danielgindi/Charts.git"
 CHARTS_MIN_VERSION = "5.0.0"
+
+LIQUIDGLASS_REPO = "https://github.com/muhittincamdali/LiquidGlassKit.git"
+LIQUIDGLASS_MIN_VERSION = "2.1.0"
 
 
 def uid(name: str) -> str:
@@ -276,6 +282,29 @@ def main():
     bf_charts = buildfile("charts", charts_product, "DGCharts", "in Frameworks", ref_key="productRef")
 
     # ------------------------------------------------------------------
+    # LiquidGlassKit SPM（液态玻璃材质，MIT；iOS 26 原生 + 17-25 fallback）
+    # ------------------------------------------------------------------
+    pkg_ref_lg = add("pkg:liquidglass", "XCRemoteSwiftPackageReference", [
+        f"\t\t{uid('pkg:liquidglass')} /* XCRemoteSwiftPackageReference \"LiquidGlassKit\" */ = {{",
+        "\t\t\tisa = XCRemoteSwiftPackageReference;",
+        f"\t\t\trepositoryURL = \"{LIQUIDGLASS_REPO}\";",
+        "\t\t\trequirement = {",
+        "\t\t\t\tkind = upToNextMajorVersion;",
+        f"\t\t\t\tminimumVersion = {LIQUIDGLASS_MIN_VERSION};",
+        "\t\t\t};",
+        "\t\t};",
+    ])
+    liquidglass_product = add("prod:liquidglass", "XCSwiftPackageProductDependency", [
+        f"\t\t{uid('prod:liquidglass')} /* LiquidGlassKit */ = {{",
+        "\t\t\tisa = XCSwiftPackageProductDependency;",
+        f"\t\t\tpackage = {pkg_ref_lg} /* XCRemoteSwiftPackageReference \"LiquidGlassKit\" */;",
+        "\t\t\tproductName = LiquidGlassKit;",
+        "\t\t};",
+    ])
+    bf_liquidglass = buildfile("liquidglass", liquidglass_product, "LiquidGlassKit",
+                               "in Frameworks", ref_key="productRef")
+
+    # ------------------------------------------------------------------
     # Groups（目录树，子组优先）
     # ------------------------------------------------------------------
     # 统一目录树：目录 -> [文件 key...]。Resources 子树没有源文件，手动并入。
@@ -364,7 +393,7 @@ def main():
     app_sources_phase = phase("app-sources", "Sources", "PBXSourcesBuildPhase",
                               [build_files[k] for k in app_src_keys])
     app_frameworks_phase = phase("app-frameworks", "Frameworks", "PBXFrameworksBuildPhase",
-                                 [bf_charts])
+                                 [bf_charts, bf_liquidglass])
     app_resources_phase = phase("app-resources", "Resources", "PBXResourcesBuildPhase",
                                 [build_files[k] for k in app_res_keys])
 
@@ -399,6 +428,7 @@ def main():
         "\t\t\tname = DevicePerfMonitor;",
         "\t\t\tpackageProductDependencies = (",
         f"\t\t\t\t{charts_product} /* Charts */,",
+        f"\t\t\t\t{liquidglass_product} /* LiquidGlassKit */,",
         "\t\t\t);",
         "\t\t\tproductName = DevicePerfMonitor;",
         f"\t\t\tproductReference = {app_product} /* DevicePerfMonitor.app */;",
@@ -526,10 +556,10 @@ def main():
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "CODE_SIGN_ENTITLEMENTS": "DevicePerfMonitor/DevicePerfMonitor.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
-        "CURRENT_PROJECT_VERSION": "8",
+        "CURRENT_PROJECT_VERSION": "9",
         "GENERATE_INFOPLIST_FILE": "NO",
         "INFOPLIST_FILE": "DevicePerfMonitor/Info.plist",
-        "MARKETING_VERSION": "1.0.7",
+        "MARKETING_VERSION": "1.0.8",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.devperf.monitor",
         "PRODUCT_NAME": "\"$(TARGET_NAME)\"",
         "TARGETED_DEVICE_FAMILY": "\"1,2\"",
@@ -537,10 +567,10 @@ def main():
     widget_debug_extra = {
         "CODE_SIGN_ENTITLEMENTS": "DevicePerfMonitorWidget/DevicePerfMonitorWidget.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
-        "CURRENT_PROJECT_VERSION": "8",
+        "CURRENT_PROJECT_VERSION": "9",
         "GENERATE_INFOPLIST_FILE": "NO",
         "INFOPLIST_FILE": "DevicePerfMonitorWidget/Info.plist",
-        "MARKETING_VERSION": "1.0.7",
+        "MARKETING_VERSION": "1.0.8",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.devperf.monitor.widget",
         "PRODUCT_NAME": "\"$(TARGET_NAME)\"",
         "SKIP_INSTALL": "YES",
@@ -620,7 +650,7 @@ def main():
         "\t\t\t\t\"zh-Hans\",",
         "\t\t\t);",
         f"\t\t\tmainGroup = {grp_main};",
-        f"\t\t\tpackageReferences = ({pkg_ref} /* XCRemoteSwiftPackageReference \"Charts\" */,);",
+        f"\t\t\tpackageReferences = ({pkg_ref} /* XCRemoteSwiftPackageReference \"Charts\" */, {pkg_ref_lg} /* XCRemoteSwiftPackageReference \"LiquidGlassKit\" */);",
         f"\t\t\tproductRefGroup = {grp_products} /* Products */;",
         "\t\t\tprojectDirPath = \"\";",
         "\t\t\tprojectRoot = \"\";",

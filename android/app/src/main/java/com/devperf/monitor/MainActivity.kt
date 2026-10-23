@@ -15,7 +15,7 @@ import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.nav.AppNav
-import com.devperf.monitor.ui.theme.LiquidGlassTheme
+import com.devperf.monitor.ui.theme.DevicePerfTheme
 import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnRequestPermissionResultListener
 
@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         BootTrace.mark("setContent 开始")
         setContent {
             val settings by viewModel.settings.collectAsState()
-            LiquidGlassTheme(settings.themeMode) {
+            DevicePerfTheme(settings.themeMode) {
                 AppNav(
                     viewModel = viewModel,
                     onRequestOverlayPermission = {
@@ -89,6 +89,17 @@ class MainActivity : ComponentActivity() {
         }
         // 界面已经可见 → 本次启动算成功，清掉崩溃残留与轨迹
         BootTrace.markBooted()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 退出应用（切后台 / 回桌面）→ 悬浮窗自动挂出，不需要用户手动打开（1.0.8）。
+        // onResume 已保证进应用时服务在跑；这里兜底覆盖「服务曾被系统杀掉」
+        // 「从通知栏隐藏过」等场景，start 幂等，重复调用无副作用。
+        val settings = viewModel.settings.value
+        if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this)) {
+            OverlayService.start(this)
+        }
     }
 
     override fun onDestroy() {

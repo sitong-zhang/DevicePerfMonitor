@@ -1,7 +1,7 @@
 {
   "$comment": "双端唯一真源 (single source of truth)。Android 由 app/build.gradle.kts 的 generateDesignTokens 任务生成为 DesignTokens.kt；iOS 由 ios/Tools/generate_tokens.py 生成为 DesignTokens.generated.swift。禁止在业务代码中硬编码色值。",
   "name": "DevicePerfMonitor Design Tokens",
-  "version": "1.0.0",
+  "version": "1.0.8",
   "palette": {
     "dark": {
       "name": "Catppuccin Mocha",
@@ -51,7 +51,7 @@
     "subtle": 24,
     "overlayMin": 28,
     "overlayMax": 36,
-    "$comment": "Android dp / iOS pt 等值；overlay 指悬浮窗场景"
+    "$comment": "Android dp / iOS pt 等值；overlay 指悬浮窗场景。1.0.8 起仅 iOS 侧使用（LiquidGlassKit）；Android 端已换 Material 3 Expressive 视觉，无自绘模糊。"
   },
   "glass": {
     "backgroundAlpha": { "min": 0.18, "max": 0.28 },
@@ -65,7 +65,7 @@
     "outerShadowOffsetY": 8,
     "saturationBoost": 1.12,
     "noiseAlpha": 0.035,
-    "$comment": "液态玻璃材质参数：模糊半径 28~36，背景透明度 18%~28% 随背景明暗自适应，1px 半透明白高光边框（顶亮底暗），顶部微弱内高光 + 底部极淡内阴影，柔和弥散外阴影。禁止纯色半透明冒充。"
+    "$comment": "iOS 液态玻璃材质参数（LiquidGlassKit 驱动）：背景透明度 18%~28% 随告警态自适应，柔和弥散外阴影。1.0.8 起仅 iOS 侧使用——Android 端已换用 Material 3 Expressive 视觉（theme/Theme.kt），不再自绘玻璃。"
   },
   "motion": {
     "enter": {
@@ -80,7 +80,13 @@
       "durationMs": 300,
       "cubicBezier": [0.2, 0.0, 0.0, 1.0]
     },
-    "$comment": "三条曲线替代原单一 300ms；所有页面切换/卡片展开/数值变化/悬浮窗弹出收起必须使用其中之一"
+    "spring": {
+      "fastSpatial": { "dampingRatio": 0.6, "stiffness": 800 },
+      "defaultSpatial": { "dampingRatio": 0.8, "stiffness": 380 },
+      "slowSpatial": { "dampingRatio": 0.8, "stiffness": 200 },
+      "$comment": "Material 3 Expressive 空间弹簧（与 androidx ExpressiveMotionTokens 同参数）：fastSpatial=按压/形态切换等改边界的短促动效，defaultSpatial=中等形变，slowSpatial=大范围位移。Compose 侧 dampingRatio/stiffness 直接使用；SwiftUI 侧由生成器换算 response=2π/√stiffness、dampingFraction=dampingRatio/2。"
+    },
+    "$comment": "三条曲线替代原单一 300ms；所有页面切换/卡片展开/数值变化/悬浮窗弹出收起必须使用其中之一。组件级交互（按压、形态切换）走 spring（Material 3 Expressive 物理曲线）。"
   },
   "number": {
     "$comment": "数值缓动：时长 = min(300ms, 刷新间隔 - 50ms)；新数据到达时从当前显示值继续缓动，不重播动画",

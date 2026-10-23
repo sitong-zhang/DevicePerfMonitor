@@ -100,6 +100,19 @@ abstract class GenerateDesignTokensTask : DefaultTask() {
             return "MotionCurveSpec(${bezier[0]}f, ${bezier[1]}f, ${bezier[2]}f, ${bezier[3]}f, ${m["durationMs"]})"
         }
 
+        /** motion.spring.* 段 → Kotlin 常量（dampingRatio/stiffness 成对）。 */
+        fun springConsts(): String {
+            val spring = (motion["spring"] as Map<*, *>).entries()
+                .associate { (k, v) -> k as String to (v as Map<*, *>) }
+            return spring.entries.joinToString("\n") { (name, spec) ->
+                val upper = camelToUpperSnake(name)
+                val damping = spec["dampingRatio"]
+                val stiffness = spec["stiffness"]
+                "            const val ${upper}_DAMPING = ${damping}f\n" +
+                    "            const val ${upper}_STIFFNESS = ${stiffness}f"
+            }
+        }
+
         val scaleRange = gesture["scaleRange"] as List<*>
 
         // ---- health 段（评分公式参数，双端同源）----
@@ -201,6 +214,12 @@ ${nestedConsts(glass)}
         val ENTER = ${motionCurve("enter")}
         val EXIT = ${motionCurve("exit")}
         val EMPHASIZED = ${motionCurve("emphasized")}
+
+        // Material 3 Expressive 空间弹簧（androidx ExpressiveMotionTokens 同参数）。
+        // 组件级交互（按压、形态切换）走 spring，页面切换走上面的曲线。
+        object Spring {
+${springConsts()}
+        }
     }
 
     object Gesture {

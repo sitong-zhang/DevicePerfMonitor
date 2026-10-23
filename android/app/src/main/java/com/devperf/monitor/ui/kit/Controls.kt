@@ -1,25 +1,34 @@
 package com.devperf.monitor.ui.kit
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -29,28 +38,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.ui.theme.DesignTokens
-import com.devperf.monitor.ui.theme.LocalAppMotion
 import com.devperf.monitor.ui.theme.LocalTokenColors
 
 /**
- * 自封装液态玻璃控件库。
+ * 控件层：Material 3 Expressive 组件 + 品牌语义色（1.0.8 起，取代液态玻璃自绘控件）。
  *
- * 硬性要求（对应需求「禁止系统默认控件与默认蓝」）：
- * 全部控件基于 Compose Foundation 原语 + 主题语义色自绘，
- * 不使用 MD3 的 Button / Switch / Slider / TabRow 等默认控件；
- * 按压反馈使用主题色 ripple（accent），不用 MD3 默认蓝色。
+ * 设计原则：
+ * 1. 能用 MD3 标准件的全部换成标准件（Button / Switch / Slider / SegmentedButton /
+ *    Card），交互、无障碍（TalkBack / 触摸目标 48dp）、状态层全部由框架保证——
+ *    自绘时代这三样都要自己维护，是「适配不完整」的重灾区；
+ * 2. 配色不用 MD3 默认蓝：主题层（DevicePerfTheme）已把 Catppuccin 语义色映射进
+ *    ColorScheme，标准件自动跟随；
+ * 3. 按压反馈走主题 ripple（accent）， Expressive 的弹簧动效由
+ *    MaterialExpressiveTheme(motionScheme = MotionScheme.expressive()) 统一驱动；
+ * 4. 公开 API 名保留 GlassXxx，调用方（四个界面 + 悬浮窗）零改动。
  */
 
 private val Pill = RoundedCornerShape(percent = 50)
@@ -70,37 +76,39 @@ fun GlassButton(
     enabled: Boolean = true,
     compact: Boolean = false,
 ) {
-    val colors = LocalTokenColors.current
-    val contentColor = when (variant) {
-        GlassButtonVariant.PRIMARY -> colors.accent
-        GlassButtonVariant.SECONDARY -> colors.textPrimary
-        GlassButtonVariant.DANGER -> colors.danger
-    }
-    Box(
-        modifier = modifier
-            .height(if (compact) 36.dp else 48.dp)
-            .clip(Pill)
-            .background(
-                when (variant) {
-                    GlassButtonVariant.PRIMARY -> colors.accent.copy(alpha = 0.16f)
-                    GlassButtonVariant.SECONDARY -> colors.surface.copy(alpha = 0.5f)
-                    GlassButtonVariant.DANGER -> colors.danger.copy(alpha = 0.14f)
-                }
-            )
-            .clickable(
-                enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(color = contentColor),
-                onClick = onClick,
-            )
-            .padding(horizontal = if (compact) 14.dp else 22.dp),
-        contentAlignment = Alignment.Center,
-    ) {
+    val shape = Pill
+    val content: @Composable () -> Unit = {
         Text(
             text = text,
-            color = if (enabled) contentColor else colors.textSecondary.copy(alpha = 0.5f),
             style = MaterialTheme.typography.labelLarge,
         )
+    }
+    val base = if (compact) Modifier.height(36.dp) else Modifier
+    when (variant) {
+        GlassButtonVariant.PRIMARY -> Button(
+            onClick = onClick,
+            modifier = base.then(modifier),
+            enabled = enabled,
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(),
+        ) { content() }
+        GlassButtonVariant.SECONDARY -> FilledTonalButton(
+            onClick = onClick,
+            modifier = base.then(modifier),
+            enabled = enabled,
+            shape = shape,
+            colors = ButtonDefaults.filledTonalButtonColors(),
+        ) { content() }
+        GlassButtonVariant.DANGER -> Button(
+            onClick = onClick,
+            modifier = base.then(modifier),
+            enabled = enabled,
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ),
+        ) { content() }
     }
 }
 
@@ -115,39 +123,23 @@ fun GlassSwitch(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    val motion = LocalAppMotion.current
-    val progress by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = tween(durationMillis = motion.emphasizedDurationMs, easing = motion.emphasized),
-        label = "switch",
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        modifier = modifier,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = colors.background,
+            checkedTrackColor = colors.accent,
+            checkedBorderColor = colors.accent,
+            uncheckedThumbColor = colors.textSecondary,
+            uncheckedTrackColor = colors.surfaceElevated,
+            uncheckedBorderColor = colors.textSecondary.copy(alpha = 0.4f),
+        ),
     )
-    val trackW = 52.dp
-    val thumbD = 24.dp
-    Box(
-        modifier = modifier
-            .size(trackW, 32.dp)
-            .clip(Pill)
-            .background(lerp(colors.surfaceElevated, colors.accent, progress))
-            .clickable(
-                indication = ripple(color = colors.accent, bounded = false),
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = { onCheckedChange(!checked) },
-            )
-            .padding(4.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = (trackW - thumbD - 8.dp) * progress)
-                .size(thumbD)
-                .clip(Pill)
-                .background(Color.White)
-        )
-    }
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（自绘轨道 + 滑块，支持 steps 吸附）
+// 滑块（MD3 Slider，支持 steps 吸附）
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -160,82 +152,23 @@ fun GlassSlider(
     enabled: Boolean = true,
 ) {
     val colors = LocalTokenColors.current
-    val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start))
-        .coerceIn(0f, 1f)
-    val trackH = 6.dp
-    val thumbR = 11.dp
-
-    fun pxToValue(px: Float, widthPx: Float): Float {
-        if (widthPx <= 0f) return value
-        val f = (px / widthPx).coerceIn(0f, 1f)
-        var raw = valueRange.start + f * (valueRange.endInclusive - valueRange.start)
-        if (steps > 0) {
-            val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
-            raw = kotlin.math.round(raw / stepSize) * stepSize
-        }
-        return raw.coerceIn(valueRange.start, valueRange.endInclusive)
-    }
-
-    Box(
-        modifier = modifier
-            .height(40.dp)
-            .alpha(if (enabled) 1f else 0.45f)
-            .pointerInput(enabled, valueRange, steps) {
-                if (!enabled) return@pointerInput
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    onValueChange(pxToValue(down.position.x, size.width.toFloat()))
-                    drag(down.id) { change ->
-                        onValueChange(pxToValue(change.position.x, size.width.toFloat()))
-                    }
-                }
-            }
-            .drawBehind {
-                val widthPx = size.width
-                val centerY = size.height / 2f
-                val trackHpx = trackH.toPx()
-                val radius = CornerRadius(trackHpx / 2f)
-                // 底轨
-                drawRoundRect(
-                    color = colors.surfaceElevated,
-                    topLeft = Offset(0f, centerY - trackHpx / 2f),
-                    size = Size(widthPx, trackHpx),
-                    cornerRadius = radius,
-                )
-                // 已选轨（accent）
-                drawRoundRect(
-                    color = colors.accent,
-                    topLeft = Offset(0f, centerY - trackHpx / 2f),
-                    size = Size(widthPx * fraction, trackHpx),
-                    cornerRadius = radius,
-                )
-                // 滑块：accent 底盘 + 白芯 + 顶部高光 + 1px 暗描边
-                val thumbX = widthPx * fraction
-                val thumbPx = thumbR.toPx() * 2f
-                drawCircle(
-                    color = Color.Black.copy(alpha = 0.10f),
-                    radius = thumbPx / 2f,
-                    center = Offset(thumbX, centerY + 0.5f),
-                )
-                drawCircle(
-                    color = colors.accent,
-                    radius = thumbPx / 2f,
-                    center = Offset(thumbX, centerY),
-                )
-                drawCircle(
-                    brush = Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.95f),
-                        1f to Color.White.copy(alpha = 0.45f),
-                    ),
-                    radius = thumbPx / 2f - 3f,
-                    center = Offset(thumbX, centerY),
-                )
-            },
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.alpha(if (enabled) 1f else 0.45f),
+        valueRange = valueRange,
+        steps = steps,
+        enabled = enabled,
+        colors = SliderDefaults.colors(
+            thumbColor = colors.accent,
+            activeTrackColor = colors.accent,
+            inactiveTrackColor = colors.surfaceElevated,
+        ),
     )
 }
 
 // ---------------------------------------------------------------------------
-// 标签页（分段）
+// 标签页（分段）：MD3 SingleChoiceSegmentedButtonRow
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -246,54 +179,35 @@ fun GlassTabs(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    val motion = LocalAppMotion.current
-    Row(
-        modifier = modifier
-            .clip(Pill)
-            .background(colors.surface.copy(alpha = 0.5f))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
-            val selected = index == selectedIndex
-            val bg by animateColorAsState(
-                targetValue = if (selected) colors.accent.copy(alpha = 0.22f) else Color.Transparent,
-                animationSpec = tween(motion.emphasizedDurationMs),
-                label = "tabBg",
-            )
-            val textColor by animateColorAsState(
-                targetValue = if (selected) colors.accent else colors.textSecondary,
-                animationSpec = tween(motion.emphasizedDurationMs),
-                label = "tabText",
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(34.dp)
-                    .clip(Pill)
-                    .background(bg)
-                    .clickable(
-                        indication = ripple(color = colors.accent, bounded = false),
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = { onSelect(index) },
+            SegmentedButton(
+                selected = index == selectedIndex,
+                onClick = { onSelect(index) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = colors.accent.copy(alpha = 0.22f),
+                    activeContentColor = colors.accent,
+                    activeBorderColor = colors.accent.copy(alpha = 0.5f),
+                    inactiveContainerColor = colors.surface.copy(alpha = 0.5f),
+                    inactiveContentColor = colors.textSecondary,
+                    inactiveBorderColor = colors.textSecondary.copy(alpha = 0.25f),
+                ),
+                label = {
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
                     )
-                    .padding(horizontal = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = option,
-                    color = textColor,
-                    style = MaterialTheme.typography.labelLarge,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                )
-            }
+                },
+            )
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// 小标签 Chip
+// 小标签 Chip（MD3 AssistChip，保留自定义着色入口）
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -306,33 +220,36 @@ fun GlassChip(
 ) {
     val colors = LocalTokenColors.current
     val base = color ?: if (selected) colors.accent else colors.textSecondary
-    Box(
-        modifier = modifier
-            .clip(Pill)
-            .background(base.copy(alpha = if (selected) 0.18f else 0.10f))
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        indication = ripple(color = base, bounded = false),
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = onClick,
-                    )
-                } else Modifier
-            )
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            color = base,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
+    if (onClick != null) {
+        AssistChip(
+            onClick = onClick,
+            modifier = modifier,
+            label = { Text(text, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
+            colors = AssistChipDefaults.assistChipColors(
+                containerColor = base.copy(alpha = if (selected) 0.18f else 0.10f),
+                labelColor = base,
+            ),
         )
+    } else {
+        // 纯展示 chip（指标说明等）：无点击态，用同款容器保持视觉一致
+        Box(
+            modifier = modifier
+                .clip(shape = Pill)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                color = base,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
-// 信息行 / 分区标题 / 玻璃面板
+// 信息行 / 分区标题 / 面板
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -377,7 +294,7 @@ fun GlassInfoRow(
     }
 }
 
-/** 分组标题（玻璃分区）。 */
+/** 分组标题。 */
 @Composable
 fun GlassSectionHeader(text: String, modifier: Modifier = Modifier) {
     val colors = LocalTokenColors.current
@@ -397,20 +314,76 @@ fun GlassSectionHeader(text: String, modifier: Modifier = Modifier) {
 fun Modifier.disabledAlpha(enabled: Boolean): Modifier =
     if (enabled) this else this.alpha(0.45f)
 
-/** 玻璃面板容器：玻璃卡片 + 内边距 + 竖向排布。 */
+/**
+ * 玻璃面板容器：MD3 Card（tonalElevation 由主题形状/色彩体系驱动）+ 内边距 + 竖向排布。
+ */
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
-    LiquidGlassSurface(
+    Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
     ) {
         Column(
             modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
             content = content,
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 玻璃卡片容器（接管原 LiquidGlassSurface 的容器职责）
+// ---------------------------------------------------------------------------
+
+/**
+ * 内容卡片：MD3 Card + 主题语义色，可点击（按压反馈由 pressScale 传入的
+ * interactionSource 驱动）。参数名与旧 LiquidGlassSurface 一致，调用方零改动。
+ *
+ * [containerColor] 可覆盖容器色：悬浮窗告警态整体变红等场景使用；
+ * 不传则走主题 surface。
+ */
+@Composable
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+    containerColor: Color? = null,
+    onClick: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val colors = CardDefaults.cardColors(
+        containerColor = containerColor ?: MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    )
+    if (onClick != null) {
+        Card(
+            onClick = onClick,
+            modifier = modifier,
+            enabled = true,
+            shape = shape,
+            colors = colors,
+            interactionSource = interactionSource,
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
+                content()
+            }
+        }
+    } else {
+        Card(
+            modifier = modifier,
+            shape = shape,
+            colors = colors,
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
+                content()
+            }
+        }
     }
 }

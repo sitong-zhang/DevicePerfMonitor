@@ -38,7 +38,6 @@ import com.devperf.monitor.ui.kit.GlassSectionHeader
 import com.devperf.monitor.ui.kit.GlassSlider
 import com.devperf.monitor.ui.kit.GlassSwitch
 import com.devperf.monitor.ui.kit.GlassTabs
-import com.devperf.monitor.ui.kit.LiquidGlassScaffold
 import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
@@ -143,8 +142,8 @@ fun SettingsScreen(
                         valueColor = if (overlayGranted) colors.success else colors.warning,
                     )
                     Text(
-                        text = "悬浮窗无法真实模糊其他应用画面（系统不提供窗口外像素采样），" +
-                            "已按真实半透明 + 自绘高光/描边/噪点降级实现，详见 README 降级说明。",
+                        text = "Android 端悬浮窗为 Material 3 Expressive 视觉的真实半透明卡片" +
+                            "（系统不提供窗口外像素采样，无法真实模糊背后的应用）。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
@@ -152,7 +151,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(DesignTokens.Spacing.S4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "默认迷你模式",
+                            text = "默认纯数字模式",
                             style = MaterialTheme.typography.bodyLarge,
                             color = colors.textPrimary,
                             modifier = Modifier.weight(1f),
@@ -165,6 +164,12 @@ fun SettingsScreen(
                             },
                         )
                     }
+                    Text(
+                        text = "启动悬浮窗时只要数字、不显示卡片；关闭则显示完整卡片。" +
+                            "运行中单击可在 卡片 → 纯数字 → 收起 之间循环切换。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "贴边吸附",
@@ -180,7 +185,12 @@ fun SettingsScreen(
                             },
                         )
                     }
-                    // 透明度滑块
+                    Text(
+                        text = "拖动到屏幕边缘时自动吸附位置（不再自动收窄变形；收起请单击循环到收起态）。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                    // 透明度滑块（1.0.8 起接线到窗口 alpha）
                     Text(
                         text = "悬浮窗不透明度 ${(settings.overlayOpacity * 100).toInt()}%",
                         style = MaterialTheme.typography.bodyMedium,
