@@ -23,6 +23,7 @@
 | `android/app/build.gradle.kts` | `versionCode` / `versionName` |
 | `ios/DevicePerfMonitor.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`，各 4 处 |
 | `ios/Tools/generate_xcodeproj.py` | 同样两个字段，各 2 处；重跑生成脚本时靠它写进 pbxproj |
+| `ios/DevicePerfMonitor/Info.plist`、`ios/DevicePerfMonitorWidget/Info.plist` | 两个版本键必须是 `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` 变量引用。工程是 `GENERATE_INFOPLIST_FILE = NO`，写死数字的话上面改的版本号不会进包 |
 | `README.md` | 本节版本号，和构建小节里的包体积 |
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
@@ -47,6 +48,9 @@
 - iOS 四种显示方式（数字 / 波形 / 环形 / 柱状）的选择持久化在 `ViewModeStore`，
   回看窗口与 Android 对齐（最长 2 小时）；实时活动数据卡从 CPU 使用率换成屏幕刷新率，
   灵动岛和锁屏都按可用性渲染，采不到的段不摆「—」。
+- 修掉 iOS 版本号失控：两个 Info.plist 把版本键写死成 1.0.0/1，而工程是
+  `GENERATE_INFOPLIST_FILE = NO`，pbxproj 里的 MARKETING_VERSION 从来不进包，
+  关于页和装机看到的版本都对不上。现在改成变量引用，pbxproj 是唯一真源。
 
 **1.0.3**：整个应用收敛到四个核心指标 + 综合评判，并重修悬浮窗。
 
