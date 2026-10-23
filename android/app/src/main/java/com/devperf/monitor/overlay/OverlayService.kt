@@ -52,7 +52,20 @@ import kotlinx.coroutines.launch
  */
 class OverlayService : android.app.Service() {
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /**
+     * 合成上下文：主线程派发 + 帧时钟。
+     *
+     * 帧时钟是 Compose 的硬性要求——Recomposer.runRecomposeAndApplyChanges 和
+     * LaunchedEffect 里的动画（Animatable.animateTo 走 withFrameNanos）都会读
+     * coroutineContext[MonotonicFrameClock]，缺了就抛 IllegalStateException。
+     * Activity 路径下由 compose-ui 内部的 AndroidUiDispatcher 提供（internal API），
+     * Service 自跑 Recomposer 必须自己补，见 [OverlayFrameClock]。
+     */
+    private val overlayFrameClock = OverlayFrameClock()
+    // 主线程派发 + 帧时钟；类型推断即为 CoroutineContext，不写显式标注
+    private val overlayContext = Dispatchers.Main.immediate + overlayFrameClock
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + overlayContext)
 
     private lateinit var repository: MetricsRepository
     private lateinit var settingsRepository: SettingsRepository
@@ -63,8 +76,9 @@ class OverlayService : android.app.Service() {
     /**
      * 自己管理的合成器：悬浮窗没有 Activity 宿主，
      * 用 Recomposer 驱动 Compose，替代默认的 ViewTreeLifecycleOwner 路径。
+     * effect 上下文必须带上帧时钟，否则界面里的数字补间动画一跑就崩。
      */
-    private val overlayRecomposer = Recomposer(Dispatchers.Main.immediate)
+    private val overlayRecomposer = Recomposer(overlayContext)
     private var recomposerJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate() {
@@ -83,7 +97,8 @@ class OverlayService : android.app.Service() {
             }
         }
         observeSettings()
-        // 驱动悬浮窗的 Compose 合成（没有 Activity 宿主，自己跑）
+        // 驱动悬浮窗的 Compose 合成（没有 Activity 宿主，自己跑）。
+        // serviceScope 已带帧时钟，runRecomposeAndApplyChanges 才能取到 MonotonicFrameClock。
         recomposerJob = serviceScope.launch {
             overlayRecomposer.runRecomposeAndApplyChanges()
         }
@@ -135,7 +150,8 @@ class OverlayService : android.app.Service() {
             // 悬浮窗由 Service 经 WindowManager 添加，没有 Activity/Fragment 宿主，
             // ComposeView 默认会去找 ViewTreeLifecycleOwner，找不到就直接抛
             // IllegalStateException("ViewTreeLifecycleOwner not found")——悬浮窗永远出不来。
-            // 这里改成自己给一个 Recomposer 作为合成上下文，绕开对宿主的依赖。
+            // 这里改成把 Service 自己的 Recomposer 作为父合成上下文（帧时钟见
+            // OverlayFrameClock），绕开对宿主的依赖。
             setParentCompositionContext(overlayRecomposer)
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool

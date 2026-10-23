@@ -14,7 +14,7 @@
 
 ## 版本
 
-当前 **1.0.4**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.5**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -28,6 +28,19 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.5**：修掉悬浮窗服务一起床就崩的问题。
+
+- 1.0.3 给悬浮窗换成「Service 自跑 Recomposer」后，少了一味料：Compose 的
+  Recomposer 和动画都要求协程上下文里带 `MonotonicFrameClock`，Activity 路径下
+  这个元素由 compose-ui 内部的 `AndroidUiDispatcher` 提供（internal API 拿不到），
+  自跑 Recomposer 必须自己补。缺了它 `runRecomposeAndApplyChanges` 直接抛
+  `IllegalStateException: A MonotonicFrameClock is not available in this CoroutineContext`，
+  华为 Android 10 上必现——服务 onCreate 就崩，悬浮窗永远出不来。
+- 新增 `overlay/OverlayFrameClock.kt`：用 Choreographer 的 postFrameCallback
+  实现的公开 API 帧时钟，协程取消时摘回调不泄漏。帧时钟同时进三处：合成上下文、
+  Recomposer 的 effect 上下文（`AnimatedNumber` 的 `Animatable.animateTo` 在
+  LaunchedEffect 里跑，也要帧时钟）、驱动 `runRecomposeAndApplyChanges` 的协程。
 
 **1.0.4**：全界面动效与交互反馈打磨，iOS 侧同步收敛到四指标，修掉详情页编译问题。
 
