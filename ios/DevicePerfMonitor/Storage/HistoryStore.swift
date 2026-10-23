@@ -58,8 +58,8 @@ final class HistoryStore {
 
     static let shared = HistoryStore()
 
-    /// 保留 30 分钟。
-    let retentionMs: Int64 = 30 * 60 * 1000
+    /// 保留 2 小时（与 Android 端一致：开始采集后不删，可回看）。
+    let retentionMs: Int64 = 2 * 60 * 60 * 1000
 
     private let queue = DispatchQueue(label: "com.devperf.monitor.history")
     private var buffer: [String: [(timestampMs: Int64, value: Float)]] = [:]

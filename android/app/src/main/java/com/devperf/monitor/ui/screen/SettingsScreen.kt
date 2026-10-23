@@ -13,18 +13,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.data.collectors.PrivilegedShell
 import com.devperf.monitor.overlay.OverlayPermissions
-import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
+import com.devperf.monitor.ui.kit.EnterStagger
 import com.devperf.monitor.ui.kit.GlassButton
 import com.devperf.monitor.ui.kit.GlassButtonVariant
 import com.devperf.monitor.ui.kit.GlassInfoRow
@@ -34,6 +39,7 @@ import com.devperf.monitor.ui.kit.GlassSlider
 import com.devperf.monitor.ui.kit.GlassSwitch
 import com.devperf.monitor.ui.kit.GlassTabs
 import com.devperf.monitor.ui.kit.LiquidGlassScaffold
+import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 
@@ -53,14 +59,27 @@ fun SettingsScreen(
     val colors = LocalTokenColors.current
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsState()
+    // 收集快照当"重组合触发器"：提权刷新后快照会在下一个 tick 更新，
+    // 这里借它让下面的特权通道三态重新读一次（backend 本身不是 State）
     val snapshot by viewModel.snapshot.collectAsState()
+    val haptics = rememberHaptics()
 
     // 权限状态跟着系统走：从系统设置页授权后返回，这里要立刻变成"已授权"
     val overlayGranted by viewModel.overlayGranted.collectAsState()
     val notificationsGranted = OverlayPermissions.canPostNotifications(context)
     val shellBackend = snapshotBackend(viewModel)
 
-    LiquidGlassScaffold {
+    // 用户拨了开关但还没授权：等授权一到位就自动把服务拉起来，
+    // 不用逼用户回到本页再拨一次
+    var pendingEnable by remember { mutableStateOf(false) }
+    LaunchedEffect(overlayGranted) {
+        if (overlayGranted && pendingEnable) {
+            pendingEnable = false
+            viewModel.setOverlayEnabled(true)
+        }
+    }
+
+    EnterStagger(index = 0) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -100,10 +119,12 @@ fun SettingsScreen(
                             checked = settings.overlayEnabled,
                             onCheckedChange = { want ->
                                 if (want && !overlayGranted) {
+                                    haptics.tick()
+                                    pendingEnable = true
                                     onRequestOverlayPermission()
                                 } else {
+                                    haptics.select()
                                     viewModel.setOverlayEnabled(want)
-                                    if (want) OverlayService.start(context)
                                 }
                             },
                         )
@@ -138,7 +159,10 @@ fun SettingsScreen(
                         )
                         GlassSwitch(
                             checked = settings.overlayMiniMode,
-                            onCheckedChange = { viewModel.setOverlayMiniMode(it) },
+                            onCheckedChange = {
+                                haptics.select()
+                                viewModel.setOverlayMiniMode(it)
+                            },
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,7 +174,10 @@ fun SettingsScreen(
                         )
                         GlassSwitch(
                             checked = settings.snapToEdge,
-                            onCheckedChange = { viewModel.setSnapToEdge(it) },
+                            onCheckedChange = {
+                                haptics.select()
+                                viewModel.setSnapToEdge(it)
+                            },
                         )
                     }
                     // 透明度滑块
@@ -194,7 +221,10 @@ fun SettingsScreen(
                         )
                         GlassSwitch(
                             checked = settings.collectInBackground,
-                            onCheckedChange = { viewModel.setCollectInBackground(it) },
+                            onCheckedChange = {
+                                haptics.select()
+                                viewModel.setCollectInBackground(it)
+                            },
                         )
                     }
                     Text(
@@ -205,7 +235,10 @@ fun SettingsScreen(
                     GlassTabs(
                         options = RefreshMode.entries.map { it.label },
                         selectedIndex = RefreshMode.entries.indexOf(settings.refreshMode),
-                        onSelect = { viewModel.setRefreshMode(RefreshMode.entries[it]) },
+                        onSelect = {
+                            haptics.select()
+                            viewModel.setRefreshMode(RefreshMode.entries[it])
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
@@ -233,7 +266,10 @@ fun SettingsScreen(
                         )
                         GlassSwitch(
                             checked = settings.alertsEnabled,
-                            onCheckedChange = { viewModel.setAlertsEnabled(it) },
+                            onCheckedChange = {
+                                haptics.select()
+                                viewModel.setAlertsEnabled(it)
+                            },
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -245,7 +281,10 @@ fun SettingsScreen(
                         )
                         GlassSwitch(
                             checked = settings.alertByNotification,
-                            onCheckedChange = { viewModel.setAlertByNotification(it) },
+                            onCheckedChange = {
+                                haptics.select()
+                                viewModel.setAlertByNotification(it)
+                            },
                         )
                     }
                     if (!notificationsGranted) {
@@ -264,7 +303,10 @@ fun SettingsScreen(
                         )
                         GlassSwitch(
                             checked = settings.alertByOverlayPopup,
-                            onCheckedChange = { viewModel.setAlertByOverlayPopup(it) },
+                            onCheckedChange = {
+                                haptics.select()
+                                viewModel.setAlertByOverlayPopup(it)
+                            },
                         )
                     }
                     Text(
@@ -290,7 +332,7 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = "全局 FPS、各核心频率、后台应用内存需要 Shizuku（免 root）或 root 授权；" +
-                            "未授权时这些指标显示「需授权/不可用」，不影响其他指标。",
+                            "未授权时这些指标不参与显示，不影响其他指标。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.textSecondary,
                     )
@@ -305,7 +347,10 @@ fun SettingsScreen(
                     )
                     GlassButton(
                         text = if (shellBackend == PrivilegedShell.Backend.NONE) "申请 Shizuku 授权" else "刷新状态",
-                        onClick = { viewModel.requestPrivilege() },
+                        onClick = {
+                            haptics.tick()
+                            viewModel.requestPrivilege()
+                        },
                         variant = GlassButtonVariant.SECONDARY,
                     )
                     Text(
@@ -332,7 +377,10 @@ fun SettingsScreen(
                     GlassTabs(
                         options = ThemeMode.entries.map { it.label },
                         selectedIndex = ThemeMode.entries.indexOf(settings.themeMode),
-                        onSelect = { viewModel.setThemeMode(ThemeMode.entries[it]) },
+                        onSelect = {
+                            haptics.select()
+                            viewModel.setThemeMode(ThemeMode.entries[it])
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
@@ -350,15 +398,15 @@ fun SettingsScreen(
                     modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                 ) {
-                    Text(
-                        text = "设备性能监控 1.0.0",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.textPrimary,
+                    // 版本号读 BuildConfig：与 versionName 永远一致，发版只改一处
+                    GlassInfoRow(
+                        label = "版本",
+                        value = BuildConfig.VERSION_NAME,
                     )
                     Text(
                         text = "全部数据本地采集、本地存储；不联网、不上传、不含第三方统计 SDK。" +
                             "指标三态规范：可用 / 不可用 / 需授权，任何接口读取失败均降级显示，" +
-                            "绝不显示估算值冒充真实数据。",
+                            "采不到的指标直接从界面消失，绝不用估算值冒充真实数据。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.textSecondary,
                     )

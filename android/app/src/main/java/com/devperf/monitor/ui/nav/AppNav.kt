@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.GlassPanel
 import com.devperf.monitor.ui.kit.GlassTabs
+import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
@@ -143,6 +144,7 @@ private fun BottomGlassBar(
     onSelect: (String) -> Unit,
 ) {
     val colors = LocalTokenColors.current
+    val haptics = rememberHaptics()
     val selectedIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
     Box(
         modifier = Modifier.padding(
@@ -155,7 +157,10 @@ private fun BottomGlassBar(
             GlassTabs(
                 options = topLevelTabs.map { it.label },
                 selectedIndex = selectedIndex,
-                onSelect = { index -> onSelect(topLevelTabs[index].route) },
+                onSelect = { index ->
+                    haptics.select()
+                    onSelect(topLevelTabs[index].route)
+                },
                 modifier = Modifier.padding(DesignTokens.Spacing.S4.dp),
             )
         }

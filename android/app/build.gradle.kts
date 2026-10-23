@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -85,6 +85,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 关于页版本号直接读 BuildConfig，杜绝手写版本号与打包版本不一致
+        buildConfig = true
     }
 
     compileOptions {

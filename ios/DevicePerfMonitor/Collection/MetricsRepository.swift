@@ -6,7 +6,8 @@
 //  - 定时器驱动各采集器 sample()，合成 DeviceSnapshot 发布给 UI；
 //  - 三态保留策略：本次 UNAVAILABLE 的指标沿用上一次可用值（"最后一次真实
 //    测量"，时间戳体现新鲜度），绝不插值伪造；
-//  - historyTracked 指标的可用采样点写入 HistoryStore（30 分钟秒级历史）；
+//  - historyTracked 指标的可用采样点写入 HistoryStore（2 小时秒级历史，
+//    开始采集后不删、可回看）；
 //  - 采集在后台并发队列执行，快照合并仅在该队列内进行（无数据竞争），
 //    完成后通过 MainActor 发布给 SwiftUI。
 //
@@ -101,9 +102,11 @@ final class MetricsRepository: ObservableObject {
             let battery = batteryCollector.sample(now: now)
             let thermal = thermalCollector.sample(now: now)
 
-            // 历史写入：仅记录本次可用值（UNAVAILABLE 跳过，不补假数据）
+            // 历史写入：仅记录本次可用值（UNAVAILABLE 跳过，不补假数据）。
+            // 四个核心指标全部入史（刷新率基本恒定，也记，便于回看切换刷新率档位的时刻）。
             let historyCandidates: [(Metric<Float>, MetricId)] = [
                 (display.fps, .fps),
+                (display.refreshRateHz, .refreshRate),
                 (display.jankRatio30s, .jankRatio),
                 (cpu.usagePercent, .cpuUsage),
                 (battery.temperatureC, .batteryTemp),
@@ -111,6 +114,7 @@ final class MetricsRepository: ObservableObject {
                 (battery.levelPercent, .batteryLevel),
                 (memory.usedMb, .memoryUsed),
                 (memory.usageRatio, .memoryUsageRatio),
+                (thermal.deviceTempC, .deviceTemp),
             ]
             for (metric, id) in historyCandidates {
                 if case .available(let v, _) = metric {
@@ -189,19 +193,25 @@ final class MetricsRepository: ObservableObject {
 
     // MARK: - 悬浮窗数据源（500ms 粒度直读，绕开采集 tick）
 
+    /// 悬浮窗数据：四个核心指标 + 综合评判（对应 Android 端 OverlayData）。
     func overlayData(now: TimeInterval) -> OverlayData {
         let snap = snapshot
         let at = now
+        // 悬浮窗 FPS 走 500ms 粒度直读（需求规定悬浮窗 FPS 500ms 刷新）
         let fps = displayCollector.currentFps()
             .map { Metric.available($0, at: at) }
             ?? snap.display.fps
         return OverlayData(
+            memoryRatio: snap.memory.usageRatio,
+            deviceTemp: snap.thermal.deviceTempC,
+            refreshHz: snap.display.refreshRateHz,
             fps: fps,
-            cpuUsage: snap.cpu.usagePercent,
-            cpuTemp: snap.cpu.temperatureC,
-            batteryTemp: snap.battery.temperatureC,
-            batteryLevel: snap.battery.levelPercent,
-            memoryRatio: snap.memory.usageRatio
+            health: FocusedHealth.evaluate(
+                memoryRatio: snap.memory.usageRatio.value,
+                deviceTempC: snap.thermal.deviceTempC.value,
+                refreshHz: snap.display.refreshRateHz.value,
+                fps: fps.value
+            )
         )
     }
 }

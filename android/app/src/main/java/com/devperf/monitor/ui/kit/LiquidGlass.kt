@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
@@ -179,6 +180,7 @@ data class GlassStyle(
  * @param shape 圆角（设计令牌 card 24 / small 16 / large 28 / pill 999）
  * @param style 玻璃参数（模糊半径、透明度、高光、描边、阴影）
  * @param onClick 非空时整块可点击
+ * @param interactionSource 与 [pressScale] 共用，用于收集按压状态做缩放反馈
  * @param contentAlignment 内容对齐
  */
 @Composable
@@ -189,6 +191,7 @@ fun LiquidGlassSurface(
     style: GlassStyle = GlassStyle(),
     tint: Color = LocalTokenColors.current.surface,
     onClick: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null,
     contentAlignment: Alignment = Alignment.TopStart,
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -196,7 +199,12 @@ fun LiquidGlassSurface(
     val noiseBrush = rememberNoiseBrush()
     var base = modifier.clip(shape)
     if (onClick != null) {
-        base = base.clickable(onClick = onClick)
+        val source = interactionSource ?: remember { MutableInteractionSource() }
+        base = base.clickable(
+            interactionSource = source,
+            indication = null,
+            onClick = onClick,
+        )
     }
 
     val drawModifier = if (backdrop != null) {

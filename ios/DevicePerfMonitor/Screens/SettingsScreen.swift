@@ -110,9 +110,14 @@ struct SettingsScreen: View {
                 GlassSectionTitle(text: "关于")
                 GlassPanel {
                     VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
-                        Text("DevicePerfMonitor iOS 1.0.0")
+                        // 版本号读 Bundle：与 CFBundleShortVersionString 永远一致
+                        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+                        Text("DevicePerfMonitor iOS \(version)")
                             .font(Typography.bodyLarge())
                             .foregroundStyle(colors.textPrimary)
+                        Text("历史轨迹保留 2 小时，开始采集后不删、可回看；退出应用后重新打开仍在。")
+                            .font(Typography.labelMedium())
+                            .foregroundStyle(colors.textSecondary)
                         Text("图表：danielgindi/Charts（Apache-2.0）；字体：Inter / JetBrains Mono（OFL-1.1）；配色：Catppuccin Mocha / Latte（MIT）。")
                             .font(Typography.labelMedium())
                             .foregroundStyle(colors.textSecondary)

@@ -4,14 +4,22 @@
 //
 //  首页总览（对应 Android 端 ui/screen/OverviewScreen.kt）：
 //  - 标题 + 告警 Chip；
-//  - 健康分大卡片（大数字 + 等级 + 四维条形图）；
-//  - 四分卡片（FPS / CPU 使用率 / CPU 温度 / 电池温度；
-//    iOS 上 CPU 温度不可用 → 降级为电量，README 已说明）；
-//  - 场景化建议面板（severity 降序）；
-//  - 全量指标按类别分组展示（三态渲染，不可用显示原因）。
+//  - 综合评判大卡片（环形总分 + 评级 + 一句话结论 + 最短板）；
+//  - 四个核心指标卡（内存占用率 / 设备温度 / 屏幕刷新率 / 帧率），
+//    每张卡带最近 1 分钟迷你波形，点进去看历史回看；
+//  - 采不到的指标不占位、不显示「—」——整个界面只认这四个指标。
+//
+//  说明：iOS 无机身温度公开 API（详见 README 降级说明），设备温度卡在
+//  iOS 上常态不出现；综合评判的温度维度随之缺席，分数按流畅度 + 内存折算。
 //
 
 import SwiftUI
+
+/// 总览页的核心指标读数（与 Android 端 MonitorViewModel.CoreReading 对齐）。
+struct CoreReading: Identifiable {
+    let id: MetricId
+    let value: Float
+}
 
 struct OverviewScreen: View {
     @Environment(\.colors) private var colors
@@ -20,31 +28,22 @@ struct OverviewScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
-                // 标题 + 告警
-                HStack {
-                    Text("设备性能")
-                        .font(Typography.titleLarge(.semibold))
-                        .foregroundStyle(colors.textPrimary)
-                    Spacer()
-                    if AlertManager.shared.alertActive {
-                        Label("告警", systemImage: "exclamationmark.triangle.fill")
-                            .font(Typography.labelMedium(.medium))
-                            .foregroundStyle(colors.danger)
-                    }
+                header
+
+                // 综合评判
+                FocusedHealthCard(result: viewModel.focusedHealth)
+
+                // 四个核心指标（采得到的才渲染）
+                ForEach(viewModel.coreReadings) { reading in
+                    CoreMetricCard(
+                        reading: reading,
+                        tickMs: viewModel.tickMs,
+                        history: viewModel.history(for: reading.id, windowSec: 60)
+                    )
                 }
 
-                // 健康分大卡片
-                HealthScoreCard(result: viewModel.health, partial: viewModel.health.partial)
-
-                // 四分卡片
-                FeaturedMetricsGrid(snapshot: viewModel.snapshot, tickMs: viewModel.tickMs)
-
-                // 建议面板
-                AdvicePanel(advice: viewModel.advice)
-
-                // 全量指标分组
-                ForEach(MetricCategory.allCases, id: \.self) { category in
-                    categorySection(category)
+                if viewModel.coreReadings.isEmpty {
+                    emptyState
                 }
             }
             .padding(.horizontal, DesignTokens.Spacing.s16)
@@ -54,238 +53,134 @@ struct OverviewScreen: View {
         .background(colors.background.ignoresSafeArea())
     }
 
-    /// 单个指标类别分组：标题 + 指标列表面板。抽到方法里是为了让标题视图
-    /// 脱离 ForEach 闭包的构建器上下文（之前直接写在闭包里会导致编译器
-    /// 把 GlassSectionTitle 解析错成非 View）。
-    private func categorySection(_ category: MetricCategory) -> some View {
-        let metrics = viewModel.metrics(for: category)
-        return Group {
-            if !metrics.isEmpty {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
-                    GlassSectionTitle(text: category.rawValue)
-                    GlassPanel {
-                        VStack(spacing: DesignTokens.Spacing.s8) {
-                            ForEach(metrics, id: \.self) { id in
-                                MetricRow(id: id, metric: viewModel.snapshot.metricOf(id), tickMs: viewModel.tickMs)
-                            }
-                        }
-                    }
-                }
+    private var header: some View {
+        HStack {
+            Text("设备性能")
+                .font(Typography.titleLarge(.semibold))
+                .foregroundStyle(colors.textPrimary)
+            Spacer()
+            if AlertManager.shared.alertActive {
+                Label("告警", systemImage: "exclamationmark.triangle.fill")
+                    .font(Typography.labelMedium(.medium))
+                    .foregroundStyle(colors.danger)
             }
         }
     }
+
+    private var emptyState: some View {
+        VStack(spacing: DesignTokens.Spacing.s4) {
+            Text("这台设备暂时读不到这些指标")
+                .font(Typography.bodyMedium())
+                .foregroundStyle(colors.textSecondary)
+            Text("能采到的会自动出现，采不到的不会占位")
+                .font(Typography.labelMedium())
+                .foregroundStyle(colors.textSecondary.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 56)
+    }
 }
 
-// MARK: - 健康分大卡片
+// MARK: - 综合评判大卡片
 
-struct HealthScoreCard: View {
+private struct FocusedHealthCard: View {
     @Environment(\.colors) private var colors
-    let result: HealthScorer.HealthResult
-    let partial: Bool
+    let result: FocusedHealthResult
 
     var body: some View {
+        let total = result.total
+        let accent: Color = {
+            guard let total else { return colors.textSecondary }
+            switch total {
+            case 75...: return colors.success
+            case 50..<75: return colors.accent
+            default: return colors.danger
+            }
+        }()
+
         GlassPanel {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("综合健康分")
-                        .font(Typography.labelLarge(.medium))
-                        .foregroundStyle(colors.textSecondary)
-                    Spacer()
-                    if partial {
-                        Text("部分指标不可用")
-                            .font(Typography.labelMedium())
-                            .foregroundStyle(colors.warning)
-                    }
-                }
+            HStack(spacing: DesignTokens.Spacing.s16) {
+                ProgressRing(
+                    progress: (total ?? 0) / 100,
+                    // 维度全采不到就不给分：环留空，不写占位数字
+                    centerText: total.map { String(Int($0.rounded())) } ?? "",
+                    caption: result.grade?.rawValue ?? "采集中",
+                    color: accent,
+                    trackColor: accent.opacity(0.18),
+                    lineWidth: 10
+                )
+                .frame(width: 108, height: 108)
 
-                if let total = result.total, let grade = result.grade {
-                    HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.s8) {
-                        Text(String(format: "%.0f", total))
-                            .font(Typography.displayLarge(.bold))
-                            .foregroundStyle(colors.textPrimary)
-                        Text(grade.rawValue)
-                            .font(Typography.titleMedium(.medium))
-                            .foregroundStyle(gradeColor(grade))
-                    }
-
-                    // 四维条形图
-                    VStack(spacing: DesignTokens.Spacing.s8) {
-                        ForEach(result.dimensions, id: \.id.rawValue) { dim in
-                            DimensionBar(dimension: dim)
-                        }
-                    }
-                } else {
-                    Text("数据不足，无法分析")
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.s4) {
+                    Text("综合评判")
+                        .font(Typography.titleMedium(.medium))
+                        .foregroundStyle(colors.textPrimary)
+                    Text(result.summary)
                         .font(Typography.bodyMedium())
                         .foregroundStyle(colors.textSecondary)
-                }
-            }
-        }
-    }
-
-    private func gradeColor(_ grade: HealthScorer.Grade) -> Color {
-        switch grade {
-        case .excellent: return colors.success
-        case .good: return colors.accentSecondary
-        case .fair: return colors.warning
-        case .warning: return colors.danger
-        }
-    }
-}
-
-private struct DimensionBar: View {
-    @Environment(\.colors) private var colors
-    let dimension: HealthScorer.DimensionScore
-
-    var body: some View {
-        HStack(spacing: DesignTokens.Spacing.s8) {
-            Text(dimension.id.rawValue)
-                .font(Typography.labelMedium())
-                .foregroundStyle(colors.textSecondary)
-                .frame(width: 72, alignment: .leading)
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(colors.surfaceElevated)
-                        .frame(height: 6)
-                    if let score = dimension.score {
-                        Capsule()
-                            .fill(colors.accent)
-                            .frame(width: geo.size.width * CGFloat(score / 100), height: 6)
+                    if let weakest = result.weakest {
+                        Text("最短板：\(weakest.rawValue)")
+                            .font(Typography.labelMedium())
+                            .foregroundStyle(accent)
                     }
                 }
             }
-            .frame(height: 6)
-
-            Text(dimension.score.map { String(format: "%.0f", $0) } ?? "—")
-                .font(Typography.mono(11, .medium))
-                .foregroundStyle(colors.textPrimary)
-                .frame(width: 28, alignment: .trailing)
-
-            if dimension.isReference {
-                Text("参考")
-                    .font(Typography.mono(9))
-                    .foregroundStyle(colors.warning)
-                    .frame(width: 26, alignment: .leading)
-            } else {
-                Spacer().frame(width: 26)
-            }
         }
     }
 }
 
-// MARK: - 四分卡片
+// MARK: - 核心指标卡
 
-struct FeaturedMetricsGrid: View {
+private struct CoreMetricCard: View {
     @Environment(\.colors) private var colors
-    let snapshot: DeviceSnapshot
+    let reading: CoreReading
     let tickMs: Double
+    let history: [HistoryPoint]
 
-    var body: some View {
-        let columns = [GridItem(.flexible(), spacing: DesignTokens.Spacing.s8),
-                       GridItem(.flexible(), spacing: DesignTokens.Spacing.s8)]
-        LazyVGrid(columns: columns, spacing: DesignTokens.Spacing.s8) {
-            FeaturedCell(label: "FPS", id: .fps, metric: snapshot.display.fps, tickMs: tickMs)
-            FeaturedCell(label: "CPU 使用率", id: .cpuUsage, metric: snapshot.cpu.usagePercent, tickMs: tickMs)
-            // iOS 无 CPU 温度：第四项降级为电量（README 已说明）
-            FeaturedCell(label: "电量", id: .batteryLevel, metric: snapshot.battery.levelPercent, tickMs: tickMs)
-            FeaturedCell(label: "内存占用", id: .memoryUsageRatio, metric: snapshot.memory.usageRatio, tickMs: tickMs)
-        }
+    private var mode: MetricViewMode {
+        MetricViewMode.effective(ViewModeStore.mode(for: reading.id), id: reading.id)
     }
-}
-
-private struct FeaturedCell: View {
-    @Environment(\.colors) private var colors
-    let label: String
-    let id: MetricId
-    let metric: Metric<Float>?
-    let tickMs: Double
 
     var body: some View {
-        GlassPanel(style: GlassStyle(cornerRadius: DesignTokens.Radius.small, outerShadow: false)) {
-            NavigationLink(value: id) {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.s4) {
-                    Text(label)
-                        .font(Typography.labelMedium())
-                        .foregroundStyle(colors.textSecondary)
-                    MetricValueText(metricId: id, metric: metric, intervalMs: tickMs)
+        let accent = colors.metricColor(reading.id.colorKey)
+        let values = history.map { $0.value }
+
+        GlassPanel {
+            NavigationLink(value: reading.id) {
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
+                    HStack {
+                        Text(reading.id.label)
+                            .font(Typography.labelMedium())
+                            .foregroundStyle(colors.textSecondary)
+                        Spacer()
+                        // 当前显示模式（详情页可切换）
+                        Text(mode.rawValue)
+                            .font(Typography.labelSmall())
+                            .foregroundStyle(accent.opacity(0.75))
+                    }
+
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        AnimatedNumber(
+                            value: Double(reading.value),
+                            decimals: reading.id.decimals,
+                            color: accent,
+                            font: Typography.headlineSmall(.bold),
+                            intervalMs: tickMs
+                        )
+                        Text(reading.id.unit)
+                            .font(Typography.labelMedium())
+                            .foregroundStyle(colors.textSecondary)
+                    }
+
+                    // 最近一分钟迷你波形；数据不足两个点就不画
+                    if values.count >= 2 {
+                        Sparkline(points: values, color: accent, lineWidth: 1.5)
+                            .frame(height: 40)
+                    }
                 }
             }
             .buttonStyle(.plain)
         }
-    }
-}
-
-// MARK: - 建议面板
-
-struct AdvicePanel: View {
-    @Environment(\.colors) private var colors
-    let advice: [AdviceEngine.Advice]
-
-    var body: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
-                Text("智能建议")
-                    .font(Typography.labelLarge(.medium))
-                    .foregroundStyle(colors.textSecondary)
-                if advice.isEmpty {
-                    Text("暂无建议")
-                        .font(Typography.bodyMedium())
-                        .foregroundStyle(colors.textSecondary)
-                } else {
-                    ForEach(advice) { item in
-                        HStack(alignment: .top, spacing: DesignTokens.Spacing.s8) {
-                            Circle()
-                                .fill(severityColor(item.severity))
-                                .frame(width: 8, height: 8)
-                                .padding(.top, 6)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .font(Typography.labelLarge(.medium))
-                                    .foregroundStyle(colors.textPrimary)
-                                Text(item.detail)
-                                    .font(Typography.labelMedium())
-                                    .foregroundStyle(colors.textSecondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func severityColor(_ severity: AdviceEngine.Severity) -> Color {
-        switch severity {
-        case .info: return colors.accentSecondary
-        case .warning: return colors.warning
-        case .critical: return colors.danger
-        }
-    }
-}
-
-// MARK: - 全量指标行
-
-struct MetricRow: View {
-    @Environment(\.colors) private var colors
-    let id: MetricId
-    let metric: Metric<Float>?
-    let tickMs: Double
-
-    var body: some View {
-        NavigationLink(value: id) {
-            HStack {
-                Circle()
-                    .fill(colors.metricColor(id.colorKey))
-                    .frame(width: 8, height: 8)
-                Text(id.label)
-                    .font(Typography.bodyMedium())
-                    .foregroundStyle(colors.textPrimary)
-                Spacer()
-                MetricValueText(metricId: id, metric: metric, intervalMs: tickMs)
-            }
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -294,17 +189,38 @@ struct MetricRow: View {
 @MainActor
 final class OverviewViewModel: ObservableObject {
     @Published private(set) var snapshot: DeviceSnapshot = .empty()
-    @Published private(set) var health: HealthScorer.HealthResult
-    @Published private(set) var advice: [AdviceEngine.Advice] = []
+    @Published private(set) var focusedHealth: FocusedHealthResult
     @Published private(set) var tickMs: Double = 1000
 
     private var timer: Timer?
 
+    /// 四个核心指标里采得到的（顺序固定：内存 / 温度 / 刷新率 / 帧率）。
+    var coreReadings: [CoreReading] {
+        let candidates: [(MetricId, Metric<Float>)] = [
+            (.memoryUsageRatio, snapshot.memory.usageRatio),
+            (.deviceTemp, snapshot.thermal.deviceTempC),
+            (.refreshRate, snapshot.display.refreshRateHz),
+            (.fps, snapshot.display.fps),
+        ]
+        return candidates.compactMap { id, metric in
+            metric.value.map { CoreReading(id: id, value: $0) }
+        }
+    }
+
     init() {
         let repository = MetricsRepository.shared
         _snapshot = Published(wrappedValue: repository.snapshot)
-        _health = Published(wrappedValue: HealthScorer.score(repository.snapshot))
+        _focusedHealth = Published(wrappedValue: Self.evaluate(repository.snapshot))
         start()
+    }
+
+    private static func evaluate(_ snapshot: DeviceSnapshot) -> FocusedHealthResult {
+        FocusedHealth.evaluate(
+            memoryRatio: snapshot.memory.usageRatio.value,
+            deviceTempC: snapshot.thermal.deviceTempC.value,
+            refreshHz: snapshot.display.refreshRateHz.value,
+            fps: snapshot.display.fps.value
+        )
     }
 
     private func start() {
@@ -316,8 +232,7 @@ final class OverviewViewModel: ObservableObject {
                 guard let self else { return }
                 let repository = MetricsRepository.shared
                 self.snapshot = repository.snapshot
-                self.health = HealthScorer.score(repository.snapshot)
-                self.advice = AdviceEngine.analyze(snapshot: repository.snapshot, history: HistoryStore.shared)
+                self.focusedHealth = Self.evaluate(repository.snapshot)
                 self.tickMs = repository.tickMs
             }
         }
@@ -328,8 +243,8 @@ final class OverviewViewModel: ObservableObject {
         timer?.invalidate()
     }
 
-    /// 某类别下的 Float 指标（非 Float 指标不在总览展示）。
-    func metrics(for category: MetricCategory) -> [MetricId] {
-        MetricId.allCases.filter { $0.category == category && snapshot.metricOf($0) != nil }
+    /// 某指标最近 windowSec 秒的历史序列（详情页/卡片迷你波形用）。
+    func history(for id: MetricId, windowSec: Int) -> [HistoryPoint] {
+        HistoryStore.shared.points(metricId: id, windowSec: windowSec)
     }
 }

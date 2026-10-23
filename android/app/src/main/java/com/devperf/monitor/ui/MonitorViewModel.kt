@@ -4,10 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.devperf.monitor.MonitorApp
-import com.devperf.monitor.analysis.AdviceEngine
 import com.devperf.monitor.analysis.AlertManager
 import com.devperf.monitor.analysis.FocusedHealth
-import com.devperf.monitor.analysis.HealthScorer
 import com.devperf.monitor.core.CoreMetricId
 import com.devperf.monitor.core.Metric
 import com.devperf.monitor.core.MetricId
@@ -34,7 +32,7 @@ import kotlinx.coroutines.launch
 /**
  * 主界面 ViewModel：采集快照 / 设置 / 分析结果的唯一数据源。
  *
- * - 健康分与建议在快照变化时重算（纯本地算法，成本可忽略）；
+ * - 综合评判在快照变化时重算（纯本地算法，成本可忽略）；
  * - 告警评估随快照推进（AlertManager 内部有迟滞与冷却）；
  * - 历史读取直连 [MetricsRepository.history]（内存环形缓冲，无 IO）。
  */
@@ -134,14 +132,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ---------------------------------------------------------------------
-    // 分析
+    // 历史
     // ---------------------------------------------------------------------
-
-    fun health(): HealthScorer.HealthResult =
-        HealthScorer.score(snapshot.value)
-
-    fun advice(): List<AdviceEngine.Advice> =
-        AdviceEngine.analyze(snapshot.value, settings.value, repository.history)
 
     /** 图表历史（窗口秒）。 */
     fun history(id: MetricId, windowSeconds: Int): List<HistoryPoint> =

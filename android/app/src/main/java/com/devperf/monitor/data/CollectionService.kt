@@ -72,14 +72,13 @@ class CollectionService : android.app.Service() {
                     val fps = snapshot.display.fps.value
                     val cpuTemp = snapshot.cpu.temperatureC.value
                     val battTemp = snapshot.battery.temperatureC.value
-                    val text = buildString {
-                        append("FPS ")
-                        append(fps?.let { Format.value(it, 0) } ?: "—")
-                        append(" · CPU ")
-                        append(cpuTemp?.let { Format.temp(it) } ?: "不可用")
-                        append(" · 电池 ")
-                        append(battTemp?.let { Format.temp(it) } ?: "不可用")
+                    // 采不到的段直接不进通知，不留「—」占位
+                    val parts = buildList {
+                        fps?.let { add("FPS ${Format.value(it, 0)}") }
+                        cpuTemp?.let { add("CPU ${Format.temp(it)}") }
+                        battTemp?.let { add("电池 ${Format.temp(it)}") }
                     }
+                    val text = parts.ifEmpty { listOf("采集中") }.joinToString(" · ")
                     runCatching {
                         NotificationManagerCompat.from(this@CollectionService)
                             .notify(NOTIFICATION_ID, buildNotification("性能监控运行中", text, snapshot.timestampMs))

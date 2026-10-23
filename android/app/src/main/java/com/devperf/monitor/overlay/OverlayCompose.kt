@@ -134,7 +134,8 @@ private fun HealthBadge(health: FocusedHealth.Result) {
     }
     ProgressRing(
         progress = (total ?: 0f) / 100f,
-        centerText = total?.let { "${it.toInt()}" } ?: "—",
+        // 三个维度全采不到就不给分：环留空，不写占位数字
+        centerText = total?.let { "${it.toInt()}" } ?: "",
         caption = "",
         color = tint,
         trackColor = tint.copy(alpha = 0.20f),

@@ -38,8 +38,12 @@ struct MonitorLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack(spacing: 12) {
-                        Text("CPU \(formattedValue(context.state.cpuUsage, suffix: "%"))")
-                        Text("内存 \(formattedValue(context.state.memoryRatio, suffix: "%"))")
+                        if let refresh = context.state.refreshHz {
+                            Text("刷新 \(formattedValue(refresh, suffix: "Hz"))")
+                        }
+                        if let memory = context.state.memoryRatio {
+                            Text("内存 \(formattedValue(memory, suffix: "%"))")
+                        }
                     }
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.9))
@@ -59,7 +63,7 @@ struct MonitorLiveActivity: Widget {
     }
 
     private func formattedValue(_ value: Double?, suffix: String) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "" }
         return String(format: "%.0f", value) + suffix
     }
 }
@@ -81,18 +85,27 @@ private struct LockScreenView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(valueText(state.fps, " fps"))
-                    .font(.system(.title3, design: .monospaced).bold())
-                Text("CPU \(valueText(state.cpuUsage, "%")) · 内存 \(valueText(state.memoryRatio, "%"))")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                if let fps = state.fps {
+                    Text(valueText(fps, " fps"))
+                        .font(.system(.title3, design: .monospaced).bold())
+                }
+                HStack(spacing: 8) {
+                    if let refresh = state.refreshHz {
+                        Text("刷新 \(valueText(refresh, "Hz"))")
+                    }
+                    if let memory = state.memoryRatio {
+                        Text("内存 \(valueText(memory, "%"))")
+                    }
+                }
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
             }
         }
         .padding()
     }
 
     private func valueText(_ value: Double?, _ suffix: String) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "" }
         return String(format: "%.0f", value) + suffix
     }
 }

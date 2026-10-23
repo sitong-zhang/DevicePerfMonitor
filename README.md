@@ -1,6 +1,6 @@
 # DevicePerfMonitor
 
-一个设备性能监控 App，Android 和 iOS 双端。核心是三块：全局悬浮窗看实时数据、硬件指标全量采集、本地健康分分析。全程不联网，数据只存本地。
+一个设备性能监控 App，Android 和 iOS 双端。核心是三块：全局悬浮窗看实时数据、四个核心硬件指标实时采集、本地综合评判。全程不联网，数据只存本地。
 
 两个端的界面是同一套设计：`design-tokens.json` 是唯一真源，色板用 Catppuccin Mocha/Latte，Android 端液态玻璃材质来自 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)，iOS 端用 `UIVisualEffectView` 加图层叠加实现同样的质感。
 
@@ -14,7 +14,7 @@
 
 ## 版本
 
-当前 **1.0.3**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.4**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -27,6 +27,26 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.4**：全界面动效与交互反馈打磨，iOS 侧同步收敛到四指标，修掉详情页编译问题。
+
+- 新增统一动效出口 `ui/kit/Motion.kt`：入场错峰（淡入 + 上滑，按索引 45ms 错峰、
+  上限 240ms）、按压缩放（走 `graphicsLayer`，不触发重新测量）、骨架屏微光扫过、
+  轻触觉反馈。曲线和时长全部取自 `design-tokens.json` 的双端共用动效 token，
+  业务代码不写死时长。
+- 首帧数据未到显示骨架屏，不再先闪空白再跳内容；模式切换（数字 / 波形 / 环形 /
+  柱状）改交叉淡入，不硬切。
+- 设置页每个开关 / 标签 / 按钮都有触觉反馈；悬浮窗授权后返回本页自动把服务拉起来，
+  不用再拨一次开关；关于页版本号改读 `BuildConfig.VERSION_NAME`，与打包版本永远一致。
+- 环形 / 数字模式下采不到当前值不再摆「—」占位，直接显示"这个时间段还没有采到数据"。
+- 液态玻璃控件补齐 `interactionSource` 参数，按压缩放与点击响应共用同一个交互源。
+- iOS 侧完成与 Android 的收敛：新增 `FocusedHealth.swift`，权重（流畅度 0.4 +
+  温度 0.35 + 内存 0.25）和分段文案与 Android 逐字一致；首页 / 详情页 / 应用内悬浮窗
+  全部重写，只剩内存占用率 / 屏幕刷新率 / 帧率 + 综合评判，采不到的直接不渲染
+  （iOS 机身温度没有公开 API，常态缺席，权重按比例折算）。
+- iOS 四种显示方式（数字 / 波形 / 环形 / 柱状）的选择持久化在 `ViewModeStore`，
+  回看窗口与 Android 对齐（最长 2 小时）；实时活动数据卡从 CPU 使用率换成屏幕刷新率，
+  灵动岛和锁屏都按可用性渲染，采不到的段不摆「—」。
 
 **1.0.3**：整个应用收敛到四个核心指标 + 综合评判，并重修悬浮窗。
 
@@ -131,17 +151,20 @@ cd android
 │   └── app/src/main/java/com/devperf/monitor/
 │       ├── core/          # 指标定义与三态模型
 │       ├── data/          # 采集器、特权通道（root/Shizuku）、本地存储与滤波
-│       ├── analysis/      # 健康分、建议、告警
+│       ├── analysis/      # 综合评判、健康分、告警
 │       ├── overlay/       # 悬浮窗服务、手势、垃圾桶
 │       ├── ui/kit/        # 自封装液态玻璃组件
 │       └── ui/            # 首页、详情、设置、主题
 └── ios/
     ├── Tools/             # pbxproj 生成与校验脚本
     ├── DevicePerfMonitor/
+    │   ├── Analysis/      # 综合评判（FocusedHealth，与 Android 逐字对齐）
     │   ├── Collection/    # 采集器与三态模型（与 Android 对齐）
     │   ├── Overlay/       # 应用内悬浮窗
     │   ├── LiveActivity/  # 实时活动（App 与 Widget 共享）
     │   ├── Charts/        # Charts 图表封装
+    │   ├── UIKit/         # 自绘波形 / 柱状 / 环形组件
+    │   ├── Storage/       # 本地历史存储
     │   ├── Theme/         # 液态玻璃主题与生成的 tokens
     │   └── Screens/       # 首页、详情、设置
     └── DevicePerfMonitorWidget/  # Widget 扩展（灵动岛/锁屏）
@@ -184,23 +207,16 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 
 ### iOS
 
+界面与 Android 完全一致：四个核心指标 + 综合评判，采不到的不进界面。iOS 上机身温度没有公开传感器直读 API，所以常态只有三个指标加综合评判——温度维度缺席，权重按比例折算给其余维度，不拿热状态档位换算冒充温度值。
+
 | 指标 | 数据来源 | 权限 | 状态 | 降级路径 |
 | --- | --- | --- | --- | --- |
-| FPS / 帧时间 / 帧时间标准差 / 掉帧 | CADisplayLink | 无 | A | 超过 2s 无帧 → U |
+| 内存占用率 | host_statistics64 + ProcessInfo.physicalMemory | 无 | A | 口径与 Android 一致：可用 = (free + inactive) × 页大小 |
 | 屏幕刷新率 | UIScreen.maximumFramesPerSecond | 无 | A | |
-| 全局 FPS | 无公开 API | | U | iOS 读不到其他进程的渲染帧 |
-| CPU 使用率 / 各核心 | host_processor_info 差分 | 无 | A | 首次采样没基线 → U，等第二次 |
-| 各核心频率 | 无公开 API，沙箱读不了 sysfs | | U | |
-| CPU 温度 | 无公开 API | | U | |
-| GPU 负载 / 频率 / 温度 | 无公开 API | | U | |
-| 电量 / 充电状态 | UIDevice.batteryLevel / batteryState | 无 | A | |
-| 电池温度 / 电流 / 电压 | 无公开 API（iOS 无 IOKit） | | U | |
-| 电池健康（百分比） | 无公开 API | | U | |
-| 总 / 已用 / 可用内存 / 占用率 | host_statistics64 + ProcessInfo.physicalMemory | 无 | A | 口径与 Android 一致：可用 = (free + inactive) × 页大小 |
-| 后台应用内存 | 无公开 API | | U | iOS 沙箱比 Android 更严 |
-| 系统热状态 | ProcessInfo.thermalState | 无 | A | 只有 nominal/fair/serious/critical 四档 |
-| 机身温度（℃） | 无传感器直读 API | | U | 不拿热状态档位换算冒充温度值 |
-| 热余量 | 无对应公开接口 | | U | |
+| 帧率 | CADisplayLink | 无 | A | 超过 2s 无帧 → 判定"当前无持续绘制"，不拿旧值冒充 |
+| 机身温度（℃） | 无传感器直读 API | | U | 只有 `ProcessInfo.thermalState` 四档热状态，不换算冒充，该指标不进入界面 |
+
+iOS 的数据层其实仍和 Android 一样全量采集（CPU、电池、热状态等），1.0.4 起两边同步收敛：界面只呈现上表里真实可读的指标，其余一律不占位、不显示占位符。
 
 ## 权限
 
@@ -226,11 +242,13 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 **iOS**
 
 1. 没有系统级全局悬浮窗，iOS 不允许第三方应用悬浮在其他 App 上面。改成应用内 `UIWindow` 悬浮窗，手势、收窄、垃圾桶这些交互都按 Android 的规格做了，App 退后台自动隐藏。
-2. 全局 FPS、GPU 负载/频率/温度、CPU 温度、机身温度、电池电流/电压/温度、电池健康百分比、后台应用内存：iOS 没有公开 API，常态显示不可用。帧率稳定性维度因此降级用帧时间标准差。
+2. 机身温度（℃）没有传感器直读 API，只有 `ProcessInfo.thermalState` 的四档热状态。不拿档位换算冒充温度值，该指标在 iOS 上不进入界面，综合评判的温度维度缺席、权重按比例折算。帧率只看本应用前台绘制（CADisplayLink），读不到其他进程的渲染帧。
 3. 本地打不了 IPA（没有 Xcode），用 GitHub Actions 的 macOS runner 构建，产物未签名，装机要重签名。
 4. `UIVisualEffectView` 不给精确指定模糊半径，只能选系统预设材质。玻璃效果靠预设模糊加自绘高光、内外阴影、弥散外阴影和噪点叠出来，参数对齐 token，视觉上跟 Android 一致，但不是同一个 API 路径。
 
 **Android**
+
+下面 1、2 两条是数据层的既有边界，涉及电池、后台内存、GPU 这些已经从界面移除的指标，记录在此备查；界面上看得到的四个指标，各自的降级路径见上面的采集指标对照表。
 
 1. 电池健康百分比没有公开接口，只展示 EXTRA_HEALTH 的粗粒度档位。
 2. 后台应用内存、各核心频率、GPU 节点要 root 或 Shizuku。普通 App 读不了，这是 Android 8 之后的沙箱规定。

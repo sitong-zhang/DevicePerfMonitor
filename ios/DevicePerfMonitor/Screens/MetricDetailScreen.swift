@@ -3,8 +3,9 @@
 //  DevicePerfMonitor
 //
 //  指标详情页（对应 Android 端 ui/screen/MetricDetailScreen.kt）：
-//  - 当前值（三态渲染）；
-//  - 1/5/30 分钟历史图表（GlassTabs 分段，Charts 折线）；
+//  - 当前值（可用才显示；采不到显示原因文案，不摆「—」占位）；
+//  - 回看窗口 1 分钟 / 5 分钟 / 30 分钟 / 2 小时（历史保留 2 小时）；
+//  - 显示方式可切换：数字 / 波形 / 柱状 / 环形（环形仅内存占用率），选择持久化；
 //  - 窗口峰值查看（max/min/avg/latest，样本不足 2 个显示"数据不足，无法分析"）。
 //
 
@@ -16,10 +17,18 @@ struct MetricDetailScreen: View {
     let metricId: MetricId?
 
     @StateObject private var viewModel = MetricDetailViewModel()
+    @State private var mode: MetricViewMode = .number
+
+    private let windowLabels = ["1 分钟", "5 分钟", "30 分钟", "2 小时"]
 
     var body: some View {
         ScrollView {
             if let metricId {
+                let metric = viewModel.snapshot.metricOf(metricId)
+                let value = metric?.value
+                let points = viewModel.points(metricId)
+                let accent = colors.metricColor(metricId.colorKey)
+
                 VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
                     // 顶栏：返回 + 指标名
                     HStack {
@@ -35,39 +44,65 @@ struct MetricDetailScreen: View {
                             Text("当前值（\(metricId.unit)）")
                                 .font(Typography.labelMedium())
                                 .foregroundStyle(colors.textSecondary)
-                            MetricValueText(
-                                metricId: metricId,
-                                metric: viewModel.snapshot.metricOf(metricId),
-                                intervalMs: viewModel.tickMs
-                            )
+                            if let value {
+                                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                    AnimatedNumber(
+                                        value: Double(value),
+                                        decimals: metricId.decimals,
+                                        color: accent,
+                                        font: Typography.headlineMedium(.bold),
+                                        intervalMs: viewModel.tickMs
+                                    )
+                                    Text(metricId.unit)
+                                        .font(Typography.labelMedium())
+                                        .foregroundStyle(colors.textSecondary)
+                                }
+                            } else {
+                                // 采不到：说清楚原因，不摆占位数字
+                                Text(unavailableReason(metric))
+                                    .font(Typography.bodyMedium())
+                                    .foregroundStyle(colors.textSecondary)
+                            }
                         }
                     }
 
-                    // 时间窗口切换
+                    // 回看窗口
+                    GlassTabs(options: windowLabels, selectedIndex: $viewModel.windowIndex)
+
+                    // 显示方式（环形只对有界指标开放）
+                    let modeOptions = MetricViewMode.allCases
+                        .filter { $0 != .ring || metricId == .memoryUsageRatio }
+                    let modeIndex = Binding<Int>(
+                        get: { modeOptions.firstIndex(of: mode) ?? 0 },
+                        set: { mode = modeOptions[$0] }
+                    )
                     GlassTabs(
-                        options: ["1 分钟", "5 分钟", "30 分钟"],
-                        selectedIndex: $viewModel.windowIndex
+                        options: modeOptions.map { $0.rawValue },
+                        selectedIndex: modeIndex
                     )
 
-                    // 历史图表
+                    // 轨迹大图
                     GlassPanel {
                         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
-                            MetricChartView(points: viewModel.points(metricId))
-                            ChartCaption(points: viewModel.points(metricId))
+                            chart(mode: MetricViewMode.effective(mode, id: metricId),
+                                  points: points,
+                                  value: value,
+                                  metricId: metricId,
+                                  accent: accent)
                         }
                     }
 
                     // 峰值查看
                     GlassPanel {
                         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
-                            Text("窗口峰值（\(viewModel.windowsSec[viewModel.windowIndex] / 60) 分钟）")
+                            Text("窗口峰值（\(windowLabels[viewModel.windowIndex])）")
                                 .font(Typography.labelMedium())
                                 .foregroundStyle(colors.textSecondary)
                             if let peaks = viewModel.peakStats(metricId) {
-                                PeakRow(label: "最高", value: peaks.max, color: colors.metricColor(metricId.colorKey))
-                                PeakRow(label: "最低", value: peaks.min, color: colors.metricColor(metricId.colorKey))
-                                PeakRow(label: "平均", value: peaks.avg, color: colors.metricColor(metricId.colorKey))
-                                PeakRow(label: "最新", value: peaks.latest, color: colors.metricColor(metricId.colorKey))
+                                PeakRow(label: "最高", value: peaks.max, color: accent)
+                                PeakRow(label: "最低", value: peaks.min, color: accent)
+                                PeakRow(label: "平均", value: peaks.avg, color: accent)
+                                PeakRow(label: "最新", value: peaks.latest, color: accent)
                                 Text("样本数 \(peaks.samples)")
                                     .font(Typography.labelMedium())
                                     .foregroundStyle(colors.textSecondary)
@@ -93,8 +128,91 @@ struct MetricDetailScreen: View {
             }
         }
         .background(colors.background.ignoresSafeArea())
-        .onAppear { viewModel.attach(metricId: metricId) }
-        .onChange(of: metricId) { newValue in viewModel.attach(metricId: newValue) }
+        .onAppear {
+            viewModel.attach(metricId: metricId)
+            if let metricId {
+                mode = MetricViewMode.effective(ViewModeStore.mode(for: metricId), id: metricId)
+            }
+        }
+        .onChange(of: metricId) { newValue in
+            viewModel.attach(metricId: newValue)
+            if let newValue {
+                mode = MetricViewMode.effective(ViewModeStore.mode(for: newValue), id: newValue)
+            }
+        }
+        .onChange(of: mode) { newValue in
+            if let metricId { ViewModeStore.set(newValue, for: metricId) }
+        }
+    }
+
+    /// 轨迹区：按显示模式切换；采不到就明说，不摆占位。
+    @ViewBuilder
+    private func chart(mode: MetricViewMode, points: [HistoryPoint], value: Float?,
+                       metricId: MetricId, accent: Color) -> some View {
+        let values = points.map { $0.value }
+        switch mode {
+        case .number:
+            if let value {
+                AnimatedNumber(
+                    value: Double(value),
+                    decimals: metricId.decimals,
+                    color: accent,
+                    font: Typography.displayLarge(.bold),
+                    intervalMs: viewModel.tickMs
+                )
+                .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                chartEmpty
+            }
+
+        case .wave:
+            if values.count >= 2 {
+                MetricChartView(points: points, lineColor: accent)
+                    .frame(height: 220)
+            } else {
+                chartEmpty
+            }
+
+        case .bars:
+            if values.count >= 2 {
+                BarSeries(points: values, color: accent)
+                    .frame(height: 220)
+            } else {
+                chartEmpty
+            }
+
+        case .ring:
+            if let value {
+                ProgressRing(
+                    progress: value / 100,
+                    centerText: String(Int(value.rounded())),
+                    caption: metricId.unit,
+                    color: accent,
+                    trackColor: accent.opacity(0.18),
+                    lineWidth: 12
+                )
+                .frame(width: 180, height: 180)
+                .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                chartEmpty
+            }
+        }
+    }
+
+    private var chartEmpty: some View {
+        Text("这个时间段还没有采到数据")
+            .font(Typography.bodyMedium())
+            .foregroundStyle(colors.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 80)
+    }
+
+    /// 不可用原因（拿不到内部原因时给一句通用说明）。
+    private func unavailableReason(_ metric: Metric<Float>?) -> String {
+        if let metric, case .unavailable(let reason, _) = metric {
+            return reason
+        }
+        return "这台设备读不到这个指标"
     }
 }
 
@@ -130,7 +248,8 @@ final class MetricDetailViewModel: ObservableObject {
     @Published private(set) var tickMs: Double = 1000
     @Published var windowIndex: Int = 1 // 默认 5 分钟
 
-    let windowsSec = [60, 300, 1800]
+    /// 历史保留 2 小时（与 Android 端一致）。
+    let windowsSec = [60, 300, 1800, 7200]
 
     private var timer: Timer?
     private var metricId: MetricId?

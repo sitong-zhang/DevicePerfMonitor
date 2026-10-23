@@ -44,7 +44,8 @@ final class FloatingWindowController: NSObject, ObservableObject {
     private func windowSize(for mode: OverlayUiState.Mode) -> CGSize {
         switch mode {
         case .mini: return CGSize(width: 252, height: 64)
-        case .standard: return CGSize(width: 340, height: 148)
+        // 标准模式 = 综合评判行 + 最多两行指标格（收敛后只有 3~4 个核心指标）
+        case .standard: return CGSize(width: 340, height: 180)
         case .collapsed: return CGSize(width: 44, height: 64)
         }
     }

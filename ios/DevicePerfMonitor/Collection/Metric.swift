@@ -138,6 +138,17 @@ enum MetricId: String, CaseIterable {
         }
     }
 
+    /// 悬浮窗等窄场景用的短标签。
+    var shortLabel: String {
+        switch self {
+        case .fps: return "帧率"
+        case .refreshRate: return "刷新率"
+        case .memoryUsageRatio: return "内存"
+        case .deviceTemp: return "温度"
+        default: return label
+        }
+    }
+
     var unit: String {
         switch self {
         case .fps, .globalFps: return "fps"
@@ -207,5 +218,40 @@ enum MetricId: String, CaseIterable {
         default:
             return false
         }
+    }
+}
+
+// MARK: - 可视化模式（与 Android 端 MetricViewMode 对齐）
+
+/// 每个指标都能单独切换显示模式，选择会被记住（UserDefaults）。
+/// 参考 OpenMonitor / 系统监控类应用常见的几种读法：
+/// - 数字：大号等宽数字，看瞬时值最准；
+/// - 波形：线条上下波动（sparkline），看趋势和抖动；
+/// - 环形：0~100% 有界指标（占用率）用环形仪表最直观；
+/// - 柱状：离散采样条，看分布和突变。
+enum MetricViewMode: String, CaseIterable {
+    case number = "数字"
+    case wave = "波形"
+    case ring = "环形"
+    case bars = "柱状"
+
+    /// 环形只对 0~100 有界指标开放，其余回落波形（避免把没有上限的值硬塞进圆环）。
+    static func effective(_ mode: MetricViewMode, id: MetricId) -> MetricViewMode {
+        if mode == .ring && id != .memoryUsageRatio { return .wave }
+        return mode
+    }
+}
+
+/// 模式选择的本地持久化（对应 Android 端 SettingsRepository.metricViewModes）。
+enum ViewModeStore {
+    private static let prefix = "metricViewMode."
+
+    static func mode(for id: MetricId) -> MetricViewMode {
+        let raw = UserDefaults.standard.string(forKey: prefix + id.rawValue)
+        return raw.flatMap(MetricViewMode.init(rawValue:)) ?? .number
+    }
+
+    static func set(_ mode: MetricViewMode, for id: MetricId) {
+        UserDefaults.standard.set(mode.rawValue, forKey: prefix + id.rawValue)
     }
 }

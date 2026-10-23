@@ -11,20 +11,20 @@ import ActivityKit
 
 struct MonitorActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
-        /// FPS（nil = 不可用，UI 显示 —）。
+        /// 帧率（nil = 不可用，UI 不显示该项）。
         var fps: Double?
-        /// CPU 使用率 %。
-        var cpuUsage: Double?
+        /// 屏幕刷新率 Hz。
+        var refreshHz: Double?
         /// 内存占用率 %。
         var memoryRatio: Double?
-        /// 告警态（温度超阈值）。
+        /// 告警态（系统热状态异常 / 帧时间不稳定）。
         var alert: Bool
         /// 快照时间戳（ms）。
         var timestampMs: Int64
 
-        init(fps: Double? = nil, cpuUsage: Double? = nil, memoryRatio: Double? = nil, alert: Bool = false, timestampMs: Int64 = 0) {
+        init(fps: Double? = nil, refreshHz: Double? = nil, memoryRatio: Double? = nil, alert: Bool = false, timestampMs: Int64 = 0) {
             self.fps = fps
-            self.cpuUsage = cpuUsage
+            self.refreshHz = refreshHz
             self.memoryRatio = memoryRatio
             self.alert = alert
             self.timestampMs = timestampMs

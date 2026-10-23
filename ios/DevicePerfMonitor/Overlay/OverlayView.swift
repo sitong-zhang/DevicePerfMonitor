@@ -5,11 +5,14 @@
 //  应用内悬浮窗内容（对应 Android 端 overlay/OverlayCompose.kt）。
 //
 //  形态（与 Android 端一致）：
-//  - 迷你模式：单行三项核心数据（FPS / CPU 使用率 / 内存占用；
-//    iOS 无机身温度 → 第三项用内存占用率替代，README 已说明）；
-//  - 标准模式：6 项指标面板（2 行 × 3 列）；
+//  - 迷你模式：综合评判小环 + 最多三项核心数据；
+//  - 标准模式：综合评判小环 + 核心指标网格（2 列）；
 //  - 收窄态：贴边窄条，点击展开；
 //  - 告警态：整体变红（边框/数值）。
+//
+//  硬规则（与 Android 一致）：只保留内存占用率 / 设备温度 / 屏幕刷新率 /
+//  帧率四个核心指标；采不到的指标不占位、不显示「—」，直接不进列表。
+//  iOS 无机身温度公开 API → 温度格在 iOS 上常态不出现。
 //
 //  玻璃材质：走 LiquidGlassSurface（UIVisualEffectView 真实毛玻璃；
 //  窗口层级在 App 内，可真实采样背后画面）。
@@ -21,13 +24,23 @@
 
 import SwiftUI
 
+/// 悬浮窗数据：只带四个核心指标 + 综合评判。
 struct OverlayData {
-    let fps: Metric<Float>
-    let cpuUsage: Metric<Float>
-    let cpuTemp: Metric<Float>
-    let batteryTemp: Metric<Float>
-    let batteryLevel: Metric<Float>
     let memoryRatio: Metric<Float>
+    let deviceTemp: Metric<Float>
+    let refreshHz: Metric<Float>
+    let fps: Metric<Float>
+    let health: FocusedHealthResult
+
+    /// 采得到的指标（顺序固定：内存 / 温度 / 刷新率 / 帧率）。
+    var cells: [(id: MetricId, value: Float)] {
+        var result: [(id: MetricId, value: Float)] = []
+        if let v = memoryRatio.value { result.append((.memoryUsageRatio, v)) }
+        if let v = deviceTemp.value { result.append((.deviceTemp, v)) }
+        if let v = refreshHz.value { result.append((.refreshRate, v)) }
+        if let v = fps.value { result.append((.fps, v)) }
+        return result
+    }
 }
 
 /// 悬浮窗 UI 状态（由 FloatingWindowController 驱动）。
@@ -73,7 +86,7 @@ struct OverlayView: View {
     }
 }
 
-// MARK: - 迷你模式：单行三项
+// MARK: - 迷你模式：综合评判小环 + 最多三项
 
 private struct MiniRow: View {
     @Environment(\.colors) private var colors
@@ -82,19 +95,85 @@ private struct MiniRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            MiniCell(label: "FPS", metric: data.fps, id: .fps, intervalMs: intervalMs)
-            MiniDivider()
-            MiniCell(label: "CPU", metric: data.cpuUsage, id: .cpuUsage, intervalMs: intervalMs)
-            MiniDivider()
-            MiniCell(label: "内存", metric: data.memoryRatio, id: .memoryUsageRatio, intervalMs: intervalMs)
+            HealthBadge(health: data.health, diameter: 44, lineWidth: 4)
+            ForEach(Array(data.cells.prefix(3).enumerated()), id: \.offset) { index, cell in
+                if index > 0 { MiniDivider() }
+                MiniCell(label: cell.id.shortLabel, metricValue: cell.value, id: cell.id, intervalMs: intervalMs)
+            }
         }
     }
 }
 
+// MARK: - 标准模式：综合评判小环 + 指标网格
+
+private struct StandardGrid: View {
+    @Environment(\.colors) private var colors
+    let data: OverlayData
+    var intervalMs: Double
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                HealthBadge(health: data.health, diameter: 52, lineWidth: 5)
+                Spacer()
+                Text("综合评判")
+                    .font(Typography.mono(10))
+                    .foregroundStyle(colors.textSecondary)
+            }
+            let cells = data.cells
+            ForEach(Array(stride(from: 0, to: cells.count, by: 2).enumerated()), id: \.offset) { _, rowStart in
+                HStack(spacing: 8) {
+                    GridCell(label: cells[rowStart].id.shortLabel, metricValue: cells[rowStart].value, id: cells[rowStart].id, intervalMs: intervalMs)
+                    if rowStart + 1 < cells.count {
+                        GridCell(label: cells[rowStart + 1].id.shortLabel, metricValue: cells[rowStart + 1].value, id: cells[rowStart + 1].id, intervalMs: intervalMs)
+                    } else {
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 综合评判小环
+
+private struct HealthBadge: View {
+    @Environment(\.colors) private var colors
+    let health: FocusedHealthResult
+    var diameter: CGFloat
+    var lineWidth: CGFloat
+
+    var body: some View {
+        let total = health.total
+        let tint: Color = {
+            guard let total else { return colors.textSecondary }
+            switch total {
+            case 75...: return colors.success
+            case 50..<75: return colors.accent
+            default: return colors.danger
+            }
+        }()
+        ProgressRing(
+            progress: (total ?? 0) / 100,
+            // 维度全采不到就不给分：环留空，不写占位数字
+            centerText: total.map { String(Int($0.rounded())) } ?? "",
+            caption: "",
+            color: tint,
+            trackColor: tint.opacity(0.2),
+            lineWidth: lineWidth,
+            centerFontSize: diameter * 0.30,
+            captionFontSize: diameter * 0.16
+        )
+        .frame(width: diameter, height: diameter)
+    }
+}
+
+// MARK: - 单元格
+
 private struct MiniCell: View {
     @Environment(\.colors) private var colors
     let label: String
-    let metric: Metric<Float>
+    let metricValue: Float
     let id: MetricId
     var intervalMs: Double
 
@@ -103,25 +182,40 @@ private struct MiniCell: View {
             Text(label)
                 .font(Typography.mono(10))
                 .foregroundStyle(colors.textSecondary)
-            switch metric.state {
-            case .available(let value):
-                AnimatedNumber(
-                    value: Double(value),
-                    decimals: id.decimals,
-                    color: colors.metricColor(id.colorKey),
-                    font: Typography.mono(16, .medium),
-                    intervalMs: intervalMs
-                )
-            case .unavailable:
-                Text("—")
-                    .font(Typography.mono(16, .medium))
-                    .foregroundStyle(colors.textSecondary)
-            case .needsPermission:
-                Text("需授权")
-                    .font(Typography.mono(10))
-                    .foregroundStyle(colors.warning)
-            }
+            AnimatedNumber(
+                value: Double(metricValue),
+                decimals: id.decimals,
+                color: colors.metricColor(id.colorKey),
+                font: Typography.mono(16, .medium),
+                intervalMs: intervalMs
+            )
         }
+    }
+}
+
+private struct GridCell: View {
+    @Environment(\.colors) private var colors
+    let label: String
+    let metricValue: Float
+    let id: MetricId
+    var intervalMs: Double
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(Typography.mono(9))
+                .foregroundStyle(colors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            AnimatedNumber(
+                value: Double(metricValue),
+                decimals: id.decimals,
+                color: colors.metricColor(id.colorKey),
+                font: Typography.mono(14, .medium),
+                intervalMs: intervalMs
+            )
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -137,66 +231,6 @@ private struct MiniDivider: View {
                 )
             )
             .frame(width: 1, height: 26)
-    }
-}
-
-// MARK: - 标准模式：6 项面板（2 行 × 3 列）
-
-private struct StandardGrid: View {
-    @Environment(\.colors) private var colors
-    let data: OverlayData
-    var intervalMs: Double
-
-    var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                GridCell(label: "FPS", metric: data.fps, id: .fps, intervalMs: intervalMs)
-                GridCell(label: "CPU", metric: data.cpuUsage, id: .cpuUsage, intervalMs: intervalMs)
-                GridCell(label: "CPU 温度", metric: data.cpuTemp, id: .cpuTemp, intervalMs: intervalMs)
-            }
-            HStack(spacing: 8) {
-                GridCell(label: "电池温度", metric: data.batteryTemp, id: .batteryTemp, intervalMs: intervalMs)
-                GridCell(label: "电量", metric: data.batteryLevel, id: .batteryLevel, intervalMs: intervalMs)
-                GridCell(label: "内存", metric: data.memoryRatio, id: .memoryUsageRatio, intervalMs: intervalMs)
-            }
-        }
-    }
-}
-
-private struct GridCell: View {
-    @Environment(\.colors) private var colors
-    let label: String
-    let metric: Metric<Float>
-    let id: MetricId
-    var intervalMs: Double
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(Typography.mono(9))
-                .foregroundStyle(colors.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            switch metric.state {
-            case .available(let value):
-                AnimatedNumber(
-                    value: Double(value),
-                    decimals: id.decimals,
-                    color: colors.metricColor(id.colorKey),
-                    font: Typography.mono(14, .medium),
-                    intervalMs: intervalMs
-                )
-            case .unavailable:
-                Text("—")
-                    .font(Typography.mono(14, .medium))
-                    .foregroundStyle(colors.textSecondary)
-            case .needsPermission:
-                Text("需授权")
-                    .font(Typography.mono(9))
-                    .foregroundStyle(colors.warning)
-            }
-        }
-        .frame(maxWidth: .infinity)
     }
 }
 

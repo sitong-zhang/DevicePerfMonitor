@@ -17,8 +17,11 @@ import DGCharts
 struct MetricChartView: View {
     @Environment(\.colors) private var colors
     let points: [HistoryPoint]
+    /// 线条颜色（默认主题强调色；详情页传指标自己的语义色）。
+    var lineColor: Color?
 
     var body: some View {
+        let line = lineColor ?? colors.accent
         if points.count < 2 {
             Text("数据不足，无法绘制图表")
                 .font(Typography.bodyMedium())
@@ -26,7 +29,7 @@ struct MetricChartView: View {
                 .frame(height: 180)
                 .frame(maxWidth: .infinity)
         } else {
-            LineChartRepresentable(points: points, lineColor: UIColor(colors.accent), textColor: UIColor(colors.textSecondary))
+            LineChartRepresentable(points: points, lineColor: UIColor(line), textColor: UIColor(colors.textSecondary))
                 .frame(height: 180)
         }
     }

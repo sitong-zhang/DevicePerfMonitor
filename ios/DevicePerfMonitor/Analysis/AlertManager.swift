@@ -134,12 +134,12 @@ final class AlertManager: ObservableObject {
     private func updateLiveActivity(snapshot: DeviceSnapshot, overlay: OverlayData?) {
         guard let activity else { return }
         let fps = overlay?.fps.value ?? snapshot.display.fps.value
-        let cpu = overlay?.cpuUsage.value ?? snapshot.cpu.usagePercent.value
+        let refresh = overlay?.refreshHz.value ?? snapshot.display.refreshRateHz.value
         let memory = overlay?.memoryRatio.value ?? snapshot.memory.usageRatio.value
 
         let state = MonitorActivityAttributes.ContentState(
             fps: fps.map { Double($0) },
-            cpuUsage: cpu.map { Double($0) },
+            refreshHz: refresh.map { Double($0) },
             memoryRatio: memory.map { Double($0) },
             alert: alertActive,
             timestampMs: snapshot.timestampMs
