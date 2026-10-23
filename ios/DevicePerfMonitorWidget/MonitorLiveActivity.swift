@@ -37,9 +37,12 @@ struct MonitorLiveActivity: Widget {
                         .foregroundStyle(.white)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
+                    // 1.0.9 口径：温度 + 内存占用率（刷新率已移到应用内显示）。
+                    // iOS 没有机身温度公开 API，deviceTempC 常态 nil → 这一项不渲染，
+                    // 不拿热状态档位换算冒充（沿项目「采不到的不占位」原则）。
                     HStack(spacing: 12) {
-                        if let refresh = context.state.refreshHz {
-                            Text("刷新 \(formattedValue(refresh, suffix: "Hz"))")
+                        if let temp = context.state.deviceTempC {
+                            Text("温度 \(formattedValue(temp, suffix: "℃"))")
                         }
                         if let memory = context.state.memoryRatio {
                             Text("内存 \(formattedValue(memory, suffix: "%"))")
@@ -90,8 +93,8 @@ private struct LockScreenView: View {
                         .font(.system(.title3, design: .monospaced).bold())
                 }
                 HStack(spacing: 8) {
-                    if let refresh = state.refreshHz {
-                        Text("刷新 \(valueText(refresh, "Hz"))")
+                    if let temp = state.deviceTempC {
+                        Text("温度 \(valueText(temp, "℃"))")
                     }
                     if let memory = state.memoryRatio {
                         Text("内存 \(valueText(memory, "%"))")

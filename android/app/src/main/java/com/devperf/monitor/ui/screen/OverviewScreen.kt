@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -83,8 +84,17 @@ fun OverviewScreen(
                     listOf(colors.background, colors.surface, colors.background),
                 ),
             ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            top = 16.dp,
+            end = 16.dp,
+            // 底部必须给浮动胶囊底栏让出空间（底栏高度 + 下边距 + 一点呼吸），
+            // 否则最后一张卡片会被底栏压住——1.0.9 之前没留，列表滚到底也看不见末尾。
+            // iOS 侧同样处理（ContentView 里的 bottom inset）。
+            bottom = DesignTokens.BottomBar.HEIGHT.dp +
+                DesignTokens.BottomBar.MARGIN_BOTTOM.dp + 16.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp),
     ) {
         if (awaitingFirstSample) {
             items(count = 5, key = { "skeleton-$it" }) { index ->
@@ -240,7 +250,7 @@ private fun HealthCard(result: FocusedHealth.Result) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(190.dp),
+            .heightIn(min = 176.dp),
         shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
     ) {
         Row(
@@ -309,7 +319,7 @@ private fun MetricCard(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(132.dp)
+            .heightIn(min = 112.dp)
             .pressScale(interactionSource),
         shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
         onClick = {

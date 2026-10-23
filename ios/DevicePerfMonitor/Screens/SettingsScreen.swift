@@ -141,7 +141,7 @@ struct SettingsScreen: View {
             }
             .padding(.horizontal, DesignTokens.Spacing.s16)
             .padding(.top, DesignTokens.Spacing.s32)
-            .padding(.bottom, 96)
+            .padding(.bottom, DesignTokens.BottomBar.height + DesignTokens.BottomBar.marginBottom + 16) // 浮动胶囊底栏占位
         }
         .background(colors.background.ignoresSafeArea())
         .onChange(of: refreshModeRaw) { newValue in

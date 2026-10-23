@@ -27,8 +27,8 @@ ios/DevicePerfMonitor.xcodeproj/xcuserdata/
 *.app
 *.dSYM.zip
 *.dSYM
-releases/*.apk
-releases/*.ipa
+# releases/ 整个目录都是本地产物（含 .xcarchive），不入库
+releases/
 
 # IDE
 .idea/
@@ -40,3 +40,4 @@ releases/*.ipa
 *.log
 .gradle/
 .kotlin/
+Tools/palette-gen/build/

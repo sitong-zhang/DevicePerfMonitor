@@ -112,6 +112,29 @@ def main() -> int:
             lines.append(f"        static let {key}: CGFloat = {value}")
     lines.append("    }")
 
+    # ---- Surface / Elevation / BottomBar（1.0.9 视觉层次参数，与 Android 同构）----
+    def emit_group(name, comment, data_map):
+        lines.append("")
+        lines.append(f"    // MARK: - {comment}")
+        lines.append(f"    enum {name} {{")
+        for key, value in data_map.items():
+            if key.startswith("$"):
+                continue
+            if isinstance(value, dict):
+                lines.append(f"        enum {key[0].upper() + key[1:]} {{")
+                for k2, v2 in value.items():
+                    if k2.startswith("$"):
+                        continue
+                    lines.append(f"            static let {k2}: CGFloat = {v2}")
+                lines.append("        }")
+            else:
+                lines.append(f"        static let {key}: CGFloat = {value}")
+        lines.append("    }")
+
+    emit_group("Surface", "卡片/面板视觉层次", data["surface"])
+    emit_group("Elevation", "三层投影（1=卡片 2=底栏 3=弹层）", data["elevation"])
+    emit_group("BottomBar", "浮动胶囊底栏几何", data["bottomBar"])
+
     # ---- Motion ----
     lines.append("")
     lines.append("    // MARK: - 动效曲线（cubic-bezier 四参数 + 时长 ms）")

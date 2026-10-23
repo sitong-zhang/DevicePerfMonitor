@@ -34,12 +34,16 @@ struct OverlayData {
     let fps: Metric<Float>
     let health: FocusedHealthResult
 
-    /// 采得到的指标（顺序固定：内存 / 温度 / 刷新率 / 帧率）。
+    /// 悬浮窗显示的指标（顺序固定：内存 / 温度 / 帧率）。
+    ///
+    /// 1.0.9 起去掉刷新率——用户要求它只留在应用内看，悬浮窗和实况窗都不要。
+    /// `refreshHz` 字段仍然保留，因为综合评判的流畅度 = 帧率 ÷ 刷新率 达成率
+    /// 要用它算，只是不再进这个列表（不是漏了）。
+    /// iOS 上温度没有公开 API，常态缺席，这里自然只会剩内存和帧率两项。
     var cells: [(id: MetricId, value: Float)] {
         var result: [(id: MetricId, value: Float)] = []
         if let v = memoryRatio.value { result.append((.memoryUsageRatio, v)) }
         if let v = deviceTemp.value { result.append((.deviceTemp, v)) }
-        if let v = refreshHz.value { result.append((.refreshRate, v)) }
         if let v = fps.value { result.append((.fps, v)) }
         return result
     }
@@ -54,6 +58,10 @@ struct OverlayUiState {
 
     var mode: Mode = .card
     var alert: Bool = false
+    /// 是否正在拖动（拖动期间主界面要挂出底部的删除区）。
+    var dragging: Bool = false
+    /// 手指是否悬在删除区上（悬停时删除区放大并转危险色）。
+    var overTrash: Bool = false
 }
 
 struct OverlayView: View {
@@ -103,16 +111,11 @@ private struct CardContent: View {
                     .font(Typography.mono(10))
                     .foregroundStyle(colors.textSecondary)
             }
+            // 1.0.9 起只剩三项（内存 / 温度 / 帧率），再排两列会空一格，
+            // 改成单列三行：标签靠左、数值靠右对齐（与 Android 同一排版）
             let cells = data.cells
-            ForEach(Array(stride(from: 0, to: cells.count, by: 2).enumerated()), id: \.offset) { _, rowStart in
-                HStack(spacing: 8) {
-                    GridCell(label: cells[rowStart].id.shortLabel, metricValue: cells[rowStart].value, id: cells[rowStart].id, intervalMs: intervalMs)
-                    if rowStart + 1 < cells.count {
-                        GridCell(label: cells[rowStart + 1].id.shortLabel, metricValue: cells[rowStart + 1].value, id: cells[rowStart + 1].id, intervalMs: intervalMs)
-                    } else {
-                        Spacer().frame(maxWidth: .infinity)
-                    }
-                }
+            ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                MetricRow(cell: cell, intervalMs: intervalMs)
             }
         }
         .padding(.horizontal, 14)
@@ -132,8 +135,8 @@ private struct CardContent: View {
 
 // MARK: - 纯数字：只要卡片上的数字，不要卡片
 //
-// 无玻璃、无阴影、无小环、无标签——四个数字直接横排浮在屏幕上，
-// 每个数字保持自己的指标色；告警时统一转危险色（没有卡片可染，染数字）。
+// 无玻璃、无阴影、无小环、无标签——三个数字（内存 / 温度 / 帧率）直接横排浮在
+// 屏幕上，每个数字保持自己的指标色；告警时统一转危险色（没有卡片可染，染数字）。
 
 private struct NumbersStrip: View {
     @Environment(\.colors) private var colors
@@ -203,31 +206,37 @@ private struct HealthBadge: View {
     }
 }
 
-// MARK: - 单元格
+// MARK: - 指标行
 
-private struct GridCell: View {
+/// 一行指标：标签靠左、数值靠右对齐。
+///
+/// 1.0.9 起悬浮窗只剩三项（内存 / 温度 / 帧率），两列网格会空一格，
+/// 所以卡片里改成单列三行——与 Android 的 MetricRow 同一排版。
+private struct MetricRow: View {
     @Environment(\.colors) private var colors
-    let label: String
-    let metricValue: Float
-    let id: MetricId
+    let cell: (id: MetricId, value: Float)
     var intervalMs: Double
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(Typography.mono(9))
+        HStack(alignment: .firstTextBaseline) {
+            Text(cell.id.shortLabel)
+                .font(Typography.mono(10))
                 .foregroundStyle(colors.textSecondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            AnimatedNumber(
-                value: Double(metricValue),
-                decimals: id.decimals,
-                color: colors.metricColor(id.colorKey),
-                font: Typography.mono(14, .medium),
-                intervalMs: intervalMs
-            )
+            Spacer(minLength: 6)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                AnimatedNumber(
+                    value: Double(cell.value),
+                    decimals: cell.id.decimals,
+                    color: colors.metricColor(cell.id.colorKey),
+                    font: Typography.mono(15, .medium),
+                    intervalMs: intervalMs
+                )
+                Text(cell.id.unit)
+                    .font(Typography.mono(9))
+                    .foregroundStyle(colors.textSecondary)
+            }
         }
-        .frame(maxWidth: .infinity)
     }
 }
 

@@ -74,7 +74,15 @@ class OverlayService : android.app.Service() {
     private lateinit var settingsRepository: SettingsRepository
 
     private var controller: OverlayController? = null
-    private var overlayVisible = false
+
+    /**
+     * 悬浮窗可见性状态机（纯逻辑，见 [OverlayVisibilityState]）。
+     *
+     * 1.0.8 用裸 Boolean 记录、hide 时不复位，导致隐藏过一次之后所有
+     * ACTION_SHOW 都被吞掉、悬浮窗再也挂不出来。现在收敛到状态机，
+     * 由单测钉住「hide → show 能再次挂出」。
+     */
+    private val overlayVisibility = OverlayVisibilityState()
 
     /** 设置页默认缩放的上次应用值；用于区分「用户双指缩放」与「设置变更」。 */
     private var lastAppliedScale = Float.NaN
@@ -126,15 +134,20 @@ class OverlayService : android.app.Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         viewTreeOwner.onStartCommand()
         when (intent?.action) {
+            // 只保证服务在跑、不显示窗口（应用前台时调用，见 ACTION_ENSURE 注释）
+            ACTION_ENSURE -> Unit
             ACTION_SHOW -> showOverlay()
-            ACTION_HIDE -> controller?.hide()
+            ACTION_HIDE -> hideOverlay()
             ACTION_CLOSE -> {
                 serviceScope.launch {
                     runCatching { settingsRepository.setOverlayEnabled(false) }
                     stopSelf()
                 }
             }
-            else -> showOverlay()
+            // 没有明确指令（典型是 START_STICKY 重建、intent 为 null）：不自作主张
+            // 弹窗——此时用户可能正在应用里，突然冒出来很难看。等 MonitorApp 的
+            // 前后台命令来决定显示/隐藏。
+            else -> Unit
         }
         return START_STICKY
     }
@@ -154,6 +167,8 @@ class OverlayService : android.app.Service() {
     override fun onDestroy() {
         controller?.detach()
         controller = null
+        // 服务销毁 → 窗口必然不在了，复位状态（下次重新 start 才能挂出）
+        overlayVisibility.reset()
         recomposerJob?.cancel()
         recomposerJob = null
         runCatching { overlayRecomposer.close() }
@@ -171,9 +186,21 @@ class OverlayService : android.app.Service() {
             stopSelf()
             return
         }
-        if (overlayVisible) return
-        controller?.show(createOverlayView())
-        overlayVisible = true
+        // 已在显示 → 不重复 addView（重复添加同一个 view 会抛）。状态机保证
+        // 隐藏之后这里能再次返回 true（1.0.8 的 bug 就出在这一行）。
+        if (!overlayVisibility.requestShow()) return
+        runCatching { controller?.show(createOverlayView()) }
+            .onFailure {
+                // 挂载失败（窗口令牌异常等）必须复位，否则下次再也挂不出来
+                Log.w(TAG, "悬浮窗挂载失败，复位可见性状态", it)
+                overlayVisibility.reset()
+            }
+    }
+
+    /** 隐藏窗口并复位可见性状态，保证之后还能再挂出来。 */
+    private fun hideOverlay() {
+        controller?.hide()
+        overlayVisibility.requestHide()
     }
 
     private fun createOverlayView(): ComposeView {
@@ -386,14 +413,34 @@ class OverlayService : android.app.Service() {
         const val ACTION_SHOW = "com.devperf.monitor.action.SHOW_OVERLAY"
         const val ACTION_HIDE = "com.devperf.monitor.action.HIDE_OVERLAY"
         const val ACTION_CLOSE = "com.devperf.monitor.action.CLOSE_OVERLAY"
+        const val ACTION_ENSURE = "com.devperf.monitor.action.ENSURE_OVERLAY"
 
-        /** 启动悬浮窗（需前台上下文；被系统拒绝时降级为不显示）。 */
+        /**
+         * 显示悬浮窗（需前台上下文；被系统拒绝时降级为不显示）。
+         *
+         * 服务已在运行时这只是条命令，不受 Android 12+「后台启动前台服务」限制。
+         */
         fun start(context: Context) {
             runCatching {
                 context.startForegroundService(
                     Intent(context, OverlayService::class.java).setAction(ACTION_SHOW)
                 )
             }.onFailure { Log.w(TAG, "前台服务启动被系统拒绝，悬浮窗不显示（降级）", it) }
+        }
+
+        /**
+         * 只保证服务在跑，不显示窗口。
+         *
+         * 必须在**应用前台**调用（Android 12+ 禁止后台新建前台服务）。这样退到
+         * 后台时 [start] 只是给已运行的 FGS 发命令，不会被系统拒绝——
+         * 这是「退出应用自动挂出」在 Android 12+ 上能真正生效的前提。
+         */
+        fun ensure(context: Context) {
+            runCatching {
+                context.startForegroundService(
+                    Intent(context, OverlayService::class.java).setAction(ACTION_ENSURE)
+                )
+            }.onFailure { Log.w(TAG, "前台服务启动被系统拒绝（降级）", it) }
         }
 
         fun stop(context: Context) {

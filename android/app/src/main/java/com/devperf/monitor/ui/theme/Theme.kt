@@ -183,6 +183,9 @@ fun DevicePerfTheme(
     }
     val tokens = if (dark) DesignTokens.DarkColors else DesignTokens.LightColors
 
+    // 1.0.9：把 design-tokens 新加的层次色与描边色全部接进 ColorScheme。
+    // 以前只映射了 10 个语义色，surfaceContainer*/tertiary*/outline* 全部回落到
+    // MD3 默认色——组件拿到的根本不是我们的色板，这也是界面"看着不对"的原因之一。
     val colorScheme = if (dark) {
         darkColorScheme(
             primary = tokens.accent,
@@ -191,15 +194,31 @@ fun DevicePerfTheme(
             onPrimaryContainer = tokens.textPrimary,
             secondary = tokens.accentSecondary,
             onSecondary = tokens.background,
+            tertiary = tokens.tertiary,
+            onTertiary = tokens.onTertiary,
+            tertiaryContainer = tokens.tertiaryContainer,
+            onTertiaryContainer = tokens.onTertiaryContainer,
             background = tokens.background,
             onBackground = tokens.textPrimary,
             surface = tokens.surface,
             onSurface = tokens.textPrimary,
-            surfaceVariant = tokens.surfaceElevated,
+            surfaceVariant = tokens.surfaceContainer,
             onSurfaceVariant = tokens.textSecondary,
+            surfaceTint = tokens.accent,
+            surfaceDim = tokens.surfaceDim,
+            surfaceBright = tokens.surfaceBright,
+            surfaceContainerLowest = tokens.surfaceDim,
+            surfaceContainerLow = tokens.surfaceLow,
+            surfaceContainer = tokens.surfaceContainer,
+            surfaceContainerHigh = tokens.surfaceHigh,
+            surfaceContainerHighest = tokens.surfaceHighest,
             error = tokens.danger,
             onError = tokens.background,
-            outline = tokens.textSecondary,
+            outline = tokens.outline,
+            outlineVariant = tokens.outlineVariant,
+            scrim = tokens.scrim,
+            inverseSurface = tokens.inverseSurface,
+            inverseOnSurface = tokens.textPrimary,
         )
     } else {
         lightColorScheme(
@@ -209,15 +228,31 @@ fun DevicePerfTheme(
             onPrimaryContainer = tokens.textPrimary,
             secondary = tokens.accentSecondary,
             onSecondary = tokens.surface,
+            tertiary = tokens.tertiary,
+            onTertiary = tokens.onTertiary,
+            tertiaryContainer = tokens.tertiaryContainer,
+            onTertiaryContainer = tokens.onTertiaryContainer,
             background = tokens.background,
             onBackground = tokens.textPrimary,
             surface = tokens.surface,
             onSurface = tokens.textPrimary,
-            surfaceVariant = tokens.surfaceElevated,
+            surfaceVariant = tokens.surfaceContainer,
             onSurfaceVariant = tokens.textSecondary,
+            surfaceTint = tokens.accent,
+            surfaceDim = tokens.surfaceDim,
+            surfaceBright = tokens.surfaceBright,
+            surfaceContainerLowest = tokens.surfaceBright,
+            surfaceContainerLow = tokens.surfaceLow,
+            surfaceContainer = tokens.surfaceContainer,
+            surfaceContainerHigh = tokens.surfaceHigh,
+            surfaceContainerHighest = tokens.surfaceHighest,
             error = tokens.danger,
             onError = tokens.surface,
-            outline = tokens.textSecondary,
+            outline = tokens.outline,
+            outlineVariant = tokens.outlineVariant,
+            scrim = tokens.scrim,
+            inverseSurface = tokens.inverseSurface,
+            inverseOnSurface = tokens.textPrimary,
         )
     }
 

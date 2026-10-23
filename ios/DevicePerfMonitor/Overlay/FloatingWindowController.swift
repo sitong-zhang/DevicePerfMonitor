@@ -40,7 +40,8 @@ final class FloatingWindowController: NSObject, ObservableObject {
     private var dragStartCenter: CGPoint = .zero
     private var currentScale: CGFloat = 1.0
     private var baseScale: CGFloat = 1.0
-    private var overTrash = false
+    // 注：删除区的悬停状态不再用私有字段存——它要驱动主界面的删除区 UI，
+    // 所以放进 @Published 的 state（见 OverlayUiState.overTrash）。
 
     /// 各形态的窗口尺寸（含阴影安全边距：窗口尺寸 = 可见区域 + 阴影，对应需求）。
     private func windowSize(for mode: OverlayUiState.Mode) -> CGSize {
@@ -206,6 +207,9 @@ final class FloatingWindowController: NSObject, ObservableObject {
         switch gesture.state {
         case .began:
             dragStartCenter = window.center
+            // 发布 dragging：主界面据此挂出底部删除区（1.0.9 之前 iOS 侧只有
+            // 判定逻辑、屏幕上什么都看不到，用户不知道能拖到哪删除）
+            state.dragging = true
             // 收起态下拖动即展开（让位给拖动，优先级最低）
             if state.mode == .collapsed {
                 state.mode = .card
@@ -217,19 +221,21 @@ final class FloatingWindowController: NSObject, ObservableObject {
                                     y: dragStartCenter.y + translation.y)
             window.center = newCenter
 
-            // 垃圾桶区域判定（底部 trashZoneHeight）
-            let trashTop = window.bounds.height - DesignTokens.Gesture.trashZoneHeight
-            let wasOver = overTrash
-            overTrash = window.frame.minY > 0 && (window.frame.midY > UIScreen.main.bounds.height - trashTop)
-            if wasOver != overTrash {
+            // 删除区判定：窗口中心进入底部 trashZone 就算悬停
+            let trashTop = UIScreen.main.bounds.height - DesignTokens.Gesture.trashZoneHeight
+            let wasOver = state.overTrash
+            state.overTrash = window.frame.midY > trashTop
+            if wasOver != state.overTrash {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         case .ended, .cancelled:
-            if overTrash {
+            let wasOver = state.overTrash
+            state.dragging = false
+            state.overTrash = false
+            if wasOver {
                 hide()
                 return
             }
-            overTrash = false
 
             let center = window.center
             // 贴边只吸附位置，不改变形态（用户原话「不要动它」，1.0.8 起）

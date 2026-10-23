@@ -34,6 +34,10 @@ enum ThemeMode: String, CaseIterable, Identifiable {
 // MARK: - 语义色值包
 
 /// 语义色（对应 Android 端 TokenColors）。值类型，便于存入 Environment。
+///
+/// 注意：这个 struct 是**手写**的，不是生成物——新增色 role 时必须同步补字段
+/// 和下面两个构造，漏一个 iOS 直接编译不过。字段顺序与
+/// `DesignTokens.Dark/Light`（由 generate_tokens.py 生成）保持一致。
 struct TokenPalette {
     let background: Color
     let surface: Color
@@ -45,6 +49,21 @@ struct TokenPalette {
     let success: Color
     let warning: Color
     let danger: Color
+    // 1.0.9 新增：层次与描边（撑起卡片 / 底栏 / 分隔线的视觉层次）
+    let surfaceLow: Color
+    let surfaceContainer: Color
+    let surfaceHigh: Color
+    let surfaceHighest: Color
+    let surfaceDim: Color
+    let surfaceBright: Color
+    let tertiary: Color
+    let onTertiary: Color
+    let tertiaryContainer: Color
+    let onTertiaryContainer: Color
+    let outline: Color
+    let outlineVariant: Color
+    let scrim: Color
+    let inverseSurface: Color
 
     static let dark = TokenPalette(
         background: DesignTokens.Dark.background,
@@ -56,7 +75,21 @@ struct TokenPalette {
         accentSecondary: DesignTokens.Dark.accentSecondary,
         success: DesignTokens.Dark.success,
         warning: DesignTokens.Dark.warning,
-        danger: DesignTokens.Dark.danger
+        danger: DesignTokens.Dark.danger,
+        surfaceLow: DesignTokens.Dark.surfaceLow,
+        surfaceContainer: DesignTokens.Dark.surfaceContainer,
+        surfaceHigh: DesignTokens.Dark.surfaceHigh,
+        surfaceHighest: DesignTokens.Dark.surfaceHighest,
+        surfaceDim: DesignTokens.Dark.surfaceDim,
+        surfaceBright: DesignTokens.Dark.surfaceBright,
+        tertiary: DesignTokens.Dark.tertiary,
+        onTertiary: DesignTokens.Dark.onTertiary,
+        tertiaryContainer: DesignTokens.Dark.tertiaryContainer,
+        onTertiaryContainer: DesignTokens.Dark.onTertiaryContainer,
+        outline: DesignTokens.Dark.outline,
+        outlineVariant: DesignTokens.Dark.outlineVariant,
+        scrim: DesignTokens.Dark.scrim,
+        inverseSurface: DesignTokens.Dark.inverseSurface
     )
 
     static let light = TokenPalette(
@@ -69,7 +102,21 @@ struct TokenPalette {
         accentSecondary: DesignTokens.Light.accentSecondary,
         success: DesignTokens.Light.success,
         warning: DesignTokens.Light.warning,
-        danger: DesignTokens.Light.danger
+        danger: DesignTokens.Light.danger,
+        surfaceLow: DesignTokens.Light.surfaceLow,
+        surfaceContainer: DesignTokens.Light.surfaceContainer,
+        surfaceHigh: DesignTokens.Light.surfaceHigh,
+        surfaceHighest: DesignTokens.Light.surfaceHighest,
+        surfaceDim: DesignTokens.Light.surfaceDim,
+        surfaceBright: DesignTokens.Light.surfaceBright,
+        tertiary: DesignTokens.Light.tertiary,
+        onTertiary: DesignTokens.Light.onTertiary,
+        tertiaryContainer: DesignTokens.Light.tertiaryContainer,
+        onTertiaryContainer: DesignTokens.Light.onTertiaryContainer,
+        outline: DesignTokens.Light.outline,
+        outlineVariant: DesignTokens.Light.outlineVariant,
+        scrim: DesignTokens.Light.scrim,
+        inverseSurface: DesignTokens.Light.inverseSurface
     )
 }
 

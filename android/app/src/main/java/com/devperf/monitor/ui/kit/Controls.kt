@@ -38,6 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.style.TextAlign
@@ -320,18 +325,29 @@ fun Modifier.disabledAlpha(enabled: Boolean): Modifier =
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
+    /**
+     * 是否自带内边距。默认 true——内边距由本组件统一承担（token: surface.cardPadding），
+     * 调用方不要再包一层 padding。设置页以前是「Panel 内 16 + 内部 Column 又 16」，
+     * 实为 32dp，就是这个开关没统一导致的。
+     */
+    padded: Boolean = true,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
+    val shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp)
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        modifier = modifier.fillMaxWidth().elevatedCardChrome(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
         Column(
-            modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
+            modifier = if (padded) {
+                Modifier.padding(DesignTokens.Surface.CARD_PADDING.dp)
+            } else {
+                Modifier
+            },
             verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
             content = content,
         )
@@ -342,30 +358,102 @@ fun GlassPanel(
 // 玻璃卡片容器（接管原 LiquidGlassSurface 的容器职责）
 // ---------------------------------------------------------------------------
 
+/** 投影层级：1=卡片，2=浮动底栏，3=弹层 / 拖拽中的悬浮窗。 */
+enum class ElevationLevel { LEVEL1, LEVEL2, LEVEL3 }
+
 /**
- * 内容卡片：MD3 Card + 主题语义色，可点击（按压反馈由 pressScale 传入的
- * interactionSource 驱动）。参数名与旧 LiquidGlassSurface 一致，调用方零改动。
+ * 卡片的「层次三件套」：真阴影 + 描边 + 顶部高光。
+ *
+ * 以前卡片就是一张纯色 Card——零阴影、零描边、零高光，堆在背景上完全没有前后
+ * 关系，这是界面显"平/丑"的直接原因。三件套参数全部来自 design-tokens
+ * （surface.borderAlpha / highlightAlpha、elevation.levelN），不在这里写死。
+ *
+ * 注意顺序：shadow 必须在 clip 之前，高光画在内容之上、描边之下。
+ */
+@Composable
+private fun Modifier.elevatedCardChrome(
+    shape: Shape,
+    level: ElevationLevel = ElevationLevel.LEVEL1,
+): Modifier {
+    val spec = when (level) {
+        ElevationLevel.LEVEL1 -> Triple(
+            DesignTokens.Elevation.LEVEL1.SHADOW_Y,
+            DesignTokens.Elevation.LEVEL1.ALPHA,
+            DesignTokens.Elevation.LEVEL1.RADIUS,
+        )
+        ElevationLevel.LEVEL2 -> Triple(
+            DesignTokens.Elevation.LEVEL2.SHADOW_Y,
+            DesignTokens.Elevation.LEVEL2.ALPHA,
+            DesignTokens.Elevation.LEVEL2.RADIUS,
+        )
+        ElevationLevel.LEVEL3 -> Triple(
+            DesignTokens.Elevation.LEVEL3.SHADOW_Y,
+            DesignTokens.Elevation.LEVEL3.ALPHA,
+            DesignTokens.Elevation.LEVEL3.RADIUS,
+        )
+    }
+    val (shadowY, shadowAlpha, shadowRadius) = spec
+    val shade = Color.Black.copy(alpha = shadowAlpha)
+    return this
+        .shadow(
+            // Compose 的阴影扩散由 elevation 决定，这里把 token 的 shadowY 与 radius
+            // 合成为一个 elevation（radius 越大越"蓬松"）
+            elevation = (shadowY + shadowRadius / 4f).dp,
+            shape = shape,
+            clip = false,
+            ambientColor = shade,
+            spotColor = shade,
+        )
+        .clip(shape)
+        .drawWithContent {
+            drawContent()
+            // 顶部高光：模拟玻璃上沿的反光，只覆盖上半部分，浓度很低
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = DesignTokens.Surface.HIGHLIGHT_ALPHA),
+                        Color.Transparent,
+                    ),
+                    endY = size.height * 0.55f,
+                ),
+            )
+        }
+        .border(
+            border = BorderStroke(
+                width = DesignTokens.Surface.BORDER_WIDTH.dp,
+                color = MaterialTheme.colorScheme.outline
+                    .copy(alpha = DesignTokens.Surface.BORDER_ALPHA),
+            ),
+            shape = shape,
+        )
+}
+
+/**
+ * 内容卡片：MD3 Card + 主题语义色 + 层次三件套，可点击（按压反馈由 pressScale
+ * 传入的 interactionSource 驱动）。参数名与旧 LiquidGlassSurface 一致，调用方零改动。
  *
  * [containerColor] 可覆盖容器色：悬浮窗告警态整体变红等场景使用；
- * 不传则走主题 surface。
+ * 不传则走主题 surfaceContainer（比背景亮一档，卡片才浮得出来）。
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
     containerColor: Color? = null,
+    elevation: ElevationLevel = ElevationLevel.LEVEL1,
     onClick: (() -> Unit)? = null,
     interactionSource: MutableInteractionSource? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val colors = CardDefaults.cardColors(
-        containerColor = containerColor ?: MaterialTheme.colorScheme.surface,
+        containerColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
     )
+    val chrome = Modifier.elevatedCardChrome(shape, elevation)
     if (onClick != null) {
         Card(
             onClick = onClick,
-            modifier = modifier,
+            modifier = modifier.then(chrome),
             enabled = true,
             shape = shape,
             colors = colors,
@@ -377,7 +465,7 @@ fun GlassCard(
         }
     } else {
         Card(
-            modifier = modifier,
+            modifier = modifier.then(chrome),
             shape = shape,
             colors = colors,
         ) {

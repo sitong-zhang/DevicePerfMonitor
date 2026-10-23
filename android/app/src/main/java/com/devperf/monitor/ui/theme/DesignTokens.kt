@@ -8,18 +8,32 @@ package com.devperf.monitor.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** 语义色板：深色 = Catppuccin Mocha，浅色 = Catppuccin Latte。 */
+/** 语义色板：由 design-tokens.json 的 palette.*.semantic 生成（字段随真源走）。 */
 internal data class TokenColors(
-    val background: Color,
-    val surface: Color,
-    val surfaceElevated: Color,
-    val textPrimary: Color,
-    val textSecondary: Color,
     val accent: Color,
     val accentSecondary: Color,
-    val success: Color,
-    val warning: Color,
+    val background: Color,
     val danger: Color,
+    val inverseSurface: Color,
+    val onTertiary: Color,
+    val onTertiaryContainer: Color,
+    val outline: Color,
+    val outlineVariant: Color,
+    val scrim: Color,
+    val success: Color,
+    val surface: Color,
+    val surfaceBright: Color,
+    val surfaceContainer: Color,
+    val surfaceDim: Color,
+    val surfaceElevated: Color,
+    val surfaceHigh: Color,
+    val surfaceHighest: Color,
+    val surfaceLow: Color,
+    val tertiary: Color,
+    val tertiaryContainer: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val warning: Color,
 )
 
 /** 动效曲线：cubic-bezier 四参数 + 时长（ms）。 */
@@ -47,29 +61,57 @@ internal data class GradeSpec(
 internal object DesignTokens {
 
     val DarkColors = TokenColors(
-        background = Color(0xFF1E1E2E),
-        surface = Color(0xFF313244),
-        surfaceElevated = Color(0xFF45475A),
-        textPrimary = Color(0xFFCDD6F4),
-        textSecondary = Color(0xFFA6ADC8),
-        accent = Color(0xFFCBA6F7),
-        accentSecondary = Color(0xFF94E2D5),
+        accent = Color(0xFFDEC0FF),
+        accentSecondary = Color(0xFF9DD1C5),
+        background = Color(0xFF17101F),
+        danger = Color(0xFFFD6F85),
+        inverseSurface = Color(0xFFFFF7FF),
+        onTertiary = Color(0xFF003730),
+        onTertiaryContainer = Color(0xFFBEF3E6),
+        outline = Color(0xFF9D92A6),
+        outlineVariant = Color(0xFF5F5668),
+        scrim = Color(0xFF000000),
         success = Color(0xFFA6E3A1),
+        surface = Color(0xFF2C2535),
+        surfaceBright = Color(0xFF51485A),
+        surfaceContainer = Color(0xFF2C2535),
+        surfaceDim = Color(0xFF0F0817),
+        surfaceElevated = Color(0xFF372F40),
+        surfaceHigh = Color(0xFF372F40),
+        surfaceHighest = Color(0xFF433A4B),
+        surfaceLow = Color(0xFF221A2A),
+        tertiary = Color(0xFF9DD1C5),
+        tertiaryContainer = Color(0xFF1A4F46),
+        textPrimary = Color(0xFFF0DFFF),
+        textSecondary = Color(0xFFD4C7DD),
         warning = Color(0xFFF9E2AF),
-        danger = Color(0xFFF38BA8),
     )
 
     val LightColors = TokenColors(
-        background = Color(0xFFEFF1F5),
-        surface = Color(0xFFE6E9EF),
-        surfaceElevated = Color(0xFFDCE0E8),
-        textPrimary = Color(0xFF4C4F69),
-        textSecondary = Color(0xFF6C6F85),
-        accent = Color(0xFF8839EF),
-        accentSecondary = Color(0xFF179299),
+        accent = Color(0xFF724DA0),
+        accentSecondary = Color(0xFF35675D),
+        background = Color(0xFFFFF7FF),
+        danger = Color(0xFFAC3149),
+        inverseSurface = Color(0xFF130A1E),
+        onTertiary = Color(0xFFE5FFF7),
+        onTertiaryContainer = Color(0xFF003730),
+        outline = Color(0xFF666268),
+        outlineVariant = Color(0xFFBAB4BB),
+        scrim = Color(0xFF000000),
         success = Color(0xFF40A02B),
+        surface = Color(0xFFE8E0E8),
+        surfaceBright = Color(0xFFFFFBFF),
+        surfaceContainer = Color(0xFFE8E0E8),
+        surfaceDim = Color(0xFFCBC4CC),
+        surfaceElevated = Color(0xFFDFD8DF),
+        surfaceHigh = Color(0xFFDFD8DF),
+        surfaceHighest = Color(0xFFD7CFD7),
+        surfaceLow = Color(0xFFF3EBF3),
+        tertiary = Color(0xFF35675D),
+        tertiaryContainer = Color(0xFFB8EDE0),
+        textPrimary = Color(0xFF3C2A52),
+        textSecondary = Color(0xFF534F55),
         warning = Color(0xFFDF8E1D),
-        danger = Color(0xFFD20F39),
     )
 
     object Radius {
@@ -110,6 +152,46 @@ internal object DesignTokens {
         const val OUTER_SHADOW_OFFSET_Y = 8f
         const val SATURATION_BOOST = 1.12f
         const val NOISE_ALPHA = 0.035f
+    }
+
+    /** 卡片/面板的视觉层次（内边距、间距、描边、顶部高光）。 */
+    object Surface {
+        const val CARD_PADDING = 16f
+        const val GAP = 14f
+        const val BORDER_WIDTH = 1f
+        const val BORDER_ALPHA = 0.22f
+        const val HIGHLIGHT_ALPHA = 0.05f
+    }
+
+    /** 三层投影：1=卡片，2=浮动底栏，3=弹层。 */
+    object Elevation {
+        object LEVEL1 {
+            const val SHADOW_Y = 2f
+            const val RADIUS = 8f
+            const val ALPHA = 0.3f
+        }
+        object LEVEL2 {
+            const val SHADOW_Y = 6f
+            const val RADIUS = 18f
+            const val ALPHA = 0.36f
+        }
+        object LEVEL3 {
+            const val SHADOW_Y = 12f
+            const val RADIUS = 32f
+            const val ALPHA = 0.44f
+        }
+    }
+
+    /** 浮动胶囊底栏几何（双端一致）。 */
+    object BottomBar {
+        const val HEIGHT = 62f
+        const val MARGIN_HORIZONTAL = 24f
+        const val MARGIN_BOTTOM = 24f
+        const val INDICATOR_INSET = 4f
+        const val ICON_SIZE = 24f
+        const val LABEL_SIZE = 11f
+        const val INDICATOR_ALPHA = 0.18f
+        const val SELECTED_SCALE = 1.08f
     }
 
     object Motion {

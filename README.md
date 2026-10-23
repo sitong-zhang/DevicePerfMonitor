@@ -2,20 +2,23 @@
 
 一个设备性能监控 App，Android 和 iOS 双端。核心是三块：全局悬浮窗看实时数据、四个核心硬件指标实时采集、本地综合评判。全程不联网，数据只存本地。
 
-两个端的界面是同一套设计：`design-tokens.json` 是唯一真源，色板用 Catppuccin Mocha/Latte。**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），不再叠液态玻璃——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
+两个端的界面是同一套设计：`design-tokens.json` 是唯一真源。色板由 Google 官方算法生成——种子色取 Catppuccin Mauve `#CBA6F7`，走 Material 3 Expressive（`SchemeExpressive` + SPEC_2025），深/浅各一套，共 24 个语义色（含 surface 层次、描边、tertiary）。生成工具在 `Tools/palette-gen/`，**构建期/离线跑一次，色值固化进 design-tokens.json，运行时零依赖**。
+
+**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），不再叠液态玻璃——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
 
 几条从一开始就定下的规矩：
 
 - 采不到的数据就显示"不可用"并说明原因，不拿估算值冒充
 - 液态玻璃（iOS）走开源库 LiquidGlassKit 的真实材质：iOS 26 上是原生 `glassEffect`（折射 + 高光 + 交互形变），低版本是库的纯 SwiftUI fallback，不是半透明纯色
-- Android 用 Material 3 Expressive：官方稳定组件（NavigationBar / SegmentedButton / Card）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API
+- Android 用 Material 3 Expressive：官方稳定组件（SegmentedButton / Card / Surface）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API
+- 视觉参数不写死：层次、描边、投影、底栏几何全部来自 design-tokens 的 `surface` / `elevation` / `bottomBar` 三段
 - 不用系统默认控件和默认蓝，按钮卡片开关滑块全部自己封装
 - 不申请 INTERNET 权限，没有任何联网代码路径
 - 平台做不到的功能，直接说做不到，降级方案写进文档
 
 ## 版本
 
-当前 **1.0.8**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.9**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -29,6 +32,18 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.9**：修掉悬浮窗挂不出来的 bug，重做配色与底栏，悬浮窗/实况窗指标收敛为三项。
+
+- **修掉「进过一次应用后悬浮窗再也挂不出来」**：服务里用一个裸 Boolean 记 `overlayVisible`，`hide()` 从不把它置回 false，于是退后台发的 ACTION_SHOW 全被 `if (overlayVisible) return` 吞掉。链路是 `MainActivity.onResume` 发 SHOW、随后 `MonitorApp` 发 HIDE，从第二次开始自动挂出就彻底失效。现在把可见性收敛成 `OverlayVisibilityState` 状态机，并用 JVM 单测钉死「hide → show 能再次挂出」这类状态 bug（新增 7 例）。
+- **顺带修掉 Android 12+ 的后台启动限制**：应用在**前台**时就把服务 ENSURE 起来，退后台只给已运行的 FGS 发命令——后台新建前台服务会被系统拒绝，这是自动挂出在 Android 12+ 上能真正生效的前提。同时删掉 `MainActivity.onStop` 里与 `MonitorApp` 打架的重复调用。
+- **配色换成官方算法生成**：种子色 Catppuccin Mauve，Material 3 Expressive（SPEC_2025），24 个语义色，层次 tone 阶梯手工拉开到 ~6 一档（M3 默认只差 2~3，深色下根本看不出层次）。生成脚本内做 WCAG 校验：正文在最差表面层上 ≥4.5、描边 ≥3.0，不达标直接失败退出。次要强调色固定为青色——M3 从紫色派生出的 tertiary 是黄绿，会和 success 绿撞色。
+- **控件有层次了**：以前卡片是零阴影、零描边、零高光的纯色块，现在统一加真投影 + 描边 + 顶部高光（参数来自 token）。`Theme.kt` 补齐了 `surfaceContainer*` / `tertiary*` / `outline*` 的 ColorScheme 映射——以前这些组件拿的是 MD3 默认色，不是我们的色板。
+- **底栏改成浮动胶囊**（双端同构）：圆角胶囊 + 投影 + 描边，选中态是滑动的 pill 指示器（Expressive fastSpatial 弹簧）。以前 Android 是系统 NavigationBar、iOS 是一块贴底的色块。
+- **悬浮窗与实况窗只显示三项**：温度 / 实时帧率 / 内存占用率。刷新率移到应用内看。iOS 没有机身温度的公开 API，实况窗的温度整行不渲染——不拿热状态档位换算冒充。Android 常驻通知同步成同一口径。
+- **删除区重做**：Android 删掉 Canvas 手画的铁桶，改用官方 Material Symbols 图标 + 圆形删除区（悬停放大转红 + 震动 +「松手关闭」）；**iOS 补上可见的删除区**——以前只有悬停判定逻辑，屏幕上什么都看不到，用户根本不知道拖到哪能删。
+- 页面固定高度改自适应下限；修掉设置页「Panel 16dp + 内部 16dp」实为 32dp 的重复内边距；首页补上被浮动底栏挡住的底部安全区；删掉零引用的死代码 `MetricChart.kt`。
+- 补 CI 漏洞：两个 workflow 的 `paths` 都漏了 `design-tokens.json`，改色板不触发任何一端构建。
 
 **1.0.8**：双端视觉重构 + 悬浮窗交互重做。
 
@@ -245,6 +260,7 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 | Shizuku | 13.1.5 | Apache-2.0 | 免 root 提权通道，可选。13.1.5 起 `Shizuku.newProcess` 私有化了，改成走公开 AIDL `IShizukuService.Stub.asInterface(...)` |
 | Charts (iOS) | 5.0.0+ | Apache-2.0 | iOS 图表，对应 Android 的 Vico。注意：这个库 4.0 起把包名和 SPM 产品名改成了 `DGCharts`，所以 import 和 pbxproj 里的 productName 都用 DGCharts |
 | LiquidGlassKit (iOS) | 2.1.0+ | MIT | iOS 液态玻璃（muhittincamdali/LiquidGlassKit，SPM）。iOS 26 走原生 `glassEffect`，低版本走库的纯 SwiftUI fallback。Android 端 1.0.8 起不用玻璃，走 Material 3 Expressive |
+| material-color-utilities | 5.0.1 | MIT | **仅离线工具，不进 APK、不进 CI**。Google 官方 Material Color Utilities 的 KMP 移植（com.materialkolor），在 `Tools/palette-gen/` 里生成 1.0.9 的色板，结果固化进 design-tokens.json。只依赖 kotlin-stdlib，零 Compose 依赖——用它而不是 material-kolor，是因为后者 5.0.1 依赖 material3 1.12.0-alpha03（alpha），会逼着升 alpha 依赖 |
 
 ## 采集指标对照表
 

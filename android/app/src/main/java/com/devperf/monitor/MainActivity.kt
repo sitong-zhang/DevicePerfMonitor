@@ -81,25 +81,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 从系统设置页返回：重新问一次权限，权限给了就把悬浮窗拉起来
+        // 从系统设置页返回：重新问一次权限，权限给了就把悬浮窗服务拉起来
         viewModel.refreshOverlayPermission()
         val settings = viewModel.settings.value
         if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this)) {
-            OverlayService.start(this)
+            // 关键：这里只 ENSURE（拉起服务、不显示窗口），不能 SHOW。
+            // Android 12+ 禁止后台新建前台服务，必须在还处于前台时把服务起好，
+            // 之后退后台由 MonitorApp 发 ACTION_SHOW 命令（对已运行的 FGS 发命令
+            // 不受限制），「退出应用自动挂出」才能真的生效。
+            // 显示/隐藏的时机统一由 MonitorApp 的前后台监听决定，这里不插手，
+            // 否则会和它的 ACTION_HIDE 打架（1.0.8 自动挂出失效的根因之一）。
+            OverlayService.ensure(this)
         }
         // 界面已经可见 → 本次启动算成功，清掉崩溃残留与轨迹
         BootTrace.markBooted()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // 退出应用（切后台 / 回桌面）→ 悬浮窗自动挂出，不需要用户手动打开（1.0.8）。
-        // onResume 已保证进应用时服务在跑；这里兜底覆盖「服务曾被系统杀掉」
-        // 「从通知栏隐藏过」等场景，start 幂等，重复调用无副作用。
-        val settings = viewModel.settings.value
-        if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this)) {
-            OverlayService.start(this)
-        }
     }
 
     override fun onDestroy() {

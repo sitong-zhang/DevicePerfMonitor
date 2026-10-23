@@ -5,6 +5,9 @@ on:
     branches: [main, master]
     paths:
       - "android/**"
+      # design-tokens.json 在仓库根：Android 的 DesignTokens.kt 由它在构建期生成，
+      # 改了色板/参数必须触发构建，否则「token 改了但包没重出」
+      - "design-tokens.json"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 

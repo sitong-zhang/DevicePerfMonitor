@@ -69,14 +69,16 @@ class CollectionService : android.app.Service() {
             repository.snapshot
                 .distinctUntilChanged { a, b -> a.timestampMs / 2000L == b.timestampMs / 2000L }
                 .collect { snapshot ->
+                    // 1.0.9 起与悬浮窗 / iOS 实况窗同一口径：温度 / 实时帧率 / 内存占用率。
+                    // （原来是 FPS + CPU 温度 + 电池温度，那两个温度是已经被移出界面的旧指标）
                     val fps = snapshot.display.fps.value
-                    val cpuTemp = snapshot.cpu.temperatureC.value
-                    val battTemp = snapshot.battery.temperatureC.value
+                    val deviceTemp = snapshot.thermal.deviceTempC.value
+                    val memory = snapshot.memory.usageRatio.value
                     // 采不到的段直接不进通知，不留「—」占位
                     val parts = buildList {
+                        deviceTemp?.let { add("温度 ${Format.temp(it)}") }
                         fps?.let { add("FPS ${Format.value(it, 0)}") }
-                        cpuTemp?.let { add("CPU ${Format.temp(it)}") }
-                        battTemp?.let { add("电池 ${Format.temp(it)}") }
+                        memory?.let { add("内存 ${Format.value(it, 0)}%") }
                     }
                     val text = parts.ifEmpty { listOf("采集中") }.joinToString(" · ")
                     runCatching {

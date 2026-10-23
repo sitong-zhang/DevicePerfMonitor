@@ -1,40 +1,68 @@
 {
   "$comment": "双端唯一真源 (single source of truth)。Android 由 app/build.gradle.kts 的 generateDesignTokens 任务生成为 DesignTokens.kt；iOS 由 ios/Tools/generate_tokens.py 生成为 DesignTokens.generated.swift。禁止在业务代码中硬编码色值。",
   "name": "DevicePerfMonitor Design Tokens",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "palette": {
     "dark": {
-      "name": "Catppuccin Mocha",
-      "url": "https://github.com/catppuccin/catppuccin",
+      "name": "Material 3 Expressive（种子色 Catppuccin Mauve #CBA6F7）",
+      "url": "https://github.com/material-foundation/material-color-utilities",
       "license": "MIT",
       "semantic": {
-        "background": "#1E1E2E",
-        "surface": "#313244",
-        "surfaceElevated": "#45475A",
-        "textPrimary": "#CDD6F4",
-        "textSecondary": "#A6ADC8",
-        "accent": "#CBA6F7",
-        "accentSecondary": "#94E2D5",
+        "background": "#17101F",
+        "surface": "#2C2535",
+        "surfaceElevated": "#372F40",
+        "textPrimary": "#F0DFFF",
+        "textSecondary": "#D4C7DD",
+        "accent": "#DEC0FF",
+        "accentSecondary": "#9DD1C5",
         "success": "#A6E3A1",
         "warning": "#F9E2AF",
-        "danger": "#F38BA8"
+        "danger": "#FD6F85",
+        "surfaceLow": "#221A2A",
+        "surfaceContainer": "#2C2535",
+        "surfaceHigh": "#372F40",
+        "surfaceHighest": "#433A4B",
+        "surfaceDim": "#0F0817",
+        "surfaceBright": "#51485A",
+        "tertiary": "#9DD1C5",
+        "onTertiary": "#003730",
+        "tertiaryContainer": "#1A4F46",
+        "onTertiaryContainer": "#BEF3E6",
+        "outline": "#9D92A6",
+        "outlineVariant": "#5F5668",
+        "scrim": "#000000",
+        "inverseSurface": "#FFF7FF"
       }
     },
     "light": {
-      "name": "Catppuccin Latte",
+      "name": "Material 3 Expressive（种子色 Catppuccin Mauve #CBA6F7）",
       "url": "https://github.com/catppuccin/catppuccin",
       "license": "MIT",
       "semantic": {
-        "background": "#EFF1F5",
-        "surface": "#E6E9EF",
-        "surfaceElevated": "#DCE0E8",
-        "textPrimary": "#4C4F69",
-        "textSecondary": "#6C6F85",
-        "accent": "#8839EF",
-        "accentSecondary": "#179299",
+        "background": "#FFF7FF",
+        "surface": "#E8E0E8",
+        "surfaceElevated": "#DFD8DF",
+        "textPrimary": "#3C2A52",
+        "textSecondary": "#534F55",
+        "accent": "#724DA0",
+        "accentSecondary": "#35675D",
         "success": "#40A02B",
         "warning": "#DF8E1D",
-        "danger": "#D20F39"
+        "danger": "#AC3149",
+        "surfaceLow": "#F3EBF3",
+        "surfaceContainer": "#E8E0E8",
+        "surfaceHigh": "#DFD8DF",
+        "surfaceHighest": "#D7CFD7",
+        "surfaceDim": "#CBC4CC",
+        "surfaceBright": "#FFFBFF",
+        "tertiary": "#35675D",
+        "onTertiary": "#E5FFF7",
+        "tertiaryContainer": "#B8EDE0",
+        "onTertiaryContainer": "#003730",
+        "outline": "#666268",
+        "outlineVariant": "#BAB4BB",
+        "scrim": "#000000",
+        "inverseSurface": "#130A1E"
       }
     }
   },
@@ -66,6 +94,43 @@
     "saturationBoost": 1.12,
     "noiseAlpha": 0.035,
     "$comment": "iOS 液态玻璃材质参数（LiquidGlassKit 驱动）：背景透明度 18%~28% 随告警态自适应，柔和弥散外阴影。1.0.8 起仅 iOS 侧使用——Android 端已换用 Material 3 Expressive 视觉（theme/Theme.kt），不再自绘玻璃。"
+  },
+  "surface": {
+    "cardPadding": 16,
+    "gap": 14,
+    "borderWidth": 1,
+    "borderAlpha": 0.22,
+    "highlightAlpha": 0.05,
+    "$comment": "卡片/面板的视觉层次（1.0.9）。以前控件零描边零高光、内边距各页各写一份（Settings 还叠成了 32），现在统一由这里给出：卡片内边距、卡片间距、描边宽度与浓度、顶部高光浓度。"
+  },
+  "elevation": {
+    "level1": {
+      "shadowY": 2,
+      "radius": 8,
+      "alpha": 0.3
+    },
+    "level2": {
+      "shadowY": 6,
+      "radius": 18,
+      "alpha": 0.36
+    },
+    "level3": {
+      "shadowY": 12,
+      "radius": 32,
+      "alpha": 0.44
+    },
+    "$comment": "三层投影：1=卡片，2=浮动底栏，3=弹层/拖拽中的悬浮窗。以前一律零阴影，界面因此完全没有层次。"
+  },
+  "bottomBar": {
+    "height": 62,
+    "marginHorizontal": 24,
+    "marginBottom": 24,
+    "indicatorInset": 4,
+    "iconSize": 24,
+    "labelSize": 11,
+    "indicatorAlpha": 0.18,
+    "selectedScale": 1.08,
+    "$comment": "浮动胶囊底栏几何（双端一致）：悬浮在内容之上、左右下留边距，圆角用 radius.pill。选中态是滑动的 pill 指示器，动效走 motion.spring.fastSpatial。"
   },
   "motion": {
     "enter": {

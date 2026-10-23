@@ -91,7 +91,7 @@ class MonitorApp : Application() {
             override fun onActivityResumed(activity: android.app.Activity) {
                 resumed += 1
                 if (resumed == 1) {
-                    runCatching { OverlayService.hide(this@MonitorApp) }
+                    hideOverlayOnEnter()
                 }
             }
 
@@ -119,7 +119,28 @@ class MonitorApp : Application() {
         })
     }
 
-    /** 退到后台：开关开着且权限已给才挂悬浮窗，否则安静地什么都不做。 */
+    /**
+     * 回到前台：收起悬浮窗。
+     *
+     * 开关关着时不发命令——否则服务没在跑的话 `startService` 会把它拉起来，
+     * 随即又被 `observeSettings` 的 `stopSelf()` 停掉，白白启停一次。
+     */
+    private fun hideOverlayOnEnter() {
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            runCatching {
+                if (settingsRepository.settings.first().overlayEnabled) {
+                    OverlayService.hide(this@MonitorApp)
+                }
+            }.onFailure { Log.w("MonitorApp", "回到应用收起悬浮窗失败", it) }
+        }
+    }
+
+    /**
+     * 退到后台：开关开着且权限已给才挂悬浮窗，否则安静地什么都不做。
+     *
+     * 前提是服务已在应用前台时被 `OverlayService.ensure` 拉起（Android 12+
+     * 禁止后台新建前台服务），这里只是给已运行的 FGS 发一条 SHOW 命令。
+     */
     private fun showOverlayOnExit() {
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             runCatching {

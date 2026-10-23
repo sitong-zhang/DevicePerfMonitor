@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -119,7 +120,7 @@ fun MetricDetailScreen(
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp),
+                .heightIn(min = 112.dp),
             shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
         ) {
             Row(
@@ -203,7 +204,7 @@ fun MetricDetailScreen(
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp),
+                .heightIn(min = 200.dp),
             shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
         ) {
             // 切换显示方式时交叉淡入，不要硬切

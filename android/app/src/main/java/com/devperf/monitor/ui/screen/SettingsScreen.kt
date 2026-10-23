@@ -103,7 +103,6 @@ fun SettingsScreen(
             GlassSectionHeader(text = "全局悬浮窗")
             GlassPanel {
                 Column(
-                    modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     // 主开关：打开时无权限先引导
@@ -219,7 +218,6 @@ fun SettingsScreen(
             GlassSectionHeader(text = "数据采集")
             GlassPanel {
                 Column(
-                    modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -264,7 +262,6 @@ fun SettingsScreen(
             GlassSectionHeader(text = "告警")
             GlassPanel {
                 Column(
-                    modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -337,7 +334,6 @@ fun SettingsScreen(
             GlassSectionHeader(text = "特权指标")
             GlassPanel {
                 Column(
-                    modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     Text(
@@ -376,7 +372,6 @@ fun SettingsScreen(
             GlassSectionHeader(text = "外观")
             GlassPanel {
                 Column(
-                    modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     Text(
@@ -405,7 +400,6 @@ fun SettingsScreen(
             GlassSectionHeader(text = "关于")
             GlassPanel {
                 Column(
-                    modifier = Modifier.padding(DesignTokens.Spacing.S16.dp),
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                 ) {
                     // 版本号读 BuildConfig：与 versionName 永远一致，发版只改一处

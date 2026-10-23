@@ -38,18 +38,29 @@ abstract class GenerateDesignTokensTask : DefaultTask() {
         val blur = json["blur"] as Map<*, *>
         val glass = json["glass"] as Map<*, *>
         val motion = json["motion"] as Map<*, *>
+        val surface = json["surface"] as Map<*, *>
+        val elevation = json["elevation"] as Map<*, *>
+        val bottomBar = json["bottomBar"] as Map<*, *>
         val gesture = json["gesture"] as Map<*, *>
         val number = json["number"] as Map<*, *>
         val health = json["health"] as Map<*, *>
 
-        val colorKeys = listOf(
-            "background", "surface", "surfaceElevated", "textPrimary", "textSecondary",
-            "accent", "accentSecondary", "success", "warning", "danger",
-        )
-
         fun semantic(themeKey: String) = (palette[themeKey] as Map<*, *>)["semantic"] as Map<*, *>
 
-        fun colorArgs(themeKey: String): String = colorKeys.joinToString(",\n        ") { key ->
+        /**
+         * 语义色 key：**遍历真源**，不硬编码列表。
+         *
+         * 以前写死 10 个 key，1.0.9 新增 14 个层次/描边色后，漏改这里的话新色会
+         * 静默丢失（生成物里没有、业务代码引用就编译不过）。改成遍历
+         * `palette.*.semantic` 之后，往 design-tokens.json 加色即可，生成器不用动。
+         * （以 `$` 开头的 key 是注释，跳过。）
+         */
+        fun colorKeys(): List<String> =
+            semantic("dark").keys.filterIsInstance<String>()
+                .filter { !it.startsWith("$") }
+                .sorted()
+
+        fun colorArgs(themeKey: String): String = colorKeys().joinToString(",\n        ") { key ->
             val hex = (semantic(themeKey)[key] as String).removePrefix("#").uppercase()
             "$key = Color(0xFF$hex)"
         }
@@ -148,18 +159,9 @@ package com.devperf.monitor.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** 语义色板：深色 = Catppuccin Mocha，浅色 = Catppuccin Latte。 */
+/** 语义色板：由 design-tokens.json 的 palette.*.semantic 生成（字段随真源走）。 */
 internal data class TokenColors(
-    val background: Color,
-    val surface: Color,
-    val surfaceElevated: Color,
-    val textPrimary: Color,
-    val textSecondary: Color,
-    val accent: Color,
-    val accentSecondary: Color,
-    val success: Color,
-    val warning: Color,
-    val danger: Color,
+${colorKeys().joinToString("\n") { "    val $it: Color," }}
 )
 
 /** 动效曲线：cubic-bezier 四参数 + 时长（ms）。 */
@@ -208,6 +210,21 @@ ${consts(blur)}
 
     object Glass {
 ${nestedConsts(glass)}
+    }
+
+    /** 卡片/面板的视觉层次（内边距、间距、描边、顶部高光）。 */
+    object Surface {
+${consts(surface)}
+    }
+
+    /** 三层投影：1=卡片，2=浮动底栏，3=弹层。 */
+    object Elevation {
+${nestedConsts(elevation)}
+    }
+
+    /** 浮动胶囊底栏几何（双端一致）。 */
+    object BottomBar {
+${consts(bottomBar)}
     }
 
     object Motion {

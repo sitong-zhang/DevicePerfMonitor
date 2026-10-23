@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +40,15 @@ import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 
 /**
- * 悬浮窗数据：只带四个核心指标。
+ * 悬浮窗数据：核心指标 + 健康分所需的辅助量。
  *
  * 之前塞了六项（含电量和 CPU），结果一半机型读不到，悬浮窗里一排「—」，
- * 悬浮窗本来就看一眼，占着位置还没用。现在只保留每台机器都真实可读的这四个。
+ * 悬浮窗本来就看一眼，占着位置还没用。
+ *
+ * 1.0.9 起悬浮窗**只显示三项**：内存占用率 / 温度 / 实时帧率（用户要求：
+ * 刷新率移到应用内看，悬浮窗和实况窗都不要它）。[refreshHz] 仍然保留在数据里，
+ * 因为综合评判的流畅度 = 帧率 ÷ 刷新率 达成率要用它算，**只是不参与悬浮窗显示**
+ * ——所以下面的 cells 构建里看不到它，不是漏了。
  */
 data class OverlayData(
     val memoryRatio: Metric<Float>,
@@ -69,9 +75,10 @@ private data class GridCell(val id: CoreMetricId, val value: Float)
 /**
  * 悬浮窗内容：三态（卡片 / 纯数字 / 收起），单击循环切换。
  *
- * - CARD：默认形态。左侧综合评判小环 + 右侧四个指标 2×2。一退出应用就稳定
- *   显示这张卡片，不自动变形（用户原话：「等它显示那张卡片，不要动它」）；
- * - NUMBERS：只要卡片上的数字——去掉卡片容器、阴影、小环，四个数字横排；
+ * - CARD：默认形态。左侧综合评判小环 + 右侧三项指标竖排（温度 / 实时帧率 /
+ *   内存占用率）。一退出应用就稳定显示这张卡片，不自动变形
+ *   （用户原话：「等它显示那张卡片，不要动它」）；
+ * - NUMBERS：只要卡片上的数字——去掉卡片容器、阴影、小环，三个数字横排；
  * - COLLAPSED：收成一条竖线，点一下恢复完整卡片。
  *
  * 形态切换的形变动效在内容层完成（[AnimatedContent] + Expressive 弹簧），
@@ -128,7 +135,7 @@ fun OverlayContent(
     }
 }
 
-/** 卡片态：完整内容（小环 + 2×2 指标）。告警时容器整体转危险色。 */
+/** 卡片态：完整内容（小环 + 三项指标竖排）。告警时容器整体转危险色。 */
 @Composable
 private fun CardContent(
     state: OverlayController.UiState,
@@ -186,7 +193,11 @@ private fun HealthBadge(health: FocusedHealth.Result) {
 }
 
 /**
- * 四个指标按 2×2 排列。只放采得到的，采不到的直接不进列表。
+ * 悬浮窗显示的三项：内存占用率 / 温度 / 实时帧率，竖排三行。
+ *
+ * 1.0.9 起去掉刷新率（用户要求它只留在应用内）。剩三项再排 2×2 会空出一格，
+ * 所以改成单列：标签在左、数值右对齐，扫一眼更整齐。
+ * 只放采得到的，采不到的直接不进列表（悬浮窗寸土寸金，不放占位符）。
  */
 @Composable
 private fun MetricGrid(
@@ -197,7 +208,7 @@ private fun MetricGrid(
     val cells = buildList<GridCell> {
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
-        data.refreshHz.value?.let { add(GridCell(CoreMetricId.REFRESH_RATE, it)) }
+        // 刷新率不进悬浮窗（1.0.9）：只用于综合评判的流畅度计算
         data.fps.value?.let { add(GridCell(CoreMetricId.FPS, it)) }
     }
 
@@ -216,35 +227,31 @@ private fun MetricGrid(
         modifier = modifier,
         verticalArrangement = Arrangement.SpaceEvenly,
     ) {
-        cells.chunked(2).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                row.forEach { cell -> MetricCell(cell, intervalMs, Modifier.weight(1f)) }
-                // 奇数个时补一个占位，保证两列对齐
-                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-            }
-        }
+        cells.forEach { cell -> MetricRow(cell, intervalMs) }
     }
 }
 
+/** 一行指标：标签靠左、数值靠右对齐。 */
 @Composable
-private fun MetricCell(
+private fun MetricRow(
     cell: GridCell,
     intervalMs: Long,
-    modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
     val accent = metricColor(cell.id.source.colorKey)
-    Column(
-        modifier = modifier.padding(horizontal = 2.dp),
-        horizontalAlignment = Alignment.Start,
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = cell.id.label,
             style = MaterialTheme.typography.labelSmall,
             color = colors.textSecondary,
+            // 标签不抢数值的位置，超出就截断（悬浮窗宽度有限）
+            modifier = Modifier.weight(1f, fill = false),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Row(verticalAlignment = Alignment.Bottom) {
             AnimatedNumber(
@@ -278,7 +285,7 @@ private fun NumbersStrip(
     val cells = buildList<GridCell> {
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
-        data.refreshHz.value?.let { add(GridCell(CoreMetricId.REFRESH_RATE, it)) }
+        // 刷新率不进悬浮窗（1.0.9）：只用于综合评判的流畅度计算
         data.fps.value?.let { add(GridCell(CoreMetricId.FPS, it)) }
     }
 

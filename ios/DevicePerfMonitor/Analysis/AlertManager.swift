@@ -134,13 +134,15 @@ final class AlertManager: ObservableObject {
     private func updateLiveActivity(snapshot: DeviceSnapshot, overlay: OverlayData?) {
         guard let activity else { return }
         let fps = overlay?.fps.value ?? snapshot.display.fps.value
-        let refresh = overlay?.refreshHz.value ?? snapshot.display.refreshRateHz.value
         let memory = overlay?.memoryRatio.value ?? snapshot.memory.usageRatio.value
+        // 温度：iOS 没有机身温度公开 API，这里常态是 nil → 实况窗整行不显示，
+        // 不拿热状态档位换算冒充（沿项目「采不到的不占位」原则）
+        let temp = overlay?.deviceTemp.value ?? snapshot.thermal.deviceTempC.value
 
         let state = MonitorActivityAttributes.ContentState(
             fps: fps.map { Double($0) },
-            refreshHz: refresh.map { Double($0) },
             memoryRatio: memory.map { Double($0) },
+            deviceTempC: temp.map { Double($0) },
             alert: alertActive,
             timestampMs: snapshot.timestampMs
         )

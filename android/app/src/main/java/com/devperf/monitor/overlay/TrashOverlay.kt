@@ -7,24 +7,30 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.ui.theme.DevicePerfTheme
 import com.devperf.monitor.ui.theme.LocalTokenColors
@@ -129,63 +135,82 @@ class TrashController(
 
     private companion object {
         const val TAG = "TrashController"
+        /** 窗口尺寸：圆形徽标 + 上下留白（容纳"松手关闭"文字）。 */
         const val TRASH_SIZE_DP = 76f
     }
 }
 
-/** 垃圾桶图标：纯自绘（盖子 + 桶身 + 提手），激活态放大并变 danger 色。 */
+/** 圆形删除区直径。 */
+private const val TRASH_BADGE_DP = 56f
+
+/** 悬停时整体放大到的倍数。 */
+private const val TRASH_ACTIVE_SCALE = 1.12f
+
+/**
+ * 删除区（拖动悬浮窗到屏幕底部时出现，松手即关闭）。
+ *
+ * 1.0.9 重写：以前是 Canvas 手画的铁桶（盖子 + 桶身 + 两道竖纹 + 提手弧），
+ * 比例和线宽全靠手调，换个屏幕密度就走形。现在按成熟开源实现的范式来做：
+ * - 图标用**官方 Material Symbols**（Icons.Filled.Delete），不再自绘路径；
+ * - 圆形容器 + 描边 + 投影，悬停时整体放大、转 danger 色，并给「松手关闭」文字；
+ * - 放大/变色走 Expressive 的 fastSpatial 弹簧（与悬浮窗三态同一条曲线）。
+ */
 @Composable
 private fun TrashIcon(active: Boolean) {
     val colors = LocalTokenColors.current
-    val tint = if (active) colors.danger else colors.textSecondary
-    DevicePerfTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .scale(if (active) 1.12f else 1f)
-                .drawBehind {
-                    val w = size.width
-                    val h = size.height
-                    val stroke = w * 0.055f
-                    // 桶身（圆角矩形，向下略收）
-                    drawRoundRect(
-                        color = tint,
-                        topLeft = Offset(w * 0.26f, h * 0.34f),
-                        size = Size(w * 0.48f, h * 0.48f),
-                        cornerRadius = CornerRadius(w * 0.08f),
-                        style = Stroke(width = stroke),
-                    )
-                    // 桶身竖纹
-                    for (i in 0..1) {
-                        val x = w * (0.40f + i * 0.20f)
-                        drawLine(
-                            color = tint.copy(alpha = 0.7f),
-                            start = Offset(x, h * 0.42f),
-                            end = Offset(x, h * 0.74f),
-                            strokeWidth = stroke * 0.6f,
-                        )
-                    }
-                    // 盖子
-                    drawLine(
-                        color = tint,
-                        start = Offset(w * 0.18f, h * 0.30f),
-                        end = Offset(w * 0.82f, h * 0.30f),
-                        strokeWidth = stroke,
-                    )
-                    // 提手
-                    drawArc(
-                        color = tint,
-                        startAngle = 180f,
-                        sweepAngle = 180f,
-                        useCenter = false,
-                        topLeft = Offset(w * 0.38f, h * 0.14f),
-                        size = Size(w * 0.24f, h * 0.16f),
-                        style = Stroke(width = stroke * 0.8f),
-                    )
-                },
-            contentAlignment = Alignment.Center,
+    val scale by animateFloatAsState(
+        targetValue = if (active) TRASH_ACTIVE_SCALE else 1f,
+        animationSpec = spring(
+            dampingRatio = DesignTokens.Motion.Spring.FAST_SPATIAL_DAMPING,
+            stiffness = DesignTokens.Motion.Spring.FAST_SPATIAL_STIFFNESS,
+        ),
+        label = "trashScale",
+    )
+    val container by animateColorAsState(
+        targetValue = if (active) {
+            colors.danger
+        } else {
+            colors.surfaceContainer.copy(alpha = 0.92f)
+        },
+        label = "trashContainer",
+    )
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
+            Surface(
+                modifier = Modifier
+                    .size(TRASH_BADGE_DP.dp)
+                    .scale(scale)
+                    .shadow(
+                        elevation = DesignTokens.Elevation.LEVEL2.SHADOW_Y.dp,
+                        shape = CircleShape,
+                        clip = false,
+                    ),
+                shape = CircleShape,
+                color = container,
+                border = BorderStroke(
+                    width = DesignTokens.Surface.BORDER_WIDTH.dp,
+                    color = if (active) colors.danger else colors.outline.copy(
+                        alpha = DesignTokens.Surface.BORDER_ALPHA,
+                    ),
+                ),
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "拖到这里关闭悬浮窗",
+                        tint = if (active) colors.background else colors.textSecondary,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
             if (active) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "松手关闭",
                     color = colors.danger,

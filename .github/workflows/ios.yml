@@ -5,6 +5,9 @@ on:
     branches: [main, master]
     paths:
       - "ios/**"
+      # design-tokens.json 在仓库根：iOS 的 DesignTokens.generated.swift 由它生成，
+      # 改了色板/参数必须触发构建（同上，1.0.9 补的洞）
+      - "design-tokens.json"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
 
