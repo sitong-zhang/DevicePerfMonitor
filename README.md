@@ -14,7 +14,7 @@
 
 ## 版本
 
-当前 **1.0.6**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.7**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -28,6 +28,19 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.7**：修掉悬浮窗服务创建阶段即崩的问题。
+
+- 1.0.6 补 ViewTree 宿主时调用顺序写反了：先推 lifecycle 到 CREATED 再
+  `performRestore`，而 savedstate 1.4.0 的 `SavedStateRegistryImpl.performAttach`
+  要求宿主仍处于 INITIALIZED（Recreator 必须在 ON_CREATE 派发前注册），
+  反了直接抛 `IllegalStateException: Restarter must be created only during
+  owner's initialization stage`——服务 onCreate 就崩，悬浮窗永远出不来。
+  改成与 ComponentActivity 一致：先 `performRestore(null)`，再推 CREATED。
+- 新增仓库第一个 JVM 单元测试 `ServiceViewTreeOwnerTest`：把宿主的调用契约
+  （onCreate 不抛且到 CREATED、onStartCommand 幂等、onDestroy 到 DESTROYED）
+  钉住。三轮悬浮窗崩溃都是「编译通过、真机才炸」的类型，以后这类顺序 bug
+  在本地就能拦住。
 
 **1.0.6**：修掉悬浮窗 ComposeView 挂窗口即崩的问题。
 

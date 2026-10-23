@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 8
+        versionName = "1.0.7"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -105,6 +105,10 @@ android {
             "/META-INF/DEPENDENCIES",
         )
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -123,6 +127,11 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
+
+    testImplementation(libs.junit)
+    // ServiceViewTreeOwnerTest 需要给 LifecycleRegistry 的主线程校验设委托
+    testImplementation(libs.androidx.arch.core.runtime)
+    testImplementation(libs.androidx.arch.core.common)
 
     // 图表（Apache-2.0）
     implementation(libs.vico.compose.m3)

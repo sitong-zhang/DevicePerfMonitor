@@ -45,9 +45,14 @@ class ServiceViewTreeOwner : SavedStateRegistryOwner {
 
     /** [OverlayService.onCreate] 时调用（服务实例只调一次）。 */
     fun onCreate() {
-        // 先到 CREATED 再 performRestore：实现要求宿主低于 STARTED，且 attach 需要 CREATED
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        // 顺序不能反：savedstate 1.4.0 的 SavedStateRegistryImpl.performAttach 要求
+        // 宿主 lifecycle 仍处于 INITIALIZED（Recreator 必须在 ON_CREATE 派发前注册），
+        // 否则抛 IllegalStateException("Restarter must be created only during
+        // owner's initialization stage")——服务直接创建失败。
+        // performRestore 内部会自动 performAttach，所以先 restore、后推 CREATED
+        // （与 ComponentActivity 的顺序一致）。
         savedStateController.performRestore(null)
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
     }
 
     /** [OverlayService.onStartCommand] 时调用；START_STICKY 重进时幂等。 */
