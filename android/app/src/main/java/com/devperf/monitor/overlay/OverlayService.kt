@@ -47,8 +47,11 @@ import kotlinx.coroutines.launch
  * - 前台常驻通知提供「显示/隐藏」与「停止」动作，双击隐藏后可从此恢复；
  * - 采集仓库由 [MonitorApp] 持有，悬浮窗复用同一实例，不重复采集。
  *
- * 注意：ComposeView 由 Service 托管，没有 ViewTreeLifecycleOwner，
- * 因此统一使用 runtime 的 collectAsState（不用 collectAsStateWithLifecycle）。
+ * 宿主说明：Compose 1.11 起 ComposeView 挂窗口时必须能从 ViewTree 取到
+ * LifecycleOwner + SavedStateRegistryOwner（见 [ServiceViewTreeOwner]），
+ * 这里由 Service 自己提供；悬浮窗内容仍用 runtime 的 collectAsState——
+ * 合成随窗口 attach/detach 创建与销毁（DisposeOnDetachedFromWindowOrReleasedFromPool），
+ * 不走宿主的可见性回调。
  */
 class OverlayService : android.app.Service() {
 
@@ -81,15 +84,28 @@ class OverlayService : android.app.Service() {
     private val overlayRecomposer = Recomposer(overlayContext)
     private var recomposerJob: kotlinx.coroutines.Job? = null
 
+    /**
+     * ComposeView 挂窗口所需的 ViewTree 宿主（LifecycleOwner + SavedStateRegistryOwner）。
+     * Service 没有 Activity/Fragment 宿主，Compose 1.11 的 resolveComposeViewContext
+     * 缺这两个 Owner 会直接抛，见 [ServiceViewTreeOwner]。
+     * 生命周期由本 Service 转发；悬浮窗与垃圾桶两个 ComposeView 共用。
+     */
+    private val viewTreeOwner = ServiceViewTreeOwner()
+
     override fun onCreate() {
         super.onCreate()
+        viewTreeOwner.onCreate()
         repository = (application as MonitorApp).metricsRepository
         settingsRepository = (application as MonitorApp).settingsRepository
         createChannel()
         startForegroundSafely(buildNotification())
         // 确保采集在跑（悬浮窗数据源）；幂等
         runCatching { repository.start() }
-        controller = OverlayController(this, getSystemService(WindowManager::class.java)) {
+        controller = OverlayController(
+            this,
+            getSystemService(WindowManager::class.java),
+            viewTreeOwner,
+        ) {
             // 垃圾桶关闭：更新设置并停止服务
             serviceScope.launch {
                 runCatching { settingsRepository.setOverlayEnabled(false) }
@@ -105,6 +121,7 @@ class OverlayService : android.app.Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        viewTreeOwner.onStartCommand()
         when (intent?.action) {
             ACTION_SHOW -> showOverlay()
             ACTION_HIDE -> controller?.hide()
@@ -127,6 +144,8 @@ class OverlayService : android.app.Service() {
         recomposerJob?.cancel()
         recomposerJob = null
         runCatching { overlayRecomposer.close() }
+        // 窗口先摘除（合成随 detach 销毁），再销毁宿主
+        viewTreeOwner.onDestroy()
         super.onDestroy()
     }
 
@@ -147,6 +166,10 @@ class OverlayService : android.app.Service() {
     private fun createOverlayView(): ComposeView {
         val controllerRef = controller ?: error("controller 未初始化")
         return ComposeView(this).apply {
+            // 挂窗口前补 ViewTree 宿主：Compose 1.11 的 resolveComposeViewContext 缺
+            // LifecycleOwner / SavedStateRegistryOwner 会直接抛（挂窗口即崩）。
+            // 必须在 controller.show() → addView 之前设置。
+            viewTreeOwner.attachTo(this)
             // 悬浮窗由 Service 经 WindowManager 添加，没有 Activity/Fragment 宿主，
             // ComposeView 默认会去找 ViewTreeLifecycleOwner，找不到就直接抛
             // IllegalStateException("ViewTreeLifecycleOwner not found")——悬浮窗永远出不来。

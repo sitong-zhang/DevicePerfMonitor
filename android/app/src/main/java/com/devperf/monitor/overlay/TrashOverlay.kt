@@ -40,6 +40,8 @@ import com.devperf.monitor.ui.theme.DesignTokens
 class TrashController(
     private val context: Context,
     private val windowManager: WindowManager,
+    /** ComposeView 挂窗口所需的 ViewTree 宿主（Service 提供，与悬浮窗共用）。 */
+    private val viewTreeOwner: ServiceViewTreeOwner,
 ) {
     private var view: View? = null
     private var params: WindowManager.LayoutParams? = null
@@ -50,6 +52,9 @@ class TrashController(
         val v = ComposeViewFactory.create(context) {
             TrashIcon(active = active)
         }
+        // 垃圾桶也是 Service 托管的裸 ComposeView：挂窗口前补宿主，
+        // 否则 Compose 1.11 一挂窗口就抛（同悬浮窗，见 ServiceViewTreeOwner）。
+        viewTreeOwner.attachTo(v)
         val (sw, sh) = screenSize()
         val sizePx = (TRASH_SIZE_DP * context.resources.displayMetrics.density).toInt()
         val lp = WindowManager.LayoutParams(

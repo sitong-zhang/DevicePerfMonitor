@@ -34,6 +34,8 @@ import kotlinx.coroutines.launch
 class OverlayController(
     private val context: Context,
     private val windowManager: WindowManager,
+    /** ComposeView 挂窗口所需的 ViewTree 宿主（由 Service 提供，垃圾桶窗口共用）。 */
+    private val viewTreeOwner: ServiceViewTreeOwner,
     private val onRequestClose: () -> Unit,
 ) {
 
@@ -88,7 +90,7 @@ class OverlayController(
             }
         view = v
         params = lp
-        trash = TrashController(context, windowManager)
+        trash = TrashController(context, windowManager, viewTreeOwner)
         _uiState.value = _uiState.value.copy(visible = true)
         applyLayout(animated = false)
     }

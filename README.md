@@ -14,7 +14,7 @@
 
 ## 版本
 
-当前 **1.0.5**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.6**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -28,6 +28,19 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.6**：修掉悬浮窗 ComposeView 挂窗口即崩的问题。
+
+- Compose 1.11 起，`AbstractComposeView` 挂窗口时会走 `resolveComposeViewContext()`，
+  强制要求 ViewTree 上取到 `LifecycleOwner` 和 `SavedStateRegistryOwner`，缺任何一个
+  直接抛 `IllegalStateException: Composed into the View which doesn't propagate
+  ViewTreeLifecycleOwner!`。1.0.5 只补了帧时钟那一半，Service 自跑 Recomposer 虽然设了
+  `setParentCompositionContext`，但父合成上下文不带宿主信息，同样机型上一起床就崩。
+- 新增 `overlay/ServiceViewTreeOwner.kt`：Service 自实现的 ViewTree 宿主，
+  生命周期由 Service 转发（onCreate→CREATED、onStartCommand→RESUMED、onDestroy→DESTROY），
+  savedState 只做占位（悬浮窗状态在 OverlayController 的 StateFlow 里，不走 Bundle）。
+- 悬浮窗和垃圾桶两个 ComposeView 都在 addView 之前挂上宿主——垃圾桶窗口同样是
+  裸 ComposeView，拖动唤出时也会中同样的招。
 
 **1.0.5**：修掉悬浮窗服务一起床就崩的问题。
 
