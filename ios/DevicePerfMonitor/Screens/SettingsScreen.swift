@@ -48,7 +48,7 @@ struct SettingsScreen: View {
                 GlassSectionTitle(text: "采集")
                 GlassPanel {
                     VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
-                        ToggleRow(title: "后台采集", subtitle: "退后台后继续采样（系统可能限制频率）", isOn: $backgroundCollection)
+                        ToggleRow(title: "后台采集", subtitle: "退后台后按系统调度周期性唤醒采样、刷新灵动岛数据（iOS 不允许后台常驻，唤醒时机由系统决定，通常十几分钟到几小时）", isOn: $backgroundCollection)
                         VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
                             Text("刷新模式")
                                 .font(Typography.labelLarge(.medium))
@@ -162,6 +162,11 @@ struct SettingsScreen: View {
         .background(colors.background.ignoresSafeArea())
         .onChange(of: refreshModeRaw) { newValue in
             MetricsRepository.shared.setRefreshMode(RefreshMode(rawValue: newValue) ?? .realtime)
+        }
+        .onChange(of: backgroundCollection) { newValue in
+            // 1.0.11：这个开关以前只存 UserDefaults、没有任何代码读（死开关），
+            // iOS 也没声明 UIBackgroundModes——现在真正接线到 BGTaskScheduler
+            newValue ? BackgroundRefresh.scheduleNext() : BackgroundRefresh.cancel()
         }
         .onChange(of: overlayEnabled) { newValue in
             newValue ? FloatingWindowController.shared.show() : FloatingWindowController.shared.hide()

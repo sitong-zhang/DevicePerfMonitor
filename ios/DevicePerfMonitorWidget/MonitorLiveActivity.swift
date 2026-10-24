@@ -40,13 +40,21 @@ struct MonitorLiveActivity: Widget {
                     // 1.0.9 口径：温度 + 内存占用率（刷新率已移到应用内显示）。
                     // iOS 没有机身温度公开 API，deviceTempC 常态 nil → 这一项不渲染，
                     // 不拿热状态档位换算冒充（沿项目「采不到的不占位」原则）。
-                    HStack(spacing: 12) {
-                        if let temp = context.state.deviceTempC {
-                            Text("温度 \(formattedValue(temp, suffix: "℃"))")
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 12) {
+                            if let temp = context.state.deviceTempC {
+                                Text("温度 \(formattedValue(temp, suffix: "℃"))")
+                            }
+                            if let memory = context.state.memoryRatio {
+                                Text("内存 \(formattedValue(memory, suffix: "%"))")
+                            }
                         }
-                        if let memory = context.state.memoryRatio {
-                            Text("内存 \(formattedValue(memory, suffix: "%"))")
-                        }
+                        // 1.0.11：数据年龄。.relative 由系统自己走时，App 被挂起后
+                        // 也持续更新——iOS 不允许后台常驻，做不到实时就不假装，
+                        // 至少让「数据有多旧」在灵动岛上实时可见
+                        Text("更新于 \(Date(timeIntervalSince1970: TimeInterval(context.state.timestampMs) / 1000), style: .relative)")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.7))
                     }
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.9))
@@ -102,6 +110,10 @@ private struct LockScreenView: View {
                 }
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
+                // 1.0.11：数据年龄（系统自走时，App 挂起后也持续更新）
+                Text("更新于 \(Date(timeIntervalSince1970: TimeInterval(state.timestampMs) / 1000), style: .relative)")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()

@@ -34,6 +34,10 @@
 
 		294F90DF30925F93B3EC910E /* MetricChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22CDFADB013953DEA4C4719E /* MetricChartView.swift */; };
 
+		83BD2A4463095CAA99113D65 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BackgroundRefresh.swift"; path = "BackgroundRefresh.swift"; sourceTree = "<group>"; };
+
+		C468577B30DB5D3782B52DA6 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BD2A4463095CAA99113D65 /* BackgroundRefresh.swift */; };
+
 		7E561786E28B57C5843A5B93 /* DeviceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeviceSnapshot.swift"; path = "DeviceSnapshot.swift"; sourceTree = "<group>"; };
 
 		06DD02972E925CF7ACC8050A /* DeviceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E561786E28B57C5843A5B93 /* DeviceSnapshot.swift */; };
@@ -229,6 +233,7 @@
 		71DCB613D63059A49AD71719 /* Collection */ = {
 			isa = PBXGroup;
 			children = (
+				83BD2A4463095CAA99113D65,
 				7E561786E28B57C5843A5B93,
 				291EF60692A55E67BF30CE5E,
 				EA9A3FF0C77F5D2C90F633C4,
@@ -401,6 +406,7 @@
 				56DEB0B8BC185361BB8D714B,
 				9DF7F2076C945E81A0B12205,
 				294F90DF30925F93B3EC910E,
+				C468577B30DB5D3782B52DA6,
 				06DD02972E925CF7ACC8050A,
 				F000457F4BA45EB0A5FE2EAC,
 				916FCA0434A353ED84C50AC9,
@@ -580,7 +586,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitor/DevicePerfMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -597,7 +603,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitor/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.10;
+				MARKETING_VERSION = 1.0.11;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -646,7 +652,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitor/DevicePerfMonitor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -661,7 +667,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitor/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.10;
+				MARKETING_VERSION = 1.0.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -709,7 +715,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitorWidget/DevicePerfMonitorWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -726,7 +732,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitorWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.10;
+				MARKETING_VERSION = 1.0.11;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -775,7 +781,7 @@
 				CODE_SIGN_ENTITLEMENTS = DevicePerfMonitorWidget/DevicePerfMonitorWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -790,7 +796,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DevicePerfMonitorWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.10;
+				MARKETING_VERSION = 1.0.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;

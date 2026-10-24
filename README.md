@@ -18,7 +18,7 @@
 
 ## 版本
 
-当前 **1.0.10**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.11**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -32,6 +32,13 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.11**：iOS 后台刷新通道落地——挂起后按系统调度周期性唤醒刷新灵动岛；「后台采集」死开关接活；灵动岛新增自走时的数据年龄。
+
+- **iOS 挂起后有正规刷新通道了**（BGAppRefreshTask）：退后台提交后台刷新任务，系统按使用习惯唤醒 App（通常十几分钟到几小时一次），每次唤醒采样一次，经采集中枢把新数据推进灵动岛/锁屏。这不是实时——iOS 不允许第三方应用在后台常驻运行，唤醒时机由系统决定；但在「全程离线、不放服务器」的前提下，这是苹果提供的唯一正规手段。
+- **「后台采集」开关以前是死的**：`backgroundCollection` 只存 UserDefaults、没有任何代码读它，Info.plist 也没声明 `UIBackgroundModes`，副标题却写着「退后台后继续采样」。现在真正接线到 BGTaskScheduler，关掉即取消待执行任务。
+- **灵动岛/锁屏新增「更新于 X」**：用 `Text(_, style: .relative)` 由系统自己走时，App 被挂起后也持续走动——做不到实时就不假装，至少让数据有多旧在灵动岛上实时可见。
+- **为什么不放服务器**（用户提议后查证，结论是不做）：① ActivityKit 推送有小时级预算，超了静默丢弃，苹果文档原话是体育直播这类秒级场景「就是装进不了这个预算」——加了服务器也做不到实时；② 推送需要 App 联网上传 push token，撞破本项目「不申请 INTERNET 权限、没有任何联网代码路径」的铁律；③ GitHub Actions 当不了这个服务器：定时工作流最小 5 分钟一轮（负载高时更晚），且拿不到设备 push token。三条都记在 `BackgroundRefresh.swift` 注释里。
 
 **1.0.10**：修悬浮窗拖动不跟手、帧率/温度采不到、图表贴顶、内存口径偏高（真机反馈集中修复）。
 
@@ -330,7 +337,7 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 2. 机身温度（℃）没有传感器直读 API，只有 `ProcessInfo.thermalState` 的四档热状态。不拿档位换算冒充温度值，该指标在 iOS 上不进入界面，综合评判的温度维度缺席、权重按比例折算。帧率只看本应用前台绘制（CADisplayLink），读不到其他进程的渲染帧。
 3. 本地打不了 IPA（没有 Xcode），用 GitHub Actions 的 macOS runner（macos-15 + Xcode 26）构建，产物未签名，装机要重签名。
 4. 液态玻璃分两档：iOS 26 及以上走原生 `glassEffect`（真折射 + 交互形变），iOS 17~25 走 LiquidGlassKit 的纯 SwiftUI fallback（Material blur + tint + 边缘高光），观感接近但不是同一个 API 路径。Reduce Transparency 下自动换不透明底。
-5. 实时活动（灵动岛/锁屏）的后台更新是平台硬限制：苹果官方文档与工程师回复都确认，App 退后台会被挂起、定时器停摆，持续更新只能靠推送服务器。本项目全程离线、无服务端，所以 App 被挂起后灵动岛停留在最后一次采样，超过 60s（staleDate）系统置灰明示数据不新鲜。帧率同理——CADisplayLink 只在本 App 前台绘制时有帧，后台显示最后一次真实测量。机身温度没有公开传感器 API，灵动岛温度位整行不渲染（不拿热状态档位换算冒充）。
+5. 实时活动（灵动岛/锁屏）的后台更新是平台硬限制：苹果官方文档与工程师回复都确认，App 退后台会被挂起、定时器停摆，持续更新只能靠推送服务器。本项目全程离线、无服务端，所以 App 被挂起后灵动岛停留在最后一次采样。1.0.11 起用 `BGTaskScheduler` 兜底：系统会周期性唤醒 App 采样一次刷新实时活动（通常十几分钟到几小时，时机由系统按使用习惯决定），灵动岛上另有自走时的「更新于 X」明示数据年龄；超过 60s（staleDate）系统置灰。帧率同理——CADisplayLink 只在本 App 前台绘制时有帧，后台显示最后一次真实测量。机身温度没有公开传感器 API，灵动岛温度位整行不渲染（不拿热状态档位换算冒充）。
 
 **Android**
 
