@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -117,10 +116,12 @@ fun MetricDetailScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
         // 顶部：返回 + 指标名 + 当前值
+        // 高度交给内容：本页在 verticalScroll 里，子节点拿到的是无界高度约束，
+        // 写死 min 高度会让 fillMaxSize 退化成 wrap、内容被 GlassCard 的
+        // TopStart 对齐顶到卡顶（1.0.14 修复「数字显示靠上」）。
         GlassCard(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 112.dp),
+                .fillMaxWidth(),
             shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
         ) {
             Row(
@@ -210,10 +211,14 @@ fun MetricDetailScreen(
         )
 
         // 轨迹大图
+        // 固定高度，不能只用 heightIn(min)：verticalScroll 给子节点无界高度，
+        // min 高度下卡片按内容收缩，内部 Box(fillMaxSize) 退化成 wrap——
+        // Sparkline / BarSeries 是没有固有尺寸的 Canvas，拿到零高度什么都不画
+        // （1.0.10 只修了 Y 轴量程，没修这个布局根因，所以图表一直不显示）。
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 200.dp),
+                .height(240.dp),
             shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
         ) {
             // 切换显示方式时交叉淡入，不要硬切

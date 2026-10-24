@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -247,10 +246,12 @@ private fun HealthCard(result: FocusedHealth.Result) {
         else -> colors.danger
     }
 
+    // 固定高度：LazyColumn 的 item 同样拿到无界高度约束，heightIn(min) 会让
+    // 卡片按内容收缩、fillMaxSize 退化成 wrap、内容顶到卡顶（1.0.14 修复）。
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 176.dp),
+            .height(176.dp),
         shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
     ) {
         Row(
@@ -316,10 +317,13 @@ private fun MetricCard(
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
 
+    // 固定高度：见 HealthCard 注释——LazyColumn item 的无界约束下 heightIn(min)
+    // 会让 fillMaxSize 全部退化成 wrap，数字/图表顶到卡顶（1.0.14 修复）。
+    // 120dp = 标签行 ~20 + 上下内边距 24 + 环形 72，四种显示模式都放得下。
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 112.dp)
+            .height(120.dp)
             .pressScale(interactionSource),
         shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
         onClick = {

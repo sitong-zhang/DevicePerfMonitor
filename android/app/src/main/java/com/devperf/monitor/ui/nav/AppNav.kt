@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +61,7 @@ import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
+import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
@@ -114,21 +116,42 @@ fun AppNav(
         easing = motion.exit,
     )
 
+    val colors = LocalTokenColors.current
+
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1.0.13 glass flavor：创建应用级 backdrop（教程标准式：主题背景色 + 内容），
-        // NavHost 挂 layerBackdrop 导出内容，玻璃组件（面板/底栏）经 LocalBackdrop 取用。
+        // glass flavor：应用级 backdrop 只挂在「纯背景节点」上——这是 Kyant0
+        // catalog BackdropDemoScaffold 的标准结构：背景层（layerBackdrop + 渐变）
+        // 与 NavHost、底栏互为兄弟，所有 drawBackdrop 玻璃元素都在录制子树之外。
+        //
+        // 1.0.13 曾把 layerBackdrop 直接挂在 NavHost 上，玻璃卡片因此落在录制
+        // 子树内：LayerBackdropNode 录制时会重放玻璃节点的 drawLayer，采样到的
+        // 是正在录音的同一个 RenderNode——自指采样，未定义行为，真机一进首页
+        // 就闪退。库本身没有任何问题（Kotlin Multiplatform，Android 侧消费
+        // backdrop-android 是官方路径），是挂载结构用错了。
         // plain flavor 为 null，全部回落到 MD3 原样外观。
         val backdrop = if (com.devperf.monitor.BuildConfig.LIQUID_GLASS) {
             com.devperf.monitor.ui.kit.rememberAppBackdrop()
         } else {
             null
         }
+        if (backdrop != null) {
+            // 背景层：主题渐变与各页面背景同源同色，玻璃的折射/模糊采样这一层
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .appLayerBackdrop(backdrop)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(colors.background, colors.surface, colors.background),
+                        ),
+                    ),
+            )
+        }
         androidx.compose.runtime.CompositionLocalProvider(
             com.devperf.monitor.ui.kit.LocalBackdrop provides backdrop
         ) {
             NavHost(
                 navController = navController,
-                modifier = Modifier.appLayerBackdrop(backdrop),
                 startDestination = Routes.OVERVIEW,
                 // 进入使用 enter 曲线（320ms），符合三条动效曲线规范
                 enterTransition = {
