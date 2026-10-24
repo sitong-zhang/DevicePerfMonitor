@@ -14,9 +14,14 @@ import com.devperf.monitor.core.MetricViewMode
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
+import com.devperf.monitor.BuildConfig
+import com.devperf.monitor.data.AppRelease
 import com.devperf.monitor.data.SettingsRepository
+import com.devperf.monitor.data.UpdateRepository
 import com.devperf.monitor.data.defaultMetricViewModes
+import com.devperf.monitor.data.isNewer
 import com.devperf.monitor.data.ThemeMode
+import java.io.File
 import com.devperf.monitor.data.collectors.DeviceSnapshot
 import com.devperf.monitor.data.storage.HistoryPoint
 import com.devperf.monitor.overlay.OverlayPermissions
@@ -280,6 +285,81 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             shell.requestShizukuPermission(REQUEST_CODE_SHIZUKU)
         }
         repository.refreshPrivilegedState()
+    }
+
+    // ---------------------------------------------------------------------
+    // 应用内版本检查与更新（1.0.15 新增，唯一的联网路径）
+    // ---------------------------------------------------------------------
+
+    private val updateRepo = UpdateRepository(getApplication())
+    private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
+    val updateState = _updateState.asStateFlow()
+    /** 本次进程生命周期内已处理过（展示/忽略/稍后），不再重复弹。 */
+    private var updateSessionHandled = false
+
+    /**
+     * 打开 App 时调用：查 GitHub Releases 最新版，有更新的版本且未被忽略就提示。
+     * 失败按「无更新」静默降级，绝不阻塞主流程。
+     */
+    fun checkForUpdate() {
+        if (updateSessionHandled) return
+        if (_updateState.value is UpdateUiState.Available) return
+        viewModelScope.launch {
+            _updateState.value = UpdateUiState.Checking
+            val current = BuildConfig.VERSION_NAME
+            val release = runCatching { updateRepo.latestRelease() }.getOrNull()
+            when {
+                release == null -> _updateState.value = UpdateUiState.Error
+                isNewer(release.version, current) -> {
+                    val ignored = settings.value.ignoredVersion
+                    if (ignored == release.tag) {
+                        updateSessionHandled = true
+                        _updateState.value = UpdateUiState.NoUpdate
+                    } else {
+                        _updateState.value = UpdateUiState.Available(release)
+                    }
+                }
+                else -> {
+                    updateSessionHandled = true
+                    _updateState.value = UpdateUiState.NoUpdate
+                }
+            }
+        }
+    }
+
+    /** 「稍后」：本次会话不再弹，但不写入忽略版本（下次打开还会提示）。 */
+    fun dismissUpdateLater() {
+        updateSessionHandled = true
+        _updateState.value = UpdateUiState.Dismissed
+    }
+
+    /** 「忽略此版本」：写入忽略版本，以后也不再为该版本弹窗。 */
+    fun ignoreUpdate() {
+        updateSessionHandled = true
+        (_updateState.value as? UpdateUiState.Available)?.release?.tag?.let { tag ->
+            viewModelScope.launch { settingsRepository.setIgnoredVersion(tag) }
+        }
+        _updateState.value = UpdateUiState.Dismissed
+    }
+
+    /** 开始下载 APK（对应 flavor）。下载完成进入 Ready 态，由 UI 触发安装。 */
+    fun startUpdateDownload() {
+        val release = (_updateState.value as? UpdateUiState.Available)?.release ?: return
+        val apkUrl = release.apkUrl ?: run {
+            _updateState.value = UpdateUiState.Error
+            return
+        }
+        viewModelScope.launch {
+            _updateState.value = UpdateUiState.Downloading(0)
+            val file = updateRepo.updatesDir().resolve("update-${release.version}.apk")
+            val ok = runCatching {
+                updateRepo.downloadApk(apkUrl, file) { p ->
+                    _updateState.value = UpdateUiState.Downloading(p)
+                }
+                file.exists() && file.length() > 0
+            }.getOrElse { false }
+            _updateState.value = if (ok) UpdateUiState.Ready(file) else UpdateUiState.Error
+        }
     }
 
     companion object {

@@ -51,6 +51,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.devperf.monitor.ui.MonitorViewModel
+import com.devperf.monitor.ui.UpdateDialog
 import com.devperf.monitor.ui.kit.LocalBackdrop
 import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
@@ -211,6 +212,9 @@ fun AppNav(
                 },
             )
         }
+
+        // 应用内更新提示（1.0.15 新增）：有新版本时弹窗，其余状态不显示
+        UpdateDialog(viewModel)
     }
 }
 

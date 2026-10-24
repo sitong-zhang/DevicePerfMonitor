@@ -1,6 +1,6 @@
 # DevicePerfMonitor
 
-一个设备性能监控 App，Android 端为主（iOS 安装包自 1.0.14 起已下架，源码保留）。核心是三块：全局悬浮窗看实时数据、四个核心硬件指标实时采集、本地综合评判。全程不联网，数据只存本地。
+一个设备性能监控 App，Android 端为主（iOS 安装包自 1.0.14 起已下架，源码保留）。核心是三块：全局悬浮窗看实时数据、四个核心硬件指标实时采集、本地综合评判。全程不联网，数据只存本地——唯一的联网路径是应用内版本检查（1.0.15 起），仅读取公开的 GitHub Releases 元数据，不会向任何服务器上报任何数据。
 
 两个端的界面是同一套设计：`design-tokens.json` 是唯一真源。色板由 Google 官方算法生成——种子色取 Catppuccin Mauve `#CBA6F7`，走 Material 3 Expressive（`SchemeExpressive` + SPEC_2025），深/浅各一套，共 24 个语义色（含 surface 层次、描边、tertiary）。生成工具在 `Tools/palette-gen/`，**构建期/离线跑一次，色值固化进 design-tokens.json，运行时零依赖**。
 
@@ -13,12 +13,12 @@
 - Android 用 Material 3 Expressive：官方稳定组件（SegmentedButton / Card / Surface）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API；1.0.13 起 glass flavor 在 MD3 组件之上叠开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）的真实折射（vibrancy + blur + lens），plain flavor 不叠——两个包由构建期 flavor 决定
 - 视觉参数不写死：层次、描边、投影、底栏几何全部来自 design-tokens 的 `surface` / `elevation` / `bottomBar` 三段
 - 不用系统默认控件和默认蓝，按钮卡片开关滑块全部自己封装
-- 不申请 INTERNET 权限，没有任何联网代码路径
+- 不申请 INTERNET 权限——**例外**：1.0.15 起为应用内版本检查申请了 `INTERNET`，但仅读取公开的 GitHub Releases 元数据，不向任何服务器上报数据；采集/分析/历史仍 100% 本地
 - 平台做不到的功能，直接说做不到，降级方案写进文档
 
 ## 版本
 
-当前 **1.0.14**。安装包（Android 双包：液态玻璃 / 无玻璃）在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。iOS 安装包自 1.0.14 起已下架。
+当前 **1.0.15**。安装包（Android 双包：液态玻璃 / 无玻璃）在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。iOS 安装包自 1.0.14 起已下架。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -34,6 +34,11 @@
 ### 更新记录
 
 **1.0.14**：修复液态玻璃版真机闪退（挂载结构），修复详情页/总览页「显示靠上、柱状/波状不显示」（滚动容器无界高度约束），修复「回看」窗口不记忆。**iOS 安装包自本版起下架，仅发 Android 双包。**
+
+**1.0.15**：悬浮窗帧率单位显示「Hz」；应用内新增「检查新版本 / 更新」功能（唯一的联网路径）。
+
+- **悬浮窗帧率显示「Hz」**：`CoreMetricId.FPS` 的单位由 `fps` 改为 `Hz`，悬浮窗 / 详情页 / 总览页三处统一显示「60 Hz」这类读法（帧率本质就是每秒帧数，单位本就是赫兹）。
+- **应用内版本检查与更新**（用户要求：打开 App 自动提示新版本）：打开 App 时查询 GitHub Releases 最新版，有新版本且未被「忽略」就弹窗，展示更新说明；点「立即更新」下载对应 flavor 的 APK（玻璃包下玻璃版、无玻璃包下无玻璃版）并拉起系统安装器，点「忽略此版本」写入忽略版本不再骚扰，点「稍后」本次会话不再弹。检查/下载只走公开 Release 元数据，**这是工程唯一主动联网路径**，为它申请了 `INTERNET` 权限，但只读取 Releases、上报零数据（详见「权限」一节）。网络/解析失败按「无更新」静默降级，绝不阻塞主流程。
 
 - **液态玻璃版闪退根因与修复**（用户报「一进去就闪退，怀疑库要别的语言」）：不是语言问题——[Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 是 Kotlin Multiplatform 工程，Android 工程消费 backdrop-android 就是官方支持路径；根因是挂载结构用错。1.0.13 把 `layerBackdrop` 挂在 NavHost 上，玻璃卡片因此落在录制子树内：`LayerBackdropNode` 录制时重放玻璃节点的 `drawLayer`，采样到的是正在录音的同一个 RenderNode——自指采样，未定义行为，一进首页就崩。1.0.14 照库官方 catalog `BackdropDemoScaffold` 的标准结构重写：`layerBackdrop` 只挂纯背景节点（主题渐变层，与各页面背景同源同色），NavHost 与浮动底栏互为兄弟，所有 `drawBackdrop` 玻璃元素都在录制子树之外。效果参数不变，仍全部取自库教程既有值。
 - **详情页/总览页「显示靠上、图表不显示」根因与修复**（两个包都中招，与玻璃无关）：页面在 `verticalScroll` / `LazyColumn` 里，子节点拿到的是无界高度约束；卡片写 `heightIn(min=…)` 时高度按内容收缩，内部 `Box(fillMaxSize)` 退化成 wrap——数字/环形被 GlassCard 的 TopStart 对齐顶到卡顶，Sparkline / BarSeries 是无固有尺寸的 `Canvas`，拿到零高度什么都不画。1.0.10 只修了图表 Y 轴量程（数据层），没修这个布局根因，所以「和上一个状况一样」。现在图表卡改固定 240dp、指标卡 120dp、综合评判卡 176dp，详情页顶部卡交回内容高度，`fillMaxSize` 恢复有界，居中对齐与 Canvas 绘制全部正常（`Crossfade` 根节点是普通 Box，约束原样透传，固定卡片高度即可治愈整条链）。
@@ -58,7 +63,8 @@
 - **iOS 挂起后有正规刷新通道了**（BGAppRefreshTask）：退后台提交后台刷新任务，系统按使用习惯唤醒 App（通常十几分钟到几小时一次），每次唤醒采样一次，经采集中枢把新数据推进灵动岛/锁屏。这不是实时——iOS 不允许第三方应用在后台常驻运行，唤醒时机由系统决定；但在「全程离线、不放服务器」的前提下，这是苹果提供的唯一正规手段。
 - **「后台采集」开关以前是死的**：`backgroundCollection` 只存 UserDefaults、没有任何代码读它，Info.plist 也没声明 `UIBackgroundModes`，副标题却写着「退后台后继续采样」。现在真正接线到 BGTaskScheduler，关掉即取消待执行任务。
 - **灵动岛/锁屏新增「更新于 X」**：用 `Text(_, style: .relative)` 由系统自己走时，App 被挂起后也持续走动——做不到实时就不假装，至少让数据有多旧在灵动岛上实时可见。
-- **为什么不放服务器**（用户提议后查证，结论是不做）：① ActivityKit 推送有小时级预算，超了静默丢弃，苹果文档原话是体育直播这类秒级场景「就是装进不了这个预算」——加了服务器也做不到实时；② 推送需要 App 联网上传 push token，撞破本项目「不申请 INTERNET 权限、没有任何联网代码路径」的铁律；③ GitHub Actions 当不了这个服务器：定时工作流最小 5 分钟一轮（负载高时更晚），且拿不到设备 push token。三条都记在 `BackgroundRefresh.swift` 注释里。
+- **为什么不放服务器**（用户提议后查证，结论是不做）：① ActivityKit 推送有小时级预算，超了静默丢弃，苹果文档原话是体育直播这类秒级场景「就是装进不了这个预算」——加了服务器也做不到实时；② 推送需要 App 联网上传 push token，会撞破「数据只存本地」原则；③ GitHub Actions 当不了这个服务器：定时工作流最小 5 分钟一轮（负载高时更晚），且拿不到设备 push token。三条都记在 `BackgroundRefresh.swift` 注释里。
+  - 注：1.0.15 起 App 新增**应用内版本检查**（仅 Android，iOS 已下架安装包），这是唯一主动联网路径，只读取公开的 GitHub Releases 元数据、不上报任何数据；为它申请了 `INTERNET` 权限。其余采集/分析/历史仍 100% 本地。
 
 **1.0.10**：修悬浮窗拖动不跟手、帧率/温度采不到、图表贴顶、内存口径偏高（真机反馈集中修复）。
 
@@ -345,7 +351,7 @@ Android 在 `AndroidManifest.xml` 里逐条声明：
 | PACKAGE_USAGE_STATS | 全局 FPS 拿前台包名 | 可选 | 相关指标不可用，可改走 Shizuku |
 | moe.shizuku.manager.permission.API_V23 | Shizuku 免 root 提权 | 可选 | 无特权指标照常工作 |
 
-`INTERNET` 明确不申请，全程离线。
+`INTERNET`：1.0.15 起为应用内版本检查申请，仅用于读取公开的 GitHub Releases 元数据（查新版本 + 下载对应 flavor 的 APK），不向任何服务器上报数据；其余功能全程离线。
 
 iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSupportsLiveActivity` 声明，数据经 ContentState 下发，不需要 App Group（两个 entitlements 是空的，文件里有注释说明原因）。
 

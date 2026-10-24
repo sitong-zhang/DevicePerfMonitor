@@ -21,7 +21,7 @@ enum class CoreMetricId(
     MEMORY_RATIO("内存占用率", "%", MetricId.MEMORY_USAGE_RATIO, 0, higherIsBetter = false),
     DEVICE_TEMP("设备温度", "℃", MetricId.DEVICE_TEMP, 1, higherIsBetter = false),
     REFRESH_RATE("屏幕刷新率", "Hz", MetricId.REFRESH_RATE, 0, higherIsBetter = true),
-    FPS("帧率", "fps", MetricId.FPS, 0, higherIsBetter = true),
+    FPS("帧率", "Hz", MetricId.FPS, 0, higherIsBetter = true),
     ;
 
     companion object {
