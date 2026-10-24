@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
 import androidx.compose.runtime.Recomposer
 import androidx.core.app.NotificationManagerCompat
+import com.devperf.monitor.AppLock
 import com.devperf.monitor.MainActivity
 import com.devperf.monitor.MonitorApp
 import com.devperf.monitor.R
@@ -178,6 +179,11 @@ class OverlayService : android.app.Service() {
     // ---------------------------------------------------------------------
 
     private fun showOverlay() {
+        // 强制更新未完成：哪怕有已排队的 SHOW 命令（锁生效之前发出去的）也不挂窗口
+        if (!AppLock.overlayAllowed()) {
+            Log.i(TAG, "强制更新未完成，拒绝挂出悬浮窗")
+            return
+        }
         if (!OverlayPermissions.canDrawOverlays(this)) {
             // 降级：无悬浮窗权限时不添加窗口，记录日志后停止（设置页负责引导授权）
             Log.w(TAG, "无悬浮窗权限，悬浮窗不显示（降级）")
@@ -417,6 +423,12 @@ class OverlayService : android.app.Service() {
          * 服务已在运行时这只是条命令，不受 Android 12+「后台启动前台服务」限制。
          */
         fun start(context: Context) {
+            // 强制更新没走完：悬浮窗是独立 Window，主界面弹窗盖不到它，
+            // 这里在拉起入口拦住，否则会出现「App 锁死但悬浮窗照常看数据」
+            if (!AppLock.overlayAllowed()) {
+                Log.i(TAG, "强制更新未完成，悬浮窗保持停用")
+                return
+            }
             runCatching {
                 context.startForegroundService(
                     Intent(context, OverlayService::class.java).setAction(ACTION_SHOW)
@@ -432,6 +444,11 @@ class OverlayService : android.app.Service() {
          * 这是「退出应用自动挂出」在 Android 12+ 上能真正生效的前提。
          */
         fun ensure(context: Context) {
+            // 同上：强制更新期间不预拉起服务（预拉起只为「退后台自动挂出」服务）
+            if (!AppLock.overlayAllowed()) {
+                Log.i(TAG, "强制更新未完成，不预拉起悬浮窗服务")
+                return
+            }
             runCatching {
                 context.startForegroundService(
                     Intent(context, OverlayService::class.java).setAction(ACTION_ENSURE)

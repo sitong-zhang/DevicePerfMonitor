@@ -323,7 +323,11 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             when {
                 release == null -> _updateState.value = UpdateUiState.Error
                 isNewer(release.version, current) -> {
-                    // 有更新：弹不可关闭的强制更新框，不写忽略、不留「稍后」
+                    // 有更新：弹不可关闭的强制更新框，不写忽略、不留「稍后」。
+                    // 同时上应用级软锁并停掉悬浮窗——它跑在独立 Window 上，
+                    // Activity 的弹窗盖不到，不锁会出现「App 锁死但悬浮窗还能看」。
+                    com.devperf.monitor.AppLock.updatePending = true
+                    runCatching { OverlayService.stop(getApplication()) }
                     _updateState.value = UpdateUiState.Available(release)
                 }
                 else -> {

@@ -43,18 +43,43 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
     when (state) {
         is UpdateUiState.Available -> {
             val release = (state as UpdateUiState.Available).release
+            // **提前申请「安装未知应用」权限**（1.0.19）：授权页回来自动开始下载，
+            // 于是下载完成时权限已就位，点「安装」一步走完，不会卡在授权页再
+            // 绕一圈。Android 8+ 没有运行时弹窗可申请，只能跳系统授权页。
+            var pendingDownload by remember { mutableStateOf(false) }
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME && pendingDownload) {
+                        pendingDownload = false
+                        if (canInstallPackages(context)) {
+                            viewModel.startUpdateDownload()
+                        }
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
             AlertDialog(
                 onDismissRequest = { /* 强制更新：不可关闭 */ },
                 title = { Text("必须更新才能继续使用") },
                 text = {
                     Text(
                         text = "发现新版本 v${release.version}，当前版本已停用，请更新后再使用。\n\n" +
+                            "更新需要「安装未知应用」权限（仅用于安装从官方 GitHub Releases 下载的更新包）。\n\n" +
                             (release.notes.ifBlank { "暂无更新说明。" }),
                         modifier = Modifier.verticalScroll(rememberScrollState()),
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { viewModel.startUpdateDownload() }) {
+                    TextButton(onClick = {
+                        if (canInstallPackages(context)) {
+                            viewModel.startUpdateDownload()
+                        } else {
+                            pendingDownload = true
+                            openInstallPermissionSettings(context)
+                        }
+                    }) {
                         Text("立即更新")
                     }
                 },
