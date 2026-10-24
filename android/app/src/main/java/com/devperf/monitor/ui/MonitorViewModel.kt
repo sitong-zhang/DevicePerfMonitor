@@ -305,7 +305,17 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
      */
     fun checkForUpdate() {
         if (updateSessionHandled) return
-        if (_updateState.value is UpdateUiState.Available) return
+        when (_updateState.value) {
+            // 已经确认有更新 / 正在下载 / 已下载完等待安装：都不重查。
+            // 特别是不能漏掉 Ready——用户点「安装」跳去系统授权页/安装器再返回时
+            // 会走 onResume，这里如果重查会把「下载完成」打回「必须更新」，逼用户
+            // 重新下载（1.0.17 真机踩到的死循环，1.0.18 修复）。
+            is UpdateUiState.Available,
+            is UpdateUiState.Downloading,
+            is UpdateUiState.Ready,
+            -> return
+            else -> {}
+        }
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val current = BuildConfig.VERSION_NAME

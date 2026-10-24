@@ -2,6 +2,8 @@ package com.devperf.monitor.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,11 +12,18 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.devperf.monitor.BuildConfig
 import java.io.File
 
@@ -69,12 +78,39 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
 
         is UpdateUiState.Ready -> {
             val file = (state as UpdateUiState.Ready).file
+            // 「安装未知应用」授权的续装逻辑（1.0.18）：第一次点「安装」若还没授权，
+            // 跳系统授权页并记住 pendingInstall；从授权页回来（ON_RESUME）时若已授权
+            // 就自动拉起安装器，用户不用再点一次。修复 1.0.17「授权回来又回到下载
+            // 界面」的体验断链（配合 checkForUpdate 的 Ready 守卫）。
+            var pendingInstall by remember { mutableStateOf(false) }
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME && pendingInstall) {
+                        pendingInstall = false
+                        if (canInstallPackages(context)) {
+                            installApk(context, file)
+                        }
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
             AlertDialog(
                 onDismissRequest = { /* 安装前：不可关闭 */ },
                 title = { Text("下载完成") },
                 text = { Text("点击「安装」完成更新（需先允许「安装未知应用」）。未完成更新前，旧版本仍无法使用。") },
                 confirmButton = {
-                    TextButton(onClick = { installApk(context, file) }) {
+                    TextButton(onClick = {
+                        if (canInstallPackages(context)) {
+                            installApk(context, file)
+                        } else {
+                            // 还没授权：跳到本应用的「安装未知应用」系统授权页，
+                            // 回来自动续装（见上面的 ON_RESUME 观察者）
+                            pendingInstall = true
+                            openInstallPermissionSettings(context)
+                        }
+                    }) {
                         Text("安装")
                     }
                 },
@@ -97,6 +133,25 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
 
         else -> { /* Idle / Checking / NoUpdate：不弹窗 */ }
     }
+}
+
+/** 本应用是否已获「安装未知应用」授权（API 26+ 才有该机制；更早版本直接装）。 */
+private fun canInstallPackages(context: android.content.Context): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+        context.packageManager.canRequestPackageInstalls()
+
+/** 跳到本应用的「安装未知应用」系统授权页（返回后由 ON_RESUME 自动续装）。 */
+private fun openInstallPermissionSettings(context: android.content.Context) {
+    runCatching {
+        context.startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${BuildConfig.APPLICATION_ID}"),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+    // 个别 ROM 不认该 action 时静默失败：pendingInstall 已记下，用户手动回
+    // 到 App 再点一次「安装」即可（那时多半已授权）。
 }
 
 /** 用 FileProvider 暴露 APK 并拉起系统安装器（Android 7+ 禁止 file:// 直装）。 */

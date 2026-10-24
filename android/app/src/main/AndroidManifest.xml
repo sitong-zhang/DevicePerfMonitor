@@ -23,6 +23,10 @@
     <!-- 应用内版本检查与更新（1.0.15 新增）：唯一的联网路径，仅读取公开的
          GitHub Releases 元数据，不向任何服务器上报任何数据 -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 应用内更新下载 APK 后拉起系统安装器（1.0.18）：Android 8+ 需要，
+         且用户须在系统设置里给本应用授予「安装未知应用」；
+         只用于安装从官方 GitHub Releases 下载的更新包 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".MonitorApp"

@@ -18,7 +18,7 @@
 
 ## 版本
 
-当前 **1.0.17**。安装包（Android 液态玻璃版，单一发布包）在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。iOS 安装包自 1.0.14 起已下架；「无玻璃」的 `-plain` 包自 1.0.16 起停产。
+当前 **1.0.18**。安装包（Android 液态玻璃版，单一发布包）在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。iOS 安装包自 1.0.14 起已下架；「无玻璃」的 `-plain` 包自 1.0.16 起停产。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -34,6 +34,11 @@
 ### 更新记录
 
 **1.0.14**：修复液态玻璃版真机闪退（挂载结构），修复详情页/总览页「显示靠上、柱状/波状不显示」（滚动容器无界高度约束），修复「回看」窗口不记忆。**iOS 安装包自本版起下架，仅发 Android 双包。**
+
+**1.0.18**：修复「点安装后又被弹回下载界面」的更新死循环（真机反馈）。
+
+- **根因一：onResume 重查把 Ready 打回 Available**。`onResume` 每次都会调 `checkForUpdate()`，但守卫只挡了 `Available` 态——用户点「安装」跳去系统安装器/授权页再返回时状态是 `Ready`，守卫不拦，重新查一遍 GitHub 发现仍有新版，于是把「下载完成」打回「必须更新」，逼用户重新下载，表现为死循环。现在 `Available` / `Downloading` / `Ready` 三个进行中的态一律不重查。
+- **根因二：安装授权链路断裂**。第一次点「安装」时若还没授予「安装未知应用」，此前只是盲发安装 intent，被系统页面打断后回来什么也不剩。现在：先查 `canRequestPackageInstalls()`，没授权就跳到本应用的系统授权页并记住待装状态，授权回来（ON_RESUME）自动拉起安装器，不用再点；Manifest 补声明 `REQUEST_INSTALL_PACKAGES`。
 
 **1.0.17**：悬浮窗那一格由「实时帧率」改为显示**手机屏幕刷新率**（用户要求）。
 
