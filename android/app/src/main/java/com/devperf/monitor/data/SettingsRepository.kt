@@ -13,11 +13,17 @@ import com.devperf.monitor.core.MetricViewMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-/** 采集频率档位：FAST=500ms / NORMAL=1s / MINIMAL=2s（极简模式同时关动画、停历史落盘）。 */
+/**
+ * 采集频率档位：FAST=500ms / NORMAL=1s / MINIMAL=1s。
+ *
+ * **不变量：任何档位的采样周期都不慢于 1 秒**（用户要求「每个数据都要做到每秒
+ * 刷新」），所以极简档不再提供 2s 慢采样，只保留「关动画 + 停历史落盘」的省电
+ * 特性。若将来新增 > 1s 的档位，[MetricsRepository] 会把 tickMs 兜底钳到 1s。
+ */
 enum class RefreshMode(val label: String, val tickMs: Long) {
     FAST("高频（500ms）", 500L),
     NORMAL("标准（1s）", 1000L),
-    MINIMAL("极简（2s）", 2000L),
+    MINIMAL("极简（1s·省电）", 1000L),
 }
 
 enum class ThemeMode(val label: String) {

@@ -32,9 +32,11 @@ import kotlinx.coroutines.withContext
  * 采集仓库：统一调度全部采集器，输出 [DeviceSnapshot] 状态流，并维护 30 分钟历史。
  *
  * 设计要点：
- * - 采集 tick 由 [RefreshMode] 决定（500ms / 1s / 2s）；FPS 由 DisplayCollector 内部
+ * - 采集 tick 由 [RefreshMode] 决定（500ms / 1s）；FPS 由 DisplayCollector 内部
  *   固定 500ms 窗口计算，与 tick 解耦，保证需求中的刷新频率语义；
- * - 极简模式：tick 2s + 停历史落盘（UI 层同时关闭动画）；
+ * - **采样周期不慢于 1s**（用户要求每个数据每秒刷新）：任何档位都会被钳到
+ *   [MAX_TICK_MS]，保证所有核心指标每秒至少更新一次；
+ * - 极简模式：tick 1s + 停历史落盘（UI 层同时关闭动画）；
  * - 单个采集器抛异常不影响其他采集器（runCatching 隔离），异常指标沿用上一次快照值；
  * - 历史落盘每 30s 一次，原子替换，极简模式跳过。
  */
@@ -88,7 +90,8 @@ class MetricsRepository(
         }
         jobs += scope.launch {
             settingsRepository.settings.collect { s ->
-                tickMs = s.refreshMode.tickMs
+                // 兜底：任何档位都不慢于 MAX_TICK_MS，保证每秒至少更新一次
+                tickMs = s.refreshMode.tickMs.coerceAtMost(MAX_TICK_MS)
                 minimalMode = s.refreshMode == RefreshMode.MINIMAL
                 history.persistEnabled = !minimalMode
             }
@@ -125,7 +128,7 @@ class MetricsRepository(
 
     /**
      * 悬浮窗专用：500ms 粒度 FPS 直读（需求规定悬浮窗 FPS 500ms 刷新，
-     * 而采集 tick 可能是 1s/2s，因此悬浮窗绕开 tick 直接读采集器当前值）。
+     * 而采集 tick 统一为 1s（见 MAX_TICK_MS），因此悬浮窗绕开 tick 直接读采集器当前值）。
      */
     fun currentFps(): Float? = displayCollector.currentFps()
 
@@ -229,5 +232,11 @@ class MetricsRepository(
     private companion object {
         const val TAG = "MetricsRepository"
         const val PERSIST_INTERVAL_MS = 30_000L
+
+        /**
+         * 采样周期上限：**不慢于 1 秒**。用户要求「每个数据都要做到每秒刷新」，
+         * 这里做兜底钳制，防止将来新增的档位把采样拖到 1s 以上。
+         */
+        const val MAX_TICK_MS = 1000L
     }
 }
