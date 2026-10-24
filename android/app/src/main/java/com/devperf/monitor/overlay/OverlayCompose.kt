@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
 import com.devperf.monitor.core.Metric
+import com.devperf.monitor.core.MetricState
 import com.devperf.monitor.data.collectors.DeviceSnapshot
 import com.devperf.monitor.ui.kit.AnimatedNumber
 import com.devperf.monitor.ui.kit.GlassCard
@@ -69,8 +71,19 @@ data class OverlayData(
     }
 }
 
-/** 悬浮窗里的一格：指标 + 当前值。 */
-private data class GridCell(val id: CoreMetricId, val value: Float)
+/** 悬浮窗里的一格：指标 + 当前值；[value] 为 null 时显示 [hint] 引导（不消失）。 */
+private data class GridCell(
+    val id: CoreMetricId,
+    val value: Float?,
+    val hint: String? = null,
+)
+
+/** 帧率采不到时的引导文案：告诉用户去哪开启，而不是莫名其妙少一行。 */
+private fun fpsHint(state: MetricState<Float>): String = when (state) {
+    is MetricState.NeedsPermission -> "需 ${state.permissionLabel}"
+    is MetricState.Unavailable -> "暂无数据"
+    else -> "暂无数据"
+}
 
 /**
  * 悬浮窗内容：三态（卡片 / 纯数字 / 收起），单击循环切换。
@@ -197,7 +210,9 @@ private fun HealthBadge(health: FocusedHealth.Result) {
  *
  * 1.0.9 起去掉刷新率（用户要求它只留在应用内）。剩三项再排 2×2 会空出一格，
  * 所以改成单列：标签在左、数值右对齐，扫一眼更整齐。
- * 只放采得到的，采不到的直接不进列表（悬浮窗寸土寸金，不放占位符）。
+ * 只放采得到的，采不到的直接不进列表（悬浮窗寸土寸金，不放占位符）——
+ * **帧率例外**：它采不到是因为缺 Shizuku 授权（不是设备不支持），必须留一行
+ * 引导，否则用户完全看不出帧率是没做还是没授权。
  */
 @Composable
 private fun MetricGrid(
@@ -209,7 +224,12 @@ private fun MetricGrid(
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
         // 刷新率不进悬浮窗（1.0.9）：只用于综合评判的流畅度计算
-        data.fps.value?.let { add(GridCell(CoreMetricId.FPS, it)) }
+        val fpsValue = data.fps.value
+        if (fpsValue != null) {
+            add(GridCell(CoreMetricId.FPS, fpsValue))
+        } else {
+            add(GridCell(CoreMetricId.FPS, null, fpsHint(data.fps.state)))
+        }
     }
 
     if (cells.isEmpty()) {
@@ -231,7 +251,7 @@ private fun MetricGrid(
     }
 }
 
-/** 一行指标：标签靠左、数值靠右对齐。 */
+/** 一行指标：标签靠左、数值靠右对齐；无值时显示灰色引导小字。 */
 @Composable
 private fun MetricRow(
     cell: GridCell,
@@ -253,18 +273,28 @@ private fun MetricRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Row(verticalAlignment = Alignment.Bottom) {
-            AnimatedNumber(
-                value = cell.value,
-                intervalMs = intervalMs,
-                decimals = cell.id.decimals,
-                color = accent,
-                style = MaterialTheme.typography.titleMedium,
-            )
+        if (cell.value != null) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                AnimatedNumber(
+                    value = cell.value,
+                    intervalMs = intervalMs,
+                    decimals = cell.id.decimals,
+                    color = accent,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = " ${cell.id.unit}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary,
+                )
+            }
+        } else {
+            // 引导行：灰色小字，告诉用户缺什么（如「需 Shizuku 授权」）
             Text(
-                text = " ${cell.id.unit}",
+                text = cell.hint ?: "暂无数据",
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.textSecondary,
+                maxLines = 1,
             )
         }
     }
@@ -273,8 +303,9 @@ private fun MetricRow(
 /**
  * 纯数字态：只要卡片上的数字，不要卡片。
  *
- * 无容器、无阴影、无小环——四个数字直接横排浮在屏幕上，
+ * 无容器、无阴影、无小环——三个数字直接横排浮在屏幕上，
  * 每个数字保持自己的指标色；告警时统一转危险色（没有卡片可染，染数字）。
+ * 帧率缺 Shizuku 授权时显示引导小字（与卡片态一致，不静默消失）。
  */
 @Composable
 private fun NumbersStrip(
@@ -286,7 +317,12 @@ private fun NumbersStrip(
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
         // 刷新率不进悬浮窗（1.0.9）：只用于综合评判的流畅度计算
-        data.fps.value?.let { add(GridCell(CoreMetricId.FPS, it)) }
+        val fpsValue = data.fps.value
+        if (fpsValue != null) {
+            add(GridCell(CoreMetricId.FPS, fpsValue))
+        } else {
+            add(GridCell(CoreMetricId.FPS, null, fpsHint(data.fps.state)))
+        }
     }
 
     if (cells.isEmpty()) {
@@ -305,23 +341,36 @@ private fun NumbersStrip(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         cells.forEach { cell ->
-            val numberColor = metricColor(cell.id.source.colorKey)
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                AnimatedNumber(
-                    value = cell.value,
-                    intervalMs = intervalMs,
-                    decimals = cell.id.decimals,
-                    color = numberColor,
-                    style = MaterialTheme.typography.titleMedium,
-                )
+            if (cell.value != null) {
+                val numberColor = metricColor(cell.id.source.colorKey)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    AnimatedNumber(
+                        value = cell.value,
+                        intervalMs = intervalMs,
+                        decimals = cell.id.decimals,
+                        color = numberColor,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = cell.id.unit,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textSecondary,
+                    )
+                }
+            } else {
+                // 引导行（如「需 Shizuku 授权」）：占一等宽格，保持三格布局稳定
                 Text(
-                    text = cell.id.unit,
+                    text = cell.hint ?: "暂无数据",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
                 )
             }
         }

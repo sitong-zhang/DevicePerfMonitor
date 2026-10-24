@@ -71,7 +71,9 @@ class CollectionService : android.app.Service() {
                 .collect { snapshot ->
                     // 1.0.9 起与悬浮窗 / iOS 实况窗同一口径：温度 / 实时帧率 / 内存占用率。
                     // （原来是 FPS + CPU 温度 + 电池温度，那两个温度是已经被移出界面的旧指标）
-                    val fps = snapshot.display.fps.value
+                    // 帧率取全局帧率（前台应用真实帧率，需 Shizuku）：1.0.10 起不再用
+                    // 本 App 帧率——服务在后台时本 App 不绘制，那个值永远是 null。
+                    val fps = snapshot.display.globalFps.value
                     val deviceTemp = snapshot.thermal.deviceTempC.value
                     val memory = snapshot.memory.usageRatio.value
                     // 采不到的段直接不进通知，不留「—」占位

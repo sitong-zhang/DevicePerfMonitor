@@ -63,7 +63,7 @@ enum class MetricId(
 
     companion object {
         val historyTracked: List<MetricId> = listOf(
-            FPS, GLOBAL_FPS, JANK_RATIO, CPU_USAGE, CPU_TEMP, GPU_LOAD, GPU_TEMP,
+            FPS, GLOBAL_FPS, REFRESH_RATE, JANK_RATIO, CPU_USAGE, CPU_TEMP, GPU_LOAD, GPU_TEMP,
             BATTERY_TEMP, BATTERY_CURRENT, BATTERY_LEVEL,
             MEMORY_USED, MEMORY_USAGE_RATIO, DEVICE_TEMP,
         )

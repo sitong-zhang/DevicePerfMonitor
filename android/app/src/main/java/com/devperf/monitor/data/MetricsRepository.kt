@@ -221,6 +221,7 @@ class MetricsRepository(
                 // 而是"最后一次真实测量"，UI 侧由时间戳体现新鲜度）
                 headroom = thermalCollector.lastHeadroom
                     ?.let { Metric.available(it, now) } ?: previous.thermal.headroom,
+                source = thermalCollector.lastSource,
             ),
         )
     }

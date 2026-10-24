@@ -20,13 +20,21 @@ import kotlinx.coroutines.launch
  * 悬浮窗手势检测器。
  *
  * 手势优先级（需求硬性规定，从上到下）：
- * 1. 拖动：长按（> longPressTimeout）且位移超过 touchSlop 后进入拖动；
+ * 1. 拖动：位移超过 touchSlop 即进入拖动（**不需要长按**——按下即拖是
+ *    悬浮窗的基本交互，1.0.9 及以前要求长按 350ms 且进入时不结算已拖
+ *    位移，用户按下直接拖时前段全部丢失，表现为"完全不跟手"）；
  * 2. 缩放：双指捏合（拖动未开始时才生效，避免与拖动冲突）；
  * 3. 单击 / 双击：快速点击（无位移、短时长）。双击判定窗口 250ms
  *    （design-tokens gesture.doubleTapWindowMs）——第一次点击后延迟 250ms
  *    再执行单击动作，窗口内第二次落下则取消单击并触发双击；
  * 4. 贴边收窄：不是手势，而是窗口贴边后的自动形态（由控制器决定），
  *    因此永远让位给上述手势。
+ *
+ * 拖动位移的两段式结算（跟手性的关键）：
+ * - 从按下到超过 slop 之前，位移只累积不发送（避免误触抖动）；
+ * - 超过 slop 进入拖动的那一个事件，**先把累计位移一次性补发**
+ *   （onDrag(totalDrag)），窗口立即跟上手指，之后按事件增量跟手。
+ *   少这一步，进入拖动窗口不动、之后才动，用户感知就是"拖一大段只动一小段"。
  *
  * 说明：手势在 Compose 层完成，窗口位置/尺寸由 [OverlayController] 更新。
  */
@@ -100,11 +108,17 @@ fun Modifier.overlayGestures(callbacks: OverlayGestureCallbacks): Modifier {
                     }
                 } else {
                     totalDrag += change.position - change.previousPosition
-                    val held = SystemClock.uptimeMillis() - downAt
-                    // ---- 优先级 1：长按 + 位移 → 拖动 ----
-                    if (held >= LONG_PRESS_MS && totalDrag.getDistance() > slopPx) {
+                    // ---- 优先级 1：位移超过 slop → 立即拖动 ----
+                    // 不要求长按：用户按下直接拖是基本交互。单击/双击靠
+                    // "时长短 + 位移小" 判定，天然不与拖动冲突。
+                    if (totalDrag.getDistance() > slopPx) {
                         dragging = true
                         callbacks.onDragStart()
+                        // 补发累计位移：从按下点连续跟手（1.0.9 缺这一步，
+                        // 导致"拖一大段只动一小段"）
+                        if (totalDrag != Offset.Zero) {
+                            callbacks.onDrag(totalDrag)
+                        }
                         change.consume()
                     }
                 }
@@ -116,8 +130,10 @@ fun Modifier.overlayGestures(callbacks: OverlayGestureCallbacks): Modifier {
                 scaling -> Unit // 缩放结束
                 dragging -> callbacks.onDragEnd()
                 else -> {
-                    val held = SystemClock.uptimeMillis() - downAt
                     // ---- 优先级 3：单击 / 双击 ----
+                    // 无拖动发生（位移未超 slop）且时长够短才算点击；
+                    // 长按不动不触发任何动作（与单击语义互斥）
+                    val held = SystemClock.uptimeMillis() - downAt
                     if (held <= TAP_TIMEOUT_MS && totalDrag.getDistance() <= slopPx) {
                         handleTap(tapState, scope, doubleTapWindowMs, callbacks)
                     }
@@ -127,10 +143,11 @@ fun Modifier.overlayGestures(callbacks: OverlayGestureCallbacks): Modifier {
     }
 }
 
-/** 长按进入拖动的判定时长（ms）：> ViewConfiguration 长按阈值，避免与点击冲突。 */
-private const val LONG_PRESS_MS = 350L
-
-/** 点击最大时长（ms）：超过即视为长按/拖动，不触发点击。 */
+/**
+ * 点击最大时长（ms）：超过即视为长按，不触发点击。
+ * 注意与拖动的区分只靠时长 + 位移：拖动不看时长（按下即拖），
+ * 点击不看距离（只要没超过 slop 且松手快）。
+ */
 private const val TAP_TIMEOUT_MS = 150L
 
 /** 跨手势迭代的单击状态（双击判定窗口 250ms）。 */

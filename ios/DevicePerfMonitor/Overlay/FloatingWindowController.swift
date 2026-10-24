@@ -310,12 +310,9 @@ final class FloatingWindowController: NSObject, ObservableObject {
 
     private func refresh() {
         guard isVisible else { return }
-        let repository = MetricsRepository.shared
-        repository.sampleOnce()
-        let overlay = repository.overlayData(now: Date().timeIntervalSince1970)
-        let snapshot = repository.snapshot
-
-        AlertManager.shared.evaluate(snapshot: snapshot, overlay: overlay)
+        // sampleOnce 内部已驱动 AlertManager.evaluate（1.0.10 挪到采集中枢），
+        // 这里只读最新告警状态给悬浮窗变红
+        MetricsRepository.shared.sampleOnce()
         state.alert = AlertManager.shared.alertActive
 
         // 形态切换时同步窗口尺寸（瞬切；内容过渡由 SwiftUI 负责）

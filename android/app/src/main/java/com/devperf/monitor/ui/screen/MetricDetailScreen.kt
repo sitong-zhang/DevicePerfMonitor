@@ -162,6 +162,15 @@ fun MetricDetailScreen(
                                 modifier = Modifier.padding(bottom = 6.dp),
                             )
                         }
+                        // 补充说明小字（如温度降级为电池读数时透明标注，不冒充）
+                        reading.note?.let { note ->
+                            Text(
+                                text = note,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.textSecondary,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
                     }
                 }
                 Text(

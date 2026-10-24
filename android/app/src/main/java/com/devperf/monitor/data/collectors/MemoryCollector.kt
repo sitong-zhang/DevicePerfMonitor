@@ -8,13 +8,19 @@ import com.devperf.monitor.core.MetricId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 内存采集器。
  *
  * 数据来源与三态：
- * - 总/已用/可用 RAM：ActivityManager.MemoryInfo（公开 API，始终可用）；
- * - 已用 = total - avail（avail 含可回收缓存，与系统"内存"页口径一致）；
+ * - 总/可用 RAM：优先 /proc/meminfo（MemTotal + MemAvailable，普通应用可读）；
+ * - **口径说明（1.0.10 修正）**：MemAvailable 是内核估算的"真正可用"内存
+ *   （MemFree + 可回收 Buffers/Cached/SReclaimable - Shmem），与系统
+ *   「设置 - 内存」页口径一致。1.0.9 及以前用 ActivityManager.availMem，
+ *   它只算真正空闲、不含可回收缓存，同样一台机器占用率会偏高 5~15%
+ *   （用户反馈"内存数据偏上"）；
+ * - /proc/meminfo 读不到的极端情况回退 ActivityManager.MemoryInfo（旧口径）；
  * - 后台应用内存明细：需 root/Shizuku 解析 `dumpsys meminfo`，
  *   普通 App 自 Android 8 起无法读取其他进程内存 → UNAVAILABLE / NeedsPermission。
  */
@@ -30,13 +36,14 @@ class MemoryCollector(
 
     override suspend fun sample(): Map<MetricId, Metric<*>> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val info = ActivityManager.MemoryInfo()
-        // getMemoryInfo 返回 Unit，runCatching 结果为 Result<Unit>；
-        // 用 isSuccess 判定（getOrDefault(false) 会因公共超类型推断失败）
-        val ok = runCatching { activityManager.getMemoryInfo(info) }.isSuccess
 
-        val totalMb = if (ok && info.totalMem > 0L) info.totalMem / (1024.0 * 1024.0) else null
-        val availMb = if (ok && info.availMem >= 0L) info.availMem / (1024.0 * 1024.0) else null
+        // 首选 /proc/meminfo（MemAvailable 口径 = 系统内存页口径）；
+        // 读不到再回退 ActivityManager（availMem 口径偏高，仅作兜底）
+        val meminfo = readMeminfo()
+        val amInfo = if (meminfo == null) readActivityManager() else null
+        val totalMb = meminfo?.first ?: amInfo?.first
+        val availMb = meminfo?.second ?: amInfo?.second
+
         val usedMb = if (totalMb != null && availMb != null) totalMb - availMb else null
         val ratio = if (totalMb != null && usedMb != null && totalMb > 0.0)
             (usedMb / totalMb * 100.0).toFloat() else null
@@ -55,6 +62,57 @@ class MemoryCollector(
             MetricId.PER_APP_MEMORY to (perApp?.let { Metric.available(it, now) }
                 ?: Metric.unavailable("后台应用内存需 root 或 Shizuku", now)),
         )
+    }
+
+    /**
+     * /proc/meminfo 口径：返回 (总 MB, 可用 MB)。
+     *
+     * 可用优先取 MemAvailable（Linux 3.14+/Android API 19+ 内核均有）；
+     * 字段缺失时按内核定义手算：MemFree + Buffers + Cached + SReclaimable - Shmem。
+     * 该口径把可回收缓存算进"可用"，与系统「设置 - 内存」页一致。
+     */
+    private fun readMeminfo(): Pair<Double, Double>? {
+        val text = runCatching { File("/proc/meminfo").readText() }.getOrNull() ?: return null
+        var totalKb = 0L
+        var availKb = -1L
+        var freeKb = 0L
+        var buffersKb = 0L
+        var cachedKb = 0L
+        var sReclaimableKb = 0L
+        var shmemKb = 0L
+        text.lineSequence().forEach { line ->
+            val sep = line.indexOf(':')
+            if (sep <= 0) return@forEach
+            val key = line.substring(0, sep).trim()
+            val value = line.substring(sep + 1).trim().split(' ').firstOrNull()?.toLongOrNull()
+                ?: return@forEach
+            when (key) {
+                "MemTotal" -> totalKb = value
+                "MemAvailable" -> availKb = value
+                "MemFree" -> freeKb = value
+                "Buffers" -> buffersKb = value
+                "Cached" -> cachedKb = value
+                "SReclaimable" -> sReclaimableKb = value
+                "Shmem" -> shmemKb = value
+            }
+        }
+        if (totalKb <= 0L) return null
+        val availKbFinal = if (availKb >= 0L) {
+            availKb
+        } else {
+            (freeKb + buffersKb + cachedKb + sReclaimableKb - shmemKb).coerceAtLeast(0L)
+        }
+        return (totalKb / 1024.0) to (availKbFinal / 1024.0)
+    }
+
+    /** ActivityManager 回退口径（availMem 不含可回收缓存，仅 /proc 读不到时用）。 */
+    private fun readActivityManager(): Pair<Double, Double>? {
+        val info = ActivityManager.MemoryInfo()
+        // getMemoryInfo 返回 Unit，runCatching 结果为 Result<Unit>；
+        // 用 isSuccess 判定（getOrDefault(false) 会因公共超类型推断失败）
+        val ok = runCatching { activityManager.getMemoryInfo(info) }.isSuccess
+        if (!ok || info.totalMem <= 0L || info.availMem < 0L) return null
+        return (info.totalMem / (1024.0 * 1024.0)) to (info.availMem / (1024.0 * 1024.0))
     }
 
     /**

@@ -10,6 +10,12 @@
 //  4. 实时活动（Live Activity，iOS 16.1+）：持续更新核心指标，
 //     系统不支持时静默降级。
 //
+//  1.0.10 起监测形态按平台能力分流（用户原话：「如果支持实况窗或者灵动岛
+//  就只能用灵动岛和实况窗，如果不支持再用悬浮窗，如果支持的话就直接没有
+//  悬浮窗这个选项」）：本机支持实时活动时，监测数据只上灵动岛/锁屏，
+//  设置里不再出现悬浮窗选项（见 SettingsScreen）；鸿蒙 6 实况窗需人工
+//  审核申请，安卓 APK 侧只做悬浮窗，走不到这里。
+//
 //  阈值与 settings 联动（温度阈值默认 45℃，可由设置页调整）。
 //
 
@@ -104,10 +110,32 @@ final class AlertManager: ObservableObject {
 
     // MARK: - 实时活动（Live Activity）
 
-    /// 启动实时活动（设置页开关；系统不支持时返回 false 并静默降级）。
+    /// 本机是否支持实时活动：iOS 16.1+ 且用户没有在「设置 → 本 App」里
+    /// 关掉实时活动。部署目标 iOS 17.0，ActivityKit 恒可用，只需查用户开关。
+    /// 支持的机型监测形态只用灵动岛/锁屏（不再提供悬浮窗），
+    /// 不支持的机型才回退应用内悬浮窗。
+    static var isSupported: Bool {
+        ActivityAuthorizationInfo().areActivitiesEnabled
+    }
+
+    /// 启动实时活动；已在运行则直接返回 true。
+    /// 系统不支持（用户在设置里关了实时活动）时返回 false，调用方回滚开关、静默降级。
     func startLiveActivity() -> Bool {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
+        guard Self.isSupported else { return false }
         guard activity == nil else { return true }
+
+        // 冷启动 / 回前台：先收养系统里仍在运行的实时活动——App 进程被杀后
+        // Activity.activities 仍有效，无条件 request 会出现两个实时活动。
+        let running = Activity<MonitorActivityAttributes>.activities
+        if let existing = running.first {
+            // 只应有一个；历史版本可能在重启后留下重复实例，顺手清掉
+            for extra in running.dropFirst() {
+                Task { await extra.end(nil, dismissalPolicy: .immediate) }
+            }
+            activity = existing
+            liveActivityRunning = true
+            return true
+        }
 
         let attributes = MonitorActivityAttributes(startedAt: Date())
         let state = MonitorActivityAttributes.ContentState()
@@ -147,6 +175,10 @@ final class AlertManager: ObservableObject {
             timestampMs: snapshot.timestampMs
         )
         Task {
+            // staleDate 60s：App 退后台后系统只给有限运行时，被挂起后采样与
+            // 更新一起停摆（苹果确认后台无定时器；持续更新只能靠推送服务器，
+            // 与本项目「全程离线」冲突，不做），超过 60s 系统会把实时活动
+            // 置灰——这正是要的效果：明示数据已不新鲜，而非假装还在跳。
             await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(60)))
         }
     }

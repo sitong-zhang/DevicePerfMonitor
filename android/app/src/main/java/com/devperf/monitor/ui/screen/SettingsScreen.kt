@@ -337,8 +337,9 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     Text(
-                        text = "全局 FPS、各核心频率、后台应用内存需要 Shizuku（免 root）或 root 授权；" +
-                            "未授权时这些指标不参与显示，不影响其他指标。",
+                        text = "悬浮窗与首页的实时帧率（前台应用/游戏真实帧率）、各核心频率、" +
+                            "后台应用内存需要 Shizuku（免 root）或 root 授权。" +
+                            "未授权时帧率会显示「需 Shizuku」引导，不影响其他指标。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.textSecondary,
                     )
@@ -362,6 +363,12 @@ fun SettingsScreen(
                     Text(
                         text = "使用方式：安装 Shizuku App 并启动服务后，点击上方按钮授权；" +
                             "授权结果弹窗由系统/Shizuku 展示。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                    Text(
+                        text = "温度说明：优先读机身温区；部分机型（如华为）系统限制普通应用读取，" +
+                            "自动回退电池温度，详情页会标注「当前为电池温度」。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )

@@ -33,6 +33,46 @@ import androidx.compose.ui.unit.dp
  * 空数据一律画占位而不是画 0：采不到就表明采不到，不编数字。
  */
 
+/**
+ * 图表 Y 轴自适应范围：抗离群点 + 最小可范围。
+ *
+ * 背景（1.0.9 用户反馈「所有数据都偏上」）：之前直接用 min/max 做量程，
+ * 一个离群低点（内存偶尔跌到 78.0，其余 59 个点全在 79.5~80.0）把 range
+ * 拉宽到 2.0，密集点全被压到图表顶部，看起来就是"贴顶一条线"。
+ *
+ * 现在的规则：
+ * - 主体范围取 2% / 98% 分位数，离群点不参与量程（仍会被画出来，
+ *   由调用方 coerce 到边缘，不会被藏掉）；
+ * - 主体范围过窄（近恒定数据，如 60Hz 刷新率全程一条直线）时扩展到
+ *   最小可范围（值的 2%），让数据落在中部、微小波动可见，
+ *   而不是被压成一条贴边直线；
+ * - 单点/空数据给一个以该值为中心的兜底范围。
+ */
+internal fun autoRange(values: List<Float>): ClosedFloatingPointRange<Float> {
+    if (values.isEmpty()) return 0f..1f
+    if (values.size == 1) {
+        val v = values[0]
+        val pad = minRangeOf(v)
+        return (v - pad / 2f)..(v + pad / 2f)
+    }
+    val sorted = values.sorted()
+    val loIdx = ((sorted.size - 1) * 0.02f).toInt().coerceIn(0, sorted.lastIndex)
+    val hiIdx = ((sorted.size - 1) * 0.98f).toInt().coerceIn(loIdx, sorted.lastIndex)
+    var lo = sorted[loIdx]
+    var hi = sorted[hiIdx]
+    // 近恒定数据：扩到最小可范围，让线落在中部而不是贴边
+    if (hi - lo < minRangeOf((lo + hi) / 2f)) {
+        val mid = (lo + hi) / 2f
+        val pad = minRangeOf(mid)
+        lo = mid - pad / 2f
+        hi = mid + pad / 2f
+    }
+    return lo..hi
+}
+
+/** 最小可范围：量级越大允许的噪声范围越大（内存 80 → ±0.8；帧率 60 → ±0.6）。 */
+private fun minRangeOf(v: Float): Float = maxOf(kotlin.math.abs(v) * 0.02f, 0.5f)
+
 /** 环形进度（健康分、内存占用率这类 0~100 有界值）。 */
 @Composable
 fun ProgressRing(
@@ -121,16 +161,19 @@ fun Sparkline(
             }
             return@Canvas
         }
-        val min = points.min()
-        val max = points.max()
-        val range = (max - min).takeIf { it > 0.0001f } ?: 1f
+        // Y 轴范围：分位数 + 最小可范围（抗离群点，近恒定数据居中，见 autoRange）
+        val range_ = autoRange(points)
+        val lo = range_.start
+        val span = (range_.endInclusive - lo).takeIf { it > 0.0001f } ?: 1f
         val padY = 4.dp.toPx()
         val usableH = (size.height - padY * 2).coerceAtLeast(1f)
         val stepX = size.width / (points.size - 1).coerceAtLeast(1)
 
         fun pxOf(i: Int): Offset {
             val v = points[i]
-            val y = padY + (1f - (v - min) / range) * usableH
+            // 离群点 coerce 到边缘：不被藏掉，也不绑架量程
+            val t = ((v - lo) / span).coerceIn(0f, 1f)
+            val y = padY + (1f - t) * usableH
             return Offset(i * stepX, y)
         }
 
@@ -173,16 +216,18 @@ fun BarSeries(
 ) {
     Canvas(modifier = modifier) {
         if (points.isEmpty()) return@Canvas
-        val min = points.min()
-        val max = points.max()
-        val range = (max - min).takeIf { it > 0.0001f } ?: 1f
+        // Y 轴范围：分位数 + 最小可范围（抗离群点，近恒定数据居中，见 autoRange）
+        val range_ = autoRange(points)
+        val lo = range_.start
+        val span = (range_.endInclusive - lo).takeIf { it > 0.0001f } ?: 1f
         val n = points.size
         val slot = size.width / n
         val barW = (slot * 0.6f).coerceAtLeast(1.5.dp.toPx())
         val padY = 3.dp.toPx()
         val usableH = (size.height - padY * 2).coerceAtLeast(1f)
         points.forEachIndexed { i, v ->
-            val h = ((v - min) / range) * usableH
+            // 离群点 coerce 到满高：不被藏掉，也不绑架量程
+            val h = ((v - lo) / span).coerceIn(0f, 1f) * usableH
             val left = i * slot + (slot - barW) / 2f
             drawRoundRect(
                 color = color.copy(alpha = 0.85f),

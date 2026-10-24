@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -32,7 +31,6 @@ import com.devperf.monitor.ui.theme.DevicePerfTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -224,16 +222,13 @@ class OverlayService : android.app.Service() {
                     initial = MonitorSettings(),
                 )
                 val snapshot by repository.snapshot.collectAsState()
-                // FPS 500ms 粒度直读（需求规定）；其余指标跟随采集 tick
-                val fps by produceState(initialValue = repository.currentFps(), controllerRef) {
-                    while (true) {
-                        value = repository.currentFps()
-                        delay(500L)
-                    }
-                }
                 val state by controllerRef.uiState.collectAsState()
+                // 帧率走**全局帧率**（前台应用/游戏的真实帧率，需 Shizuku 或 root，
+                // 见 GlobalFpsCollector）。未授权时 Metric 带 NeedsPermission 三态，
+                // 悬浮窗显示「需 Shizuku」引导行，而不是像 1.0.9 以前那样直接消失
+                // （那时读的是本 App 帧率：退出应用后本 App 不绘制，永远 null）。
                 val data = OverlayData.from(
-                    fps = fps?.let { Metric.available(it) } ?: Metric.unavailable("等待采样"),
+                    fps = snapshot.display.globalFps,
                     snapshot = snapshot,
                 )
                 val callbacks = rememberOverlayCallbacks(controllerRef)

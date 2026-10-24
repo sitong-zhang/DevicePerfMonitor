@@ -86,6 +86,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         val value: Float?,
         /** 采不到时的内部原因（不直接展示给用户）。 */
         val reason: String?,
+        /** 有值时也可能有的补充说明（如"当前为电池温度"），UI 以小字展示。 */
+        val note: String? = null,
     ) {
         val available: Boolean get() = value != null
     }
@@ -104,9 +106,15 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private fun buildFocused(s: DeviceSnapshot): FocusedState {
         val readings = listOf(
             readingOf(CoreMetricId.MEMORY_RATIO, s.memory.usageRatio),
-            readingOf(CoreMetricId.DEVICE_TEMP, s.thermal.deviceTempC),
+            // 温度：zone 不可读（部分 ROM 限制）降级为电池温度时透明标注，
+            // 不冒充 zone 读数（电池温度通常低 5~15℃）
+            readingOf(CoreMetricId.DEVICE_TEMP, s.thermal.deviceTempC).let { r ->
+                if (r.available && s.thermal.source == com.devperf.monitor.data.collectors.ThermalCollector.Source.BATTERY) {
+                    r.copy(note = "机身温区不可读，当前为电池温度")
+                } else r
+            },
             readingOf(CoreMetricId.REFRESH_RATE, s.display.refreshRateHz),
-            readingOf(CoreMetricId.FPS, s.display.fps),
+            fpsReading(s),
         )
         val byId = readings.associate { it.id to it.value }
         return FocusedState(
@@ -119,6 +127,24 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             ),
             updatedAtMs = s.timestampMs,
         )
+    }
+
+    /**
+     * 帧率读数：**优先全局帧率**（前台应用/游戏的真实帧率，需 Shizuku 或 root），
+     * 未授权时回落本 App 帧率（前台打开本应用时有效，悬浮窗场景本 App 无绘制、
+     * 采不到，此时带上 Shizuku 三态引导用户授权）。
+     *
+     * 1.0.9 及以前这里直接用本 App 帧率：用户退出应用后悬浮窗永远没有帧率
+     * （本 App 不绘制），看起来像"帧率根本没做"。
+     */
+    private fun fpsReading(s: DeviceSnapshot): CoreReading {
+        val global = s.display.globalFps
+        if (global.value != null) return readingOf(CoreMetricId.FPS, global)
+        val own = s.display.fps
+        if (own.value != null) return readingOf(CoreMetricId.FPS, own)
+        // 都采不到：沿用 globalFps 的三态（NeedsPermission("Shizuku 授权") /
+        // Unavailable），让 UI 显示引导而不是静默消失
+        return readingOf(CoreMetricId.FPS, global)
     }
 
     private fun readingOf(id: CoreMetricId, metric: Metric<Float>): CoreReading {

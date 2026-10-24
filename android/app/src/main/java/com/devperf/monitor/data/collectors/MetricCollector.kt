@@ -110,11 +110,14 @@ data class MemoryMetrics(
 )
 
 data class ThermalMetrics(
-    /** 机身整体温度：取可读温区最大值（真实测量值，非模型估算）。 */
+    /** 机身整体温度：优先取可读温区最大值；zone 不可读（部分 ROM 限制）时
+     *  为电池温度（[source] 记录真实来源，UI 透明标注，不冒充）。 */
     val deviceTempC: Metric<Float>,
     val status: ThermalStatus,
     /** 热余量：0.0~1.0 比值（1.0 = SEVERE 节流阈值），API 30+，非摄氏度。 */
     val headroom: Metric<Float>,
+    /** 温度读数来源（ZONE 真实温区 / BATTERY 电池温度降级 / NONE 无）。 */
+    val source: ThermalCollector.Source = ThermalCollector.Source.NONE,
 )
 
 data class DeviceSnapshot(

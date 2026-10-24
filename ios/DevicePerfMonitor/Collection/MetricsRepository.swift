@@ -170,6 +170,12 @@ final class MetricsRepository: ObservableObject {
 
             Task { @MainActor in
                 self.snapshot = merged
+                // 1.0.10：告警判定与实时活动（灵动岛/锁屏）更新改由采集中枢驱动。
+                // 以前挂在 FloatingWindowController 的 500ms 循环上——支持实时
+                // 活动、不挂悬浮窗的机型（1.0.10 起的默认监测形态）永远收不到
+                // 更新，灵动岛会停在上次的值。挂在这里后，前台 UI、后台运行、
+                // 灵动岛三种形态走同一条驱动链路（对齐 Android 的 MonitorViewModel）。
+                AlertManager.shared.evaluate(snapshot: merged, overlay: self.overlayData(now: now))
             }
         }
     }
