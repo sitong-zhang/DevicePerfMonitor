@@ -34,10 +34,23 @@ fun defaultMetricViewModes(): Map<CoreMetricId, MetricViewMode> = mapOf(
     CoreMetricId.FPS to MetricViewMode.WAVE,
 )
 
+/** 每个核心指标默认的回看窗口（秒）：1 分钟，与详情页 WINDOWS 首项一致。 */
+fun defaultMetricWindows(): Map<CoreMetricId, Int> =
+    CoreMetricId.values().associateWith { DEFAULT_WINDOW_SEC }
+
+/** 回看窗口默认值（秒）。 */
+const val DEFAULT_WINDOW_SEC: Int = 60
+
 /** 全部用户设置（设置页唯一数据源）。 */
 data class MonitorSettings(
     /** 每个核心指标的可视化模式；缺省项回落到 [defaultMetricViewModes]。 */
     val metricViewModes: Map<CoreMetricId, MetricViewMode> = defaultMetricViewModes(),
+    /**
+     * 每个核心指标详情页的「回看」时间窗口（秒）；缺省项回落到
+     * [defaultMetricWindows]。1.0.14 修复：窗口选择以前只活在页面 Composition
+     * 里，退出详情页再进就被打回默认的 1 分钟——与显示方式同一套持久化机制。
+     */
+    val metricWindows: Map<CoreMetricId, Int> = defaultMetricWindows(),
     /**
      * 悬浮窗总开关。1.0.8 起默认 true：用户要求「一退出应用悬浮窗就出现，
      * 不需要手动打开」。老用户升级后保留其已有选择（DataStore 里存过值）。
@@ -78,6 +91,10 @@ class SettingsRepository(private val context: Context) {
                 ?.let { parseMetricModes(it) }
                 ?.takeIf { it.isNotEmpty() }
                 ?: defaultMetricViewModes(),
+            metricWindows = prefs[KEY_METRIC_WINDOWS]
+                ?.let { parseMetricWindows(it) }
+                ?.takeIf { it.isNotEmpty() }
+                ?: defaultMetricWindows(),
             overlayEnabled = prefs[KEY_OVERLAY_ENABLED] ?: true,
             collectInBackground = prefs[KEY_COLLECT_BACKGROUND] ?: true,
             overlayOpacity = prefs[KEY_OVERLAY_OPACITY] ?: 1f,
@@ -111,6 +128,19 @@ class SettingsRepository(private val context: Context) {
                 current.entries.joinToString("|") { "${it.key.name}:${it.value.name}" }
         }
     }
+
+    /** 切换某个核心指标详情页的回看窗口（秒，1.0.14 新增持久化）。 */
+    suspend fun setMetricWindow(id: CoreMetricId, windowSec: Int) {
+        context.settingsDataStore.edit { prefs ->
+            val current = (
+                prefs[KEY_METRIC_WINDOWS]?.let { parseMetricWindows(it) }
+                    ?: defaultMetricWindows()
+                ).toMutableMap()
+            current[id] = windowSec
+            prefs[KEY_METRIC_WINDOWS] =
+                current.entries.joinToString("|") { "${it.key.name}:${it.value}" }
+        }
+    }
     suspend fun setCollectInBackground(value: Boolean) = put(KEY_COLLECT_BACKGROUND, value)
     suspend fun setOverlayOpacity(value: Float) = put(KEY_OVERLAY_OPACITY, value)
     suspend fun setOverlayScale(value: Float) = put(KEY_OVERLAY_SCALE, value)
@@ -138,7 +168,18 @@ class SettingsRepository(private val context: Context) {
                 id to mode
             }.toMap()
 
+        /** 序列化格式：FPS:300|DEVICE_TEMP:60|... 缺省项回落到默认窗口。 */
+        fun parseMetricWindows(raw: String): Map<CoreMetricId, Int> =
+            raw.split("|").mapNotNull { part ->
+                val kv = part.split(":")
+                if (kv.size != 2) return@mapNotNull null
+                val id = runCatching { CoreMetricId.valueOf(kv[0]) }.getOrNull() ?: return@mapNotNull null
+                val sec = kv[1].toIntOrNull() ?: return@mapNotNull null
+                id to sec
+            }.toMap()
+
         val KEY_METRIC_MODES = stringPreferencesKey("metric_view_modes")
+        val KEY_METRIC_WINDOWS = stringPreferencesKey("metric_windows")
         val KEY_OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
         val KEY_COLLECT_BACKGROUND = booleanPreferencesKey("collect_background")
         val KEY_OVERLAY_OPACITY = floatPreferencesKey("overlay_opacity")

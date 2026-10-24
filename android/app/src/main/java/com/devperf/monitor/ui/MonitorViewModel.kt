@@ -213,6 +213,11 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         settingsRepository.setMetricViewMode(id, mode)
     }
 
+    /** 切换某个核心指标详情页的回看窗口（秒）。 */
+    fun setMetricWindow(id: CoreMetricId, windowSec: Int) = viewModelScope.launch {
+        settingsRepository.setMetricWindow(id, windowSec)
+    }
+
     /** 某个指标当前的展示模式（缺省回落到默认）。 */
     fun viewModeOf(id: CoreMetricId): MetricViewMode =
         settings.value.metricViewModes[id] ?: defaultMetricViewModes()[id] ?: MetricViewMode.NUMBER

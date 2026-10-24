@@ -33,10 +33,11 @@
 
 ### 更新记录
 
-**1.0.14**：修复液态玻璃版真机闪退（挂载结构），修复详情页/总览页「显示靠上、柱状/波状不显示」（滚动容器无界高度约束）。
+**1.0.14**：修复液态玻璃版真机闪退（挂载结构），修复详情页/总览页「显示靠上、柱状/波状不显示」（滚动容器无界高度约束），修复「回看」窗口不记忆。
 
 - **液态玻璃版闪退根因与修复**（用户报「一进去就闪退，怀疑库要别的语言」）：不是语言问题——[Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 是 Kotlin Multiplatform 工程，Android 工程消费 backdrop-android 就是官方支持路径；根因是挂载结构用错。1.0.13 把 `layerBackdrop` 挂在 NavHost 上，玻璃卡片因此落在录制子树内：`LayerBackdropNode` 录制时重放玻璃节点的 `drawLayer`，采样到的是正在录音的同一个 RenderNode——自指采样，未定义行为，一进首页就崩。1.0.14 照库官方 catalog `BackdropDemoScaffold` 的标准结构重写：`layerBackdrop` 只挂纯背景节点（主题渐变层，与各页面背景同源同色），NavHost 与浮动底栏互为兄弟，所有 `drawBackdrop` 玻璃元素都在录制子树之外。效果参数不变，仍全部取自库教程既有值。
 - **详情页/总览页「显示靠上、图表不显示」根因与修复**（两个包都中招，与玻璃无关）：页面在 `verticalScroll` / `LazyColumn` 里，子节点拿到的是无界高度约束；卡片写 `heightIn(min=…)` 时高度按内容收缩，内部 `Box(fillMaxSize)` 退化成 wrap——数字/环形被 GlassCard 的 TopStart 对齐顶到卡顶，Sparkline / BarSeries 是无固有尺寸的 `Canvas`，拿到零高度什么都不画。1.0.10 只修了图表 Y 轴量程（数据层），没修这个布局根因，所以「和上一个状况一样」。现在图表卡改固定 240dp、指标卡 120dp、综合评判卡 176dp，详情页顶部卡交回内容高度，`fillMaxSize` 恢复有界，居中对齐与 Canvas 绘制全部正常（`Crossfade` 根节点是普通 Box，约束原样透传，固定卡片高度即可治愈整条链）。
+- **「回看」窗口不记忆**（用户报：选 30 分钟退出详情页再进，被打回 1 分钟）：窗口选择以前是 `remember { mutableIntStateOf(0) }`，只活在页面 Composition 里，页面一销毁就重置。现在与「显示方式」同一套 DataStore 持久化（新增 `metricWindows`，序列化格式同 `metricViewModes`），每个指标各自记住上次选的窗口，重装才丢。
 
 **1.0.13**：iOS 悬浮窗新增「仿灵动岛」态，监测形态改为用户自选；Android 出液态玻璃/无玻璃双包。
 

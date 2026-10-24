@@ -20,10 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -89,7 +86,12 @@ fun MetricDetailScreen(
     val backSource = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
 
-    var windowIndex by remember { mutableIntStateOf(0) }
+    // 回看窗口记住上次选择（1.0.14 修复）：以前窗口选择只活在页面 Composition
+    // 里，退出详情页再进就被打回默认的 1 分钟。与显示方式同一套 DataStore
+    // 持久化，换设备重装才丢。
+    val savedWindowSec = settings.metricWindows[coreId]
+    val windowIndex = WINDOWS.indexOfFirst { it.first == savedWindowSec }
+        .takeIf { it >= 0 } ?: 0
     val windowSec = WINDOWS[windowIndex].first
     val points = viewModel.history(coreId.source, windowSec)
     val values = points.map { it.value }
@@ -205,7 +207,7 @@ fun MetricDetailScreen(
             selectedIndex = windowIndex,
             onSelect = {
                 haptics.select()
-                windowIndex = it
+                viewModel.setMetricWindow(coreId, WINDOWS[it].first)
             },
             modifier = Modifier.fillMaxWidth(),
         )
