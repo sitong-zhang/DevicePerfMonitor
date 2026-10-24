@@ -1,7 +1,7 @@
 {
   "$comment": "双端唯一真源 (single source of truth)。Android 由 app/build.gradle.kts 的 generateDesignTokens 任务生成为 DesignTokens.kt；iOS 由 ios/Tools/generate_tokens.py 生成为 DesignTokens.generated.swift。禁止在业务代码中硬编码色值。",
   "name": "DevicePerfMonitor Design Tokens",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "palette": {
     "dark": {
       "name": "Material 3 Expressive（种子色 Catppuccin Mauve #CBA6F7）",

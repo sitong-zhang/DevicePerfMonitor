@@ -18,7 +18,7 @@
 
 ## 版本
 
-当前 **1.0.11**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
+当前 **1.0.12**。安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -32,6 +32,12 @@
 | Release 资产名 | `DevicePerfMonitor-<版本>-release.apk` / `.ipa` |
 
 ### 更新记录
+
+**1.0.12**：设置页「关于」段瘦身——删掉大段产品理念式说明文字，只留版本号与开源许可。
+
+- Android 删：「全部数据本地采集、本地存储；不联网、不上传、不含第三方统计 SDK。指标三态规范：可用 / 不可用 / 需授权……」整段。
+- iOS 删：「历史轨迹保留 2 小时……」「iOS 平台可用性差异与降级路径详见仓库 README……」两条。
+- 两端「关于」段现在统一为：版本号 + 开源许可。
 
 **1.0.11**：iOS 后台刷新通道落地——挂起后按系统调度周期性唤醒刷新灵动岛；「后台采集」死开关接活；灵动岛新增自走时的数据年龄。
 

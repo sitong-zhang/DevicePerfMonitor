@@ -415,13 +415,6 @@ fun SettingsScreen(
                         value = BuildConfig.VERSION_NAME,
                     )
                     Text(
-                        text = "全部数据本地采集、本地存储；不联网、不上传、不含第三方统计 SDK。" +
-                            "指标三态规范：可用 / 不可用 / 需授权，任何接口读取失败均降级显示，" +
-                            "采不到的指标直接从界面消失，绝不用估算值冒充真实数据。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.textSecondary,
-                    )
-                    Text(
                         text = "开源许可：Backdrop（Kyant0，Apache-2.0）、Vico（Apache-2.0）、" +
                             "Shizuku（Apache-2.0）、字体 Inter / JetBrains Mono（OFL-1.1）。",
                         style = MaterialTheme.typography.labelMedium,

@@ -143,13 +143,7 @@ struct SettingsScreen: View {
                         Text("DevicePerfMonitor iOS \(version)")
                             .font(Typography.bodyLarge())
                             .foregroundStyle(colors.textPrimary)
-                        Text("历史轨迹保留 2 小时，开始采集后不删、可回看；退出应用后重新打开仍在。")
-                            .font(Typography.labelMedium())
-                            .foregroundStyle(colors.textSecondary)
                         Text("图表：danielgindi/Charts（Apache-2.0）；字体：Inter / JetBrains Mono（OFL-1.1）；配色：Catppuccin Mocha / Latte（MIT）。")
-                            .font(Typography.labelMedium())
-                            .foregroundStyle(colors.textSecondary)
-                        Text("iOS 平台可用性差异与降级路径详见仓库 README「API-权限-可用性-降级」对照表。")
                             .font(Typography.labelMedium())
                             .foregroundStyle(colors.textSecondary)
                     }
