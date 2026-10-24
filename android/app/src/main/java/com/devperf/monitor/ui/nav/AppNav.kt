@@ -50,13 +50,21 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.devperf.monitor.ui.MonitorViewModel
+import com.devperf.monitor.ui.kit.LocalBackdrop
+import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
+import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.shapes.Capsule
 import androidx.compose.ui.unit.dp
 
 /**
@@ -107,41 +115,54 @@ fun AppNav(
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        NavHost(
-            navController = navController,
-            startDestination = Routes.OVERVIEW,
-            // 进入使用 enter 曲线（320ms），符合三条动效曲线规范
-            enterTransition = {
-                slideInVertically(animationSpec = enterSpec) { it / 6 }
-            },
-            exitTransition = {
-                slideOutVertically(animationSpec = exitSpec) { -it / 6 }
-            },
+        // 1.0.13 glass flavor：创建应用级 backdrop（教程标准式：主题背景色 + 内容），
+        // NavHost 挂 layerBackdrop 导出内容，玻璃组件（面板/底栏）经 LocalBackdrop 取用。
+        // plain flavor 为 null，全部回落到 MD3 原样外观。
+        val backdrop = if (com.devperf.monitor.BuildConfig.LIQUID_GLASS) {
+            com.devperf.monitor.ui.kit.rememberAppBackdrop()
+        } else {
+            null
+        }
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.devperf.monitor.ui.kit.LocalBackdrop provides backdrop
         ) {
-            composable(Routes.OVERVIEW) {
-                OverviewScreen(
-                    viewModel = viewModel,
-                    onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
-                )
-            }
-            composable(Routes.SETTINGS) {
-                SettingsScreen(
-                    viewModel = viewModel,
-                    onRequestOverlayPermission = onRequestOverlayPermission,
-                )
-            }
-            composable(Routes.DETAIL) { entry ->
-                val coreId = entry.arguments?.getString("metricId")
-                    ?.let { name ->
-                        runCatching {
-                            com.devperf.monitor.core.CoreMetricId.valueOf(name)
-                        }.getOrNull()
-                    }
-                MetricDetailScreen(
-                    viewModel = viewModel,
-                    coreId = coreId,
-                    onBack = { navController.popBackStack() },
-                )
+            NavHost(
+                navController = navController,
+                modifier = Modifier.appLayerBackdrop(backdrop),
+                startDestination = Routes.OVERVIEW,
+                // 进入使用 enter 曲线（320ms），符合三条动效曲线规范
+                enterTransition = {
+                    slideInVertically(animationSpec = enterSpec) { it / 6 }
+                },
+                exitTransition = {
+                    slideOutVertically(animationSpec = exitSpec) { -it / 6 }
+                },
+            ) {
+                composable(Routes.OVERVIEW) {
+                    OverviewScreen(
+                        viewModel = viewModel,
+                        onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
+                    )
+                }
+                composable(Routes.SETTINGS) {
+                    SettingsScreen(
+                        viewModel = viewModel,
+                        onRequestOverlayPermission = onRequestOverlayPermission,
+                    )
+                }
+                composable(Routes.DETAIL) { entry ->
+                    val coreId = entry.arguments?.getString("metricId")
+                        ?.let { name ->
+                            runCatching {
+                                com.devperf.monitor.core.CoreMetricId.valueOf(name)
+                            }.getOrNull()
+                        }
+                    MetricDetailScreen(
+                        viewModel = viewModel,
+                        coreId = coreId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
         }
 
@@ -192,6 +213,13 @@ private fun BottomNavBar(
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
     val selectedIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
+    // 1.0.13 glass flavor：容器走 Kyant0 Backdrop 的 drawBackdrop（参数用
+    // LiquidBottomTabs 示例既有值：Capsule + vibrancy/blur 8dp/lens 24dp×24dp，
+    // surface 用主题 surfaceContainer 40% 透明保证可读性）；plain flavor
+    // 保留原 Surface + 投影 + 描边。
+    val backdrop = LocalBackdrop.current
+    val glassOn = com.devperf.monitor.BuildConfig.LIQUID_GLASS && backdrop != null
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -201,26 +229,7 @@ private fun BottomNavBar(
             ),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        // 容器：level2 投影（比卡片高一级，因为它浮在内容之上）
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(DesignTokens.BottomBar.HEIGHT.dp)
-                .shadow(
-                    elevation = (DesignTokens.Elevation.LEVEL2.SHADOW_Y +
-                        DesignTokens.Elevation.LEVEL2.RADIUS / 4f).dp,
-                    shape = capsule,
-                    clip = false,
-                    ambientColor = Color.Black.copy(alpha = DesignTokens.Elevation.LEVEL2.ALPHA),
-                    spotColor = Color.Black.copy(alpha = DesignTokens.Elevation.LEVEL2.ALPHA),
-                ),
-            shape = capsule,
-            color = cs.surfaceContainer,
-            border = BorderStroke(
-                width = DesignTokens.Surface.BORDER_WIDTH.dp,
-                color = cs.outline.copy(alpha = DesignTokens.Surface.BORDER_ALPHA),
-            ),
-        ) {
+        val barContent: @Composable () -> Unit = {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val itemWidth = maxWidth / topLevelTabs.size
                 // 滑动指示器：位置由弹簧驱动，切换 tab 时滑过去而不是瞬移
@@ -259,6 +268,51 @@ private fun BottomNavBar(
                         )
                     }
                 }
+            }
+        }
+
+        if (glassOn) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(DesignTokens.BottomBar.HEIGHT.dp)
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { Capsule() },
+                        effects = {
+                            vibrancy()
+                            blur(8f.dp.toPx())
+                            lens(24f.dp.toPx(), 24f.dp.toPx())
+                        },
+                        onDrawSurface = {
+                            drawRect(cs.surfaceContainer.copy(alpha = 0.4f))
+                        }
+                    )
+            ) {
+                barContent()
+            }
+        } else {
+            // 容器：level2 投影（比卡片高一级，因为它浮在内容之上）
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(DesignTokens.BottomBar.HEIGHT.dp)
+                    .shadow(
+                        elevation = (DesignTokens.Elevation.LEVEL2.SHADOW_Y +
+                            DesignTokens.Elevation.LEVEL2.RADIUS / 4f).dp,
+                        shape = capsule,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = DesignTokens.Elevation.LEVEL2.ALPHA),
+                        spotColor = Color.Black.copy(alpha = DesignTokens.Elevation.LEVEL2.ALPHA),
+                    ),
+                shape = capsule,
+                color = cs.surfaceContainer,
+                border = BorderStroke(
+                    width = DesignTokens.Surface.BORDER_WIDTH.dp,
+                    color = cs.outline.copy(alpha = DesignTokens.Surface.BORDER_ALPHA),
+                ),
+            ) {
+                barContent()
             }
         }
     }

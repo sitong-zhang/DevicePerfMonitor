@@ -414,9 +414,25 @@ fun SettingsScreen(
                         label = "版本",
                         value = BuildConfig.VERSION_NAME,
                     )
+                    // 1.0.13 双包标识：plain 包让用户一眼区分（无液态玻璃版本）
+                    if (!BuildConfig.LIQUID_GLASS) {
+                        Text(
+                            text = "无液态玻璃版本",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.textSecondary,
+                        )
+                    }
+                    // 1.0.13：Backdrop 只在 glass flavor 进包（plain 经 R8 全裁），
+                    // 许可行按 flavor 展示，不列用不到的库
+                    val licenses = buildString {
+                        append("Vico（Apache-2.0）、Shizuku（Apache-2.0）")
+                        if (BuildConfig.LIQUID_GLASS) {
+                            append("、Backdrop（Apache-2.0）")
+                        }
+                        append("、字体 Inter / JetBrains Mono（OFL-1.1）")
+                    }
                     Text(
-                        text = "开源许可：Backdrop（Kyant0，Apache-2.0）、Vico（Apache-2.0）、" +
-                            "Shizuku（Apache-2.0）、字体 Inter / JetBrains Mono（OFL-1.1）。",
+                        text = "开源许可：$licenses。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )

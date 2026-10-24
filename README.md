@@ -4,13 +4,13 @@
 
 两个端的界面是同一套设计：`design-tokens.json` 是唯一真源。色板由 Google 官方算法生成——种子色取 Catppuccin Mauve `#CBA6F7`，走 Material 3 Expressive（`SchemeExpressive` + SPEC_2025），深/浅各一套，共 24 个语义色（含 surface 层次、描边、tertiary）。生成工具在 `Tools/palette-gen/`，**构建期/离线跑一次，色值固化进 design-tokens.json，运行时零依赖**。
 
-**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），不再叠液态玻璃——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
+**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），1.0.13 起玻璃包（glass flavor）引入开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
 
 几条从一开始就定下的规矩：
 
 - 采不到的数据就显示"不可用"并说明原因，不拿估算值冒充
 - 液态玻璃（iOS）走开源库 LiquidGlassKit 的真实材质：iOS 26 上是原生 `glassEffect`（折射 + 高光 + 交互形变），低版本是库的纯 SwiftUI fallback，不是半透明纯色
-- Android 用 Material 3 Expressive：官方稳定组件（SegmentedButton / Card / Surface）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API
+- Android 用 Material 3 Expressive：官方稳定组件（SegmentedButton / Card / Surface）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API；1.0.13 起 glass flavor 在 MD3 组件之上叠开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）的真实折射（vibrancy + blur + lens），plain flavor 不叠——两个包由构建期 flavor 决定
 - 视觉参数不写死：层次、描边、投影、底栏几何全部来自 design-tokens 的 `surface` / `elevation` / `bottomBar` 三段
 - 不用系统默认控件和默认蓝，按钮卡片开关滑块全部自己封装
 - 不申请 INTERNET 权限，没有任何联网代码路径
@@ -33,7 +33,9 @@
 
 ### 更新记录
 
-**1.0.13**：iOS 悬浮窗新增「仿灵动岛」态，监测形态改为用户自选。
+**1.0.13**：iOS 悬浮窗新增「仿灵动岛」态，监测形态改为用户自选；Android 出液态玻璃/无玻璃双包。
+
+- **Android 双包**（用户要求）：同一版本两个 APK——`DevicePerfMonitor-1.0.13-release.apk`（液态玻璃，默认）与 `DevicePerfMonitor-1.0.13-plain-release.apk`（无玻璃）。玻璃版用开源库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）：AppNav 根创建 `LayerBackdrop`（主题背景色 + 页面内容录制成层），卡片与浮动底栏按库教程既有参数采样折射（vibrancy + blur(4dp) + lens(16dp, 32dp)，surface 层主题色 40% 透明；底栏 blur(8dp) + lens(24dp, 24dp)）——参数全部取自库文档与 catalog 示例，没有自拟。无玻璃版回归纯 MD3 Card。两包同 applicationId / versionCode，装哪个覆盖哪个。开关是构建期 flavor（`glass` / `plain`，BuildConfig.LIQUID_GLASS），不是运行时开关；plain 包经 R8 把整个库裁干净（dex 内 0 处 kyant 引用，包体小 16KB）。blur 需 Android 12+、lens 需 Android 13+，更低版本库内部自动跳过效果不崩。
 
 - **新增灵动岛态悬浮窗**（overlayDefaultMode 默认 island，1.0.13 起默认形态）：紧凑药丸 = 综合评分小环 + 一个核心指标（帧率优先，采不到退内存）；单击展开为大圆角面板（药丸条作岛锚 + 综合评判 + 指标行），再单击收起；展开态以紧凑态顶边为锚向下增长，与真灵动岛展开方向一致。窗口尺寸瞬切 + 内容 spring 形变（与其他形态同一原则）。
 - **监测形态自选**（覆盖 1.0.10 的「支持灵动岛就不给悬浮窗选项」）：设置页新增「监测形态」二选一——灵动岛/锁屏（实时活动）或应用内悬浮窗，两种互斥切换；悬浮窗形态三选一（灵动岛/卡片/纯数字）。1.0.10 分流规则的背景：灵动岛退后台即冻结，用户要悬浮窗扛前台实时显示。
@@ -291,7 +293,9 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 | Vico | 3.2.3 | Apache-2.0 | Compose 图表。3.3.x 要 compileSdk 37 |
 | Shizuku | 13.1.5 | Apache-2.0 | 免 root 提权通道，可选。13.1.5 起 `Shizuku.newProcess` 私有化了，改成走公开 AIDL `IShizukuService.Stub.asInterface(...)` |
 | Charts (iOS) | 5.0.0+ | Apache-2.0 | iOS 图表，对应 Android 的 Vico。注意：这个库 4.0 起把包名和 SPM 产品名改成了 `DGCharts`，所以 import 和 pbxproj 里的 productName 都用 DGCharts |
-| LiquidGlassKit (iOS) | 2.1.0+ | MIT | iOS 液态玻璃（muhittincamdali/LiquidGlassKit，SPM）。iOS 26 走原生 `glassEffect`，低版本走库的纯 SwiftUI fallback。Android 端 1.0.8 起不用玻璃，走 Material 3 Expressive |
+| LiquidGlassKit (iOS) | 2.1.0+ | MIT | iOS 液态玻璃（muhittincamdali/LiquidGlassKit，SPM）。iOS 26 走原生 `glassEffect`，低版本走库的纯 SwiftUI fallback |
+| Backdrop (Android) | 2.0.0-alpha03 | Apache-2.0 | Android 液态玻璃（Kyant0/AndroidLiquidGlass，Maven Central）。仅 glass flavor 引用，参数照库文档/catalog；2.0.0 正式版要 compileSdk 37 / AGP 9.1+，本项目 AGP 8.13.2 + compileSdk 36，故选 API 完全一致的 alpha03（javap 核对签名，minCompileSdk=36） |
+| kyant-shapes (Android) | 1.2.0 | Apache-2.0 | Backdrop 的 G2 平滑圆角（RoundedRectangle / Capsule），随 Backdrop 传递引入 |
 | material-color-utilities | 5.0.1 | MIT | **仅离线工具，不进 APK、不进 CI**。Google 官方 Material Color Utilities 的 KMP 移植（com.materialkolor），在 `Tools/palette-gen/` 里生成 1.0.9 的色板，结果固化进 design-tokens.json。只依赖 kotlin-stdlib，零 Compose 依赖——用它而不是 material-kolor，是因为后者 5.0.1 依赖 material3 1.12.0-alpha03（alpha），会逼着升 alpha 依赖 |
 
 ## 采集指标对照表
@@ -358,7 +362,7 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 1. 电池健康百分比没有公开接口，只展示 EXTRA_HEALTH 的粗粒度档位。
 2. 后台应用内存、各核心频率、GPU 节点要 root 或 Shizuku。普通 App 读不了，这是 Android 8 之后的沙箱规定。
 3. Shizuku 13.1.5 把 `newProcess` 私有化了，改走公开 AIDL。
-4. **Android 没有液态玻璃**（1.0.8 起的刻意决策）：安卓这边真实背景模糊要么走 API 33 的 `RuntimeShader`（Android 12 及以下直接崩）、要么观感与服务端合成对不上，所以 Android 全面换 Material 3 Expressive——Compose 的 M3 组件不依赖系统版本，从 minSdk 24 起视觉与动效完全一致。玻璃质感只在 iOS 端保留（LiquidGlassKit）。
+4. **Android 液态玻璃按包分发**（1.0.13 起，修正 1.0.8「Android 没有液态玻璃」的决策）：安卓真实背景模糊要么走 API 33 的 `RuntimeShader`（Android 12 及以下直接崩）、要么观感与服务端合成对不上，所以 1.0.8 起全面换 Material 3 Expressive。1.0.13 应用户要求出双包：glass flavor 引入开源库 Kyant0/AndroidLiquidGlass（backdrop 2.0.0-alpha03）把液态玻璃做上——blur 需 Android 12+、lens 需 Android 13+，更低版本库内部自动跳过效果只保留采样层，不崩；plain flavor 不引效果回归纯 MD3。玻璃质感 iOS 端仍走 LiquidGlassKit（1.0.8 起），两端共用同一份色板与动效 token。
 
 ## design-tokens.json
 

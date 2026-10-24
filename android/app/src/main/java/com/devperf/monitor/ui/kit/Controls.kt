@@ -47,8 +47,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 
 /**
  * 控件层：Material 3 Expressive 组件 + 品牌语义色（1.0.8 起，取代液态玻璃自绘控件）。
@@ -320,7 +326,11 @@ fun Modifier.disabledAlpha(enabled: Boolean): Modifier =
     if (enabled) this else this.alpha(0.45f)
 
 /**
- * 玻璃面板容器：MD3 Card（tonalElevation 由主题形状/色彩体系驱动）+ 内边距 + 竖向排布。
+ * 玻璃面板容器：MD3 Card + 玻璃表面 / 层次三件套（1.0.13 双包）。
+ *
+ * glass flavor 主窗口（[LocalBackdrop] 非 null）时容器表面走 Kyant0 Backdrop 的
+ * [glassSurface]（Card 容器色透明，让玻璃显出来）；plain flavor 与悬浮窗窗口
+ * （backdrop 为 null，跨窗口捕获无意义）回落 MD3 Card + [elevatedCardChrome]。
  */
 @Composable
 fun GlassPanel(
@@ -334,11 +344,26 @@ fun GlassPanel(
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp)
+    val glassBackdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     Card(
-        modifier = modifier.fillMaxWidth().elevatedCardChrome(shape),
+        modifier = modifier.fillMaxWidth().then(
+            if (glassBackdrop != null) {
+                Modifier.glassSurface(
+                    backdrop = glassBackdrop,
+                    shape = shape,
+                    tint = MaterialTheme.colorScheme.surfaceContainer,
+                )
+            } else {
+                Modifier.elevatedCardChrome(shape)
+            }
+        ),
         shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            containerColor = if (glassBackdrop != null) {
+                Color.Transparent
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            },
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
@@ -368,6 +393,12 @@ enum class ElevationLevel { LEVEL1, LEVEL2, LEVEL3 }
  * 关系，这是界面显"平/丑"的直接原因。三件套参数全部来自 design-tokens
  * （surface.borderAlpha / highlightAlpha、elevation.levelN），不在这里写死。
  *
+ * 1.0.13 双包：
+ * - plain flavor（BuildConfig.LIQUID_GLASS = false）整段跳过，回归纯 MD3 Card；
+ * - glass flavor 的主窗口卡片已改走 [glassSurface]（Kyant0 Backdrop，高光与
+ *   投影用库默认值），三件套只留在悬浮窗窗口——那里跨窗口捕获 backdrop 无
+ *   意义，回落 MD3 + 手绘层次，浮在别的应用之上仍有立体感。
+ *
  * 注意顺序：shadow 必须在 clip 之前，高光画在内容之上、描边之下。
  */
 @Composable
@@ -375,6 +406,7 @@ private fun Modifier.elevatedCardChrome(
     shape: Shape,
     level: ElevationLevel = ElevationLevel.LEVEL1,
 ): Modifier {
+    if (!BuildConfig.LIQUID_GLASS) return this
     val spec = when (level) {
         ElevationLevel.LEVEL1 -> Triple(
             DesignTokens.Elevation.LEVEL1.SHADOW_Y,
@@ -429,8 +461,44 @@ private fun Modifier.elevatedCardChrome(
 }
 
 /**
- * 内容卡片：MD3 Card + 主题语义色 + 层次三件套，可点击（按压反馈由 pressScale
- * 传入的 interactionSource 驱动）。参数名与旧 LiquidGlassSurface 一致，调用方零改动。
+ * 玻璃表面：Kyant0 Backdrop 的 drawBackdrop（1.0.13 glass flavor 专用）。
+ *
+ * 库：io.github.kyant0:backdrop 2.0.0-alpha03（Kyant0/AndroidLiquidGlass，Apache-2.0）。
+ * 效果参数全部取自库教程 glass-bottom-bar 的既有值，不自拟：
+ * vibrancy + blur(4dp) + lens(16dp, 32dp)；高光与投影用库默认值
+ * （DefaultHighlight / DefaultShadow，取代手绘三件套的高光与阴影）。
+ * surface 层用主题 surfaceContainer 40% 透明（catalog LiquidBottomTabs 的
+ * containerColor 模式）：玻璃可见的同时，文字对比度不塌。
+ *
+ * 生效条件：glass flavor 且处于主窗口（[LocalBackdrop] 非 null）。plain flavor
+ * 与悬浮窗窗口由调用方回落 [elevatedCardChrome]。
+ * 降版本由库内部处理：blur 需 Android 12+、lens 需 Android 13+，更低版本
+ * 自动跳过效果（只保留采样层），不崩。
+ */
+private fun Modifier.glassSurface(
+    backdrop: LayerBackdrop,
+    shape: Shape,
+    tint: Color,
+): Modifier = drawBackdrop(
+    backdrop = backdrop,
+    shape = { shape },
+    effects = {
+        vibrancy()
+        blur(4f.dp.toPx())
+        lens(16f.dp.toPx(), 32f.dp.toPx())
+    },
+    onDrawSurface = {
+        drawRect(color = tint, alpha = 0.4f)
+    },
+)
+
+/**
+ * 内容卡片：MD3 Card + 玻璃表面 / 主题语义色 + 层次三件套，可点击（按压反馈由
+ * pressScale 传入的 interactionSource 驱动）。参数名与旧 LiquidGlassSurface 一致，调用方零改动。
+ *
+ * 1.0.13 双包：glass flavor 主窗口（[LocalBackdrop] 非 null）走 [glassSurface]，
+ * Card 容器色透明；表面 tint 沿用 [containerColor] 参数（悬浮窗告警态整体变红等
+ * 场景在主窗口同样成立）。plain flavor / 悬浮窗窗口回落 chrome 路径。
  *
  * [containerColor] 可覆盖容器色：悬浮窗告警态整体变红等场景使用；
  * 不传则走主题 surfaceContainer（比背景亮一档，卡片才浮得出来）。
@@ -445,18 +513,35 @@ fun GlassCard(
     interactionSource: MutableInteractionSource? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val glassBackdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     val colors = CardDefaults.cardColors(
         containerColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
     )
-    val chrome = Modifier.elevatedCardChrome(shape, elevation)
+    val chrome = if (glassBackdrop != null) {
+        Modifier.glassSurface(
+            backdrop = glassBackdrop,
+            shape = shape,
+            tint = containerColor ?: MaterialTheme.colorScheme.surfaceContainer,
+        )
+    } else {
+        Modifier.elevatedCardChrome(shape, elevation)
+    }
+    val cardColors = if (glassBackdrop != null) {
+        CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
+    } else {
+        colors
+    }
     if (onClick != null) {
         Card(
             onClick = onClick,
             modifier = modifier.then(chrome),
             enabled = true,
             shape = shape,
-            colors = colors,
+            colors = cardColors,
             interactionSource = interactionSource,
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
@@ -467,7 +552,7 @@ fun GlassCard(
         Card(
             modifier = modifier.then(chrome),
             shape = shape,
-            colors = colors,
+            colors = cardColors,
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
                 content()

@@ -43,6 +43,31 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    // ---------------------------------------------------------------------------
+    // 液态玻璃效果双包（1.0.13，用户要求）：
+    //   glass = Kyant0 Backdrop 液态玻璃（io.github.kyant0:backdrop 2.0.0-alpha03，
+    //          教程既有参数：vibrancy + blur + lens；UI 控件仍为 MD3 标准件）
+    //   plain = 纯 MD3 Card，无任何玻璃效果
+    // 两个 flavor 同 applicationId / versionCode，装哪个覆盖哪个；
+    // 产物名 app-glass-release.apk / app-plain-release.apk，发版时
+    // 分别命名为 DevicePerfMonitor-<版本>-release.apk（玻璃，默认）
+    // 与 DevicePerfMonitor-<版本>-plain-release.apk（无玻璃）。
+    // ---------------------------------------------------------------------------
+    flavorDimensions += "effect"
+    productFlavors {
+        create("glass") {
+            dimension = "effect"
+            buildConfigField("boolean", "LIQUID_GLASS", "true")
+            // Kyant0 Backdrop 只在 glass 变体出现，keep 规则不进共享文件——
+            // plain 变体才能把整个库裁干净（见 proguard-rules-glass.pro 头注）
+            proguardFile("proguard-rules-glass.pro")
+        }
+        create("plain") {
+            dimension = "effect"
+            buildConfigField("boolean", "LIQUID_GLASS", "false")
+        }
+    }
+
     androidResources {
         // 仅保留中英文资源（AGP 8.5+ 新 API，替代已废弃的 resourceConfigurations）
         localeFilters += setOf("zh-rCN", "en")
@@ -143,4 +168,9 @@ dependencies {
     // Shizuku（可选提权通道，用于全局 FPS / 后台内存）
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+
+    // Kyant0 液态玻璃（1.0.13 glass flavor；plain flavor 不调用，R8 会裁掉未用代码）
+    // 版本锁 2.0.0-alpha03 的理由见 libs.versions.toml（2.0.0 正式版要 compileSdk 37 / AGP 9.1+）
+    implementation(libs.backdrop)
+    implementation(libs.kyant.shapes)
 }

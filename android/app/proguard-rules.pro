@@ -12,8 +12,9 @@
 # Vico 图表（内部通过工厂/Provider 反射装配图层）
 -keep class com.patrykandpatrick.vico.** { *; }
 
-# Kyant0 Backdrop 液态玻璃（含 RenderEffect 相关 native 入口）
--keep class com.kyant.backdrop.** { *; }
+# Kyant0 Backdrop 液态玻璃只在 glass flavor 出现，keep 规则见
+# proguard-rules-glass.pro（由 glass flavor 的 proguardFile 引入）；
+# 这里不写，plain flavor 才能把整个库裁干净。
 
 # Shizuku：Provider / AIDL 生成的 Stub 必须保留
 -keep class rikka.shizuku.** { *; }

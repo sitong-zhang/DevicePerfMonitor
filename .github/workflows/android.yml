@@ -37,5 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DevicePerfMonitor-${{ github.sha }}
-          path: android/app/build/outputs/apk/release/app-release.apk
+          # 1.0.13 起双 flavor：glass（液态玻璃）/ plain（无玻璃）
+          path: |
+            android/app/build/outputs/apk/*/release/*.apk
           if-no-files-found: error

@@ -19,6 +19,18 @@ archCore = "2.2.0"
 # 第三方库（协议见 README 依赖表）
 vico = "3.2.3"          # Apache-2.0，Compose 图表
 shizuku = "13.1.5"      # Apache-2.0(?) 见 README，全局 FPS 提权通道（可选）
+# Kyant0 液态玻璃（1.0.13 glass flavor 引入）：backdrop = CMP 库（android target
+# minSdk 21），shapes 提供 G2 平滑圆角（RoundedRectangle / Capsule）。
+# 参数一律用库文档与 catalog 示例的既有值，不自拟。
+# 版本选择（2026-10 查证）：最新 2.0.1 / 2.0.0 的 AAR metadata 都是 minCompileSdk=37、
+# 传递依赖 compose 1.12.0，要 AGP 9.1+ / compileSdk 37——本项目 AGP 8.13.2 +
+# compileSdk 36 + compose-bom 1.11.4，且 2.0.0→2.0.1 全库仅两个 commit 且都是
+# "Update dependencies"（零功能差异）。2.0.0-alpha03 的 minCompileSdk=36、compose 1.10.1、
+# 自带 shapes 1.2.0 依赖，且 javap 核对 drawBackdrop / rememberLayerBackdrop /
+# blur / lens / vibrancy 签名与 2.0.1 完全一致（DrawBackdropModifier 的 draw 顺序
+# 与降级逻辑也逐字相同），是当前工具链下 API 等同的可用版本。
+backdrop = "2.0.0-alpha03"
+kyantShapes = "1.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -43,6 +55,8 @@ compose-material-icons-core = { group = "androidx.compose.material", name = "mat
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
+backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
+kyant-shapes = { group = "io.github.kyant0", name = "shapes", version.ref = "kyantShapes" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
