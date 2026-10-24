@@ -9,7 +9,9 @@
 //  触摸，区域外自动穿透到下层窗口，语义等价。
 //
 //  手势优先级（与 Android 端一致）：拖动(单指) > 缩放(双指) > 双击隐藏 > 单击循环；
-//  三态循环（单击切换）：card 完整卡片 → numbers 纯数字 → collapsed 收起；
+//  单击循环（1.0.13 起）：card 完整卡片 → numbers 纯数字 → collapsed 收起 → card；
+//  1.0.13 新增灵动岛态（island，设置页可选、默认）：单击 = 展开/收起，
+//  不参与上面的循环；展开态以紧凑态顶边为锚向下增长；
 //  贴边只吸附位置，不再自动收窄（收窄只由用户显式操作触发，1.0.8 起）；
 //  垃圾桶：拖动过程中悬停底部垃圾桶区域（高亮），松手关闭。
 //
@@ -44,19 +46,28 @@ final class FloatingWindowController: NSObject, ObservableObject {
     // 所以放进 @Published 的 state（见 OverlayUiState.overTrash）。
 
     /// 各形态的窗口尺寸（含阴影安全边距：窗口尺寸 = 可见区域 + 阴影，对应需求）。
-    private func windowSize(for mode: OverlayUiState.Mode) -> CGSize {
+    /// - 1.0.13：island 紧凑药丸 132×36；展开态 300×212（顶边锚定，见 frame(for:)）。
+    private func windowSize(for mode: OverlayUiState.Mode, expanded: Bool = false) -> CGSize {
         switch mode {
         // 完整卡片 = 综合评判行 + 最多两行指标格（默认形态，稳定显示不变形）
         case .card: return CGSize(width: 340, height: 180)
         // 纯数字：只要数字、不要卡片——无玻璃无阴影的一横排
         case .numbers: return CGSize(width: 264, height: 52)
         case .collapsed: return CGSize(width: 44, height: 64)
+        // 灵动岛态：紧凑药丸 / 展开面板（1.0.13）
+        case .island: return expanded ? CGSize(width: 300, height: 212) : CGSize(width: 132, height: 36)
         }
     }
 
-    /// 启动时的默认形态：设置页「默认纯数字」开关（overlayMiniMode）。
+    /// 启动时的默认形态：设置页「悬浮窗形态」（overlayDefaultMode：island/numbers/card）。
+    /// 1.0.13 起默认 island——用户要求主打仿灵动岛；旧的 overlayMiniMode（纯数字）
+    /// 不再读取，设置页已换成三选一。
     private var defaultMode: OverlayUiState.Mode {
-        UserDefaults.standard.bool(forKey: "overlayMiniMode") ? .numbers : .card
+        switch UserDefaults.standard.string(forKey: "overlayDefaultMode") {
+        case "numbers": return .numbers
+        case "card": return .card
+        default: return .island
+        }
     }
 
     /// 窗口透明度（设置页滑杆 0.4~1.0，UserDefaults「overlayOpacity」；未设置 = 1.0）。
@@ -80,8 +91,9 @@ final class FloatingWindowController: NSObject, ObservableObject {
     func show() {
         guard !isVisible, let scene = activeWindowScene() else { return }
         isVisible = true
-        // 启动形态取设置页默认值（卡片 / 纯数字）
+        // 启动形态取设置页默认值（灵动岛 / 纯数字 / 卡片）
         state.mode = defaultMode
+        state.islandExpanded = false
 
         let rootView = OverlayRootView(controller: self)
         let hosting = UIHostingController(rootView: rootView)
@@ -112,6 +124,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
         hostingController = nil
         isVisible = false
         state.mode = defaultMode
+        state.islandExpanded = false
         currentScale = 1.0
         baseScale = 1.0
     }
@@ -125,24 +138,32 @@ final class FloatingWindowController: NSObject, ObservableObject {
         window?.alpha = overlayOpacity
     }
 
-    /// 设置页「默认纯数字」开关变更时调用（立即切换当前形态）。
+    /// 设置页「悬浮窗形态」变更时调用（立即切换当前形态）。
     func applyDefaultMode() {
         state.mode = defaultMode
+        state.islandExpanded = false
         applyFrame(center: window?.center ?? initialCenter, animated: false)
     }
 
     // MARK: - 窗口布局
 
     private func frame(for mode: OverlayUiState.Mode, center: CGPoint) -> CGRect {
-        let size = windowSize(for: mode)
-        return CGRect(origin: .zero, size: size).offsetBy(dx: center.x - size.width / 2,
-                                                          dy: center.y - size.height / 2)
+        let size = windowSize(for: mode, expanded: state.islandExpanded)
+        var c = center
+        // 灵动岛展开态：以紧凑态顶边为锚向下增长（药丸视觉上原地撑开成面板，
+        // 与真灵动岛展开方向一致）。compactH = 36。
+        if mode == .island, state.islandExpanded {
+            let compactH = windowSize(for: .island, expanded: false).height
+            c.y += (size.height - compactH) / 2
+        }
+        return CGRect(origin: .zero, size: size).offsetBy(dx: c.x - size.width / 2,
+                                                          dy: c.y - size.height / 2)
     }
 
     private func applyFrame(center: CGPoint, animated: Bool = true) {
         guard let window, let scene = activeWindowScene() else { return }
         let bounds = scene.screen.bounds
-        let size = windowSize(for: state.mode)
+        let size = windowSize(for: state.mode, expanded: state.islandExpanded)
         let safe = scene.windows.first?.safeAreaInsets ?? .zero
 
         // 位置钳制在安全区内
@@ -264,6 +285,19 @@ final class FloatingWindowController: NSObject, ObservableObject {
     }
 
     @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+        // 灵动岛态：单击 = 展开/收起（对齐真灵动岛语义，不参与三态循环）
+        if state.mode == .island {
+            withAnimation(
+                .spring(
+                    response: DesignTokens.Motion.Spring.DefaultSpatial.response,
+                    dampingFraction: DesignTokens.Motion.Spring.DefaultSpatial.dampingFraction
+                )
+            ) {
+                state.islandExpanded.toggle()
+            }
+            applyFrame(center: window?.center ?? initialCenter, animated: false)
+            return
+        }
         // 三态循环：card → numbers → collapsed → card。
         // 内容形变交给 SwiftUI 过渡（spring），窗口尺寸瞬切——不拿窗口动画
         // 去形变用户正在看的卡片（与 Android applyLayout 同一原则）。
@@ -272,6 +306,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
         case .card: next = .numbers
         case .numbers: next = .collapsed
         case .collapsed: next = .card
+        case .island: next = .card // 不可达（上面已拦截），保编译完备
         }
         withAnimation(
             .spring(
@@ -316,7 +351,7 @@ final class FloatingWindowController: NSObject, ObservableObject {
         state.alert = AlertManager.shared.alertActive
 
         // 形态切换时同步窗口尺寸（瞬切；内容过渡由 SwiftUI 负责）
-        if window?.frame.size != windowSize(for: state.mode) {
+        if window?.frame.size != windowSize(for: state.mode, expanded: state.islandExpanded) {
             applyFrame(center: window?.center ?? initialCenter, animated: false)
         }
     }

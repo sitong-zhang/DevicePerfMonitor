@@ -4,9 +4,9 @@
 //
 //  设置页（对应 Android 端 ui/screen/SettingsScreen.kt）：
 //  - 采集：后台采集开关 + 刷新模式（实时/均衡/省电）+ 离线说明；
-//  - 监测悬浮形态：按平台能力分流（1.0.10）——本机支持实时活动的机型
-//    只用灵动岛/锁屏，设置里不出现悬浮窗选项；不支持的机型才回退
-//    应用内悬浮窗（含平台限制说明）；
+//  - 监测悬浮形态：1.0.13 起用户自选——灵动岛/锁屏（实时活动）或
+//    应用内悬浮窗（含仿灵动岛态：紧凑药丸 + 单击展开）；不支持的
+//    机型只能悬浮窗；
 //  - 告警：通知开关；
 //  - 主题：深色/浅色/跟随系统；
 //  - 关于：版本 + 依赖许可证 + 降级说明入口。
@@ -22,12 +22,16 @@ struct SettingsScreen: View {
     // 1.0.8 起默认 true：回应用自动挂出悬浮窗，不需要手动打开
     @AppStorage("overlayEnabled") private var overlayEnabled = true
     @AppStorage("alertNotification") private var alertNotification = true
-    // 1.0.10：支持实时活动的机型监测形态只用灵动岛/锁屏，默认开
+    // 1.0.10：支持实时活动的机型监测形态默认灵动岛/锁屏
     @AppStorage("liveActivity") private var liveActivity = true
+    // 1.0.13：监测形态自选（覆盖 1.0.10 的「支持灵动岛就不给悬浮窗选项」）
+    // liveActivity = 灵动岛/锁屏；overlay = 应用内悬浮窗
+    @AppStorage("monitorMode") private var monitorMode = "liveActivity"
+    // 1.0.13：悬浮窗默认形态三选一（island 灵动岛 / card 卡片 / numbers 纯数字），
+    // 取代旧的 overlayMiniMode 二值开关；默认 island
+    @AppStorage("overlayDefaultMode") private var overlayDefaultMode = "island"
     @AppStorage("themeMode") private var themeModeRaw = ThemeMode.dark.rawValue
     @AppStorage("backgroundCollection") private var backgroundCollection = true
-    /// 默认纯数字：启动悬浮窗时只要数字、不显示卡片（对应 Android overlayMiniMode）。
-    @AppStorage("overlayMiniMode") private var overlayMiniMode = false
     /// 悬浮窗窗口透明度 0.4~1.0（1.0.8 起接线到 window.alpha）。
     @AppStorage("overlayOpacity") private var overlayOpacity = 1.0
 
@@ -67,38 +71,66 @@ struct SettingsScreen: View {
                     }
                 }
 
-                // ---- 监测悬浮形态（1.0.10 起按平台能力分流）----
-                // 支持实时活动：只用灵动岛/锁屏，不出现悬浮窗选项；
-                // 不支持（iOS 16.1 以下或用户在系统里关了实时活动）：回退应用内悬浮窗。
-                if AlertManager.isSupported {
-                    GlassSectionTitle(text: "灵动岛 / 锁屏")
-                    GlassPanel {
-                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
-                            ToggleRow(
-                                title: "实时活动（灵动岛/锁屏）",
-                                subtitle: "监测数据直接显示在灵动岛与锁屏，打开应用即自动开启",
-                                isOn: $liveActivity
-                            )
-                            Text("本机支持实时活动（iOS 16.1+），按平台规范不再提供应用内悬浮窗。iOS 没有机身温度的公开 API，灵动岛不显示温度；退后台后系统只给有限运行时，App 被挂起后数据停留在最后一次采样。")
-                                .font(Typography.labelMedium())
-                                .foregroundStyle(colors.textSecondary)
+                // ---- 监测形态（1.0.13 起用户自选）----
+                // 1.0.10 曾按平台能力分流：支持实时活动的机型不出现悬浮窗选项。
+                // 1.0.13 放开——灵动岛退后台即冻结，用户要悬浮窗（仿灵动岛态）
+                // 扛前台实时显示，故两种形态都由用户自己选。
+                GlassSectionTitle(text: "监测形态")
+                GlassPanel {
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
+                        if AlertManager.isSupported {
+                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
+                                Text("监测形态")
+                                    .font(Typography.labelLarge(.medium))
+                                    .foregroundStyle(colors.textSecondary)
+                                GlassTabs(
+                                    options: ["灵动岛 / 锁屏", "应用内悬浮窗"],
+                                    selectedIndex: Binding(
+                                        get: { monitorMode == "overlay" ? 1 : 0 },
+                                        set: { monitorMode = $0 == 0 ? "liveActivity" : "overlay" }
+                                    )
+                                )
+                            }
                         }
-                    }
-                } else {
-                    GlassSectionTitle(text: "悬浮窗")
-                    GlassPanel {
-                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
-                            ToggleRow(title: "应用内悬浮窗", subtitle: "回应用自动挂出实时指标小窗（仅在应用内可见）", isOn: $overlayEnabled)
-                            ToggleRow(title: "默认纯数字模式", subtitle: "启动时只要数字、不显示卡片；单击可在 卡片 → 纯数字 → 收起 间循环", isOn: $overlayMiniMode)
-                            GlassSlider(
-                                value: $overlayOpacity,
-                                range: 0.4...1.0,
-                                label: "悬浮窗不透明度",
-                                valueText: "\(Int((overlayOpacity * 100).rounded()))%"
-                            )
-                            Text("本机未启用实时活动（iOS 16.1 以下，或已在系统设置里关闭），已回退为应用内悬浮窗。iOS 平台限制：系统不允许第三方应用创建全局悬浮窗（无 SYSTEM_ALERT_WINDOW 等价物），本悬浮窗仅在 DevicePerfMonitor 内显示，退后台自动隐藏、回前台自动挂出。详见 README「降级说明」。")
-                                .font(Typography.labelMedium())
-                                .foregroundStyle(colors.warning)
+                        // 悬浮窗设置组：选了悬浮窗，或本机不支持实时活动（只能悬浮窗）
+                        if monitorMode == "overlay" || !AlertManager.isSupported {
+                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
+                                ToggleRow(title: "应用内悬浮窗", subtitle: "回应用自动挂出实时指标小窗（仅在应用内可见）", isOn: $overlayEnabled)
+                                VStack(alignment: .leading, spacing: DesignTokens.Spacing.s8) {
+                                    Text("悬浮窗形态")
+                                        .font(Typography.labelLarge(.medium))
+                                        .foregroundStyle(colors.textSecondary)
+                                    GlassTabs(
+                                        options: ["灵动岛", "卡片", "纯数字"],
+                                        selectedIndex: Binding(
+                                            get: { overlayDefaultMode == "numbers" ? 2 : (overlayDefaultMode == "card" ? 1 : 0) },
+                                            set: { overlayDefaultMode = ["island", "card", "numbers"][$0] }
+                                        )
+                                    )
+                                }
+                                GlassSlider(
+                                    value: $overlayOpacity,
+                                    range: 0.4...1.0,
+                                    label: "悬浮窗不透明度",
+                                    valueText: "\(Int((overlayOpacity * 100).rounded()))%"
+                                )
+                                Text("iOS 无全局悬浮窗权限，悬浮窗仅本应用内显示；灵动岛态单击展开 / 收起。")
+                                    .font(Typography.labelMedium())
+                                    .foregroundStyle(colors.textSecondary)
+                            }
+                        }
+                        // 实时活动设置组：支持灵动岛且选了它
+                        if AlertManager.isSupported && monitorMode != "overlay" {
+                            VStack(alignment: .leading, spacing: DesignTokens.Spacing.s12) {
+                                ToggleRow(
+                                    title: "实时活动（灵动岛/锁屏）",
+                                    subtitle: "监测数据直接显示在灵动岛与锁屏，打开应用即自动开启",
+                                    isOn: $liveActivity
+                                )
+                                Text("退后台后系统只给有限运行时，App 挂起后数据停留在最后一次采样。iOS 无机身温度公开 API，灵动岛不显示温度。")
+                                    .font(Typography.labelMedium())
+                                    .foregroundStyle(colors.textSecondary)
+                            }
                         }
                     }
                 }
@@ -163,13 +195,25 @@ struct SettingsScreen: View {
             newValue ? BackgroundRefresh.scheduleNext() : BackgroundRefresh.cancel()
         }
         .onChange(of: overlayEnabled) { newValue in
+            // 1.0.13：仅悬浮窗模式响应（灵动岛模式下不挂窗）
+            guard monitorMode == "overlay" || !AlertManager.isSupported else { return }
             newValue ? FloatingWindowController.shared.show() : FloatingWindowController.shared.hide()
         }
         .onChange(of: overlayOpacity) { _ in
             FloatingWindowController.shared.applyOpacity()
         }
-        .onChange(of: overlayMiniMode) { _ in
+        .onChange(of: overlayDefaultMode) { _ in
             FloatingWindowController.shared.applyDefaultMode()
+        }
+        .onChange(of: monitorMode) { newValue in
+            // 1.0.13：两种监测形态互斥切换
+            if newValue == "overlay" {
+                AlertManager.shared.stopLiveActivity()
+                if overlayEnabled { FloatingWindowController.shared.show() }
+            } else {
+                FloatingWindowController.shared.hide()
+                if liveActivity { AlertManager.shared.startLiveActivity() }
+            }
         }
         .onChange(of: alertNotification) { newValue in
             if newValue { AlertManager.shared.requestNotificationPermission() }

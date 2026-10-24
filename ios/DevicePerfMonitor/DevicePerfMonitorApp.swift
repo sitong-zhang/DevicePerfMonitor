@@ -5,8 +5,9 @@
 //  App 入口：单 Window SwiftUI 场景。
 //  - 启动即开始采集（后台采集开关见设置页）；
 //  - 退后台时隐藏悬浮窗并立即落盘历史（scenePhase 驱动）；
-//  - 1.0.10 起监测形态按平台能力分流：支持实时活动的机型只用
-//    灵动岛/锁屏，不挂应用内悬浮窗；不支持的机型才回退悬浮窗；
+//  - 1.0.13 起监测形态用户自选（monitorMode）：liveActivity = 灵动岛/锁屏，
+//    overlay = 应用内悬浮窗；1.0.10 的「支持灵动岛就不给悬浮窗选项」已放开
+//    （灵动岛退后台即冻结，悬浮窗扛前台实时）；
 //  - 1.0.11 起退后台提交 BGAppRefreshTask：iOS 挂起 App 后唯一的
 //    正规刷新通道，唤醒时采样一次把新数据推进实时活动。
 //
@@ -20,11 +21,12 @@ struct DevicePerfMonitorApp: App {
     @AppStorage("themeMode") private var themeModeRaw = ThemeMode.dark.rawValue
     // 1.0.8 起默认 true：回应用即自动挂出悬浮窗（用户「不需要手动打开」；
     // iOS 平台上限是应用内窗口，退后台仍会隐藏）。
-    // 1.0.10 起仅在不支持实时活动的机型上生效——支持实时活动的机型
-    // 监测形态只用灵动岛/锁屏，设置里不再出现悬浮窗选项。
+    // 1.0.13 起仅 monitorMode == overlay（或不支持实时活动）时生效。
     @AppStorage("overlayEnabled") private var overlayEnabled = true
     // 1.0.10：支持实时活动的机型，监测数据直接上灵动岛/锁屏，默认开
     @AppStorage("liveActivity") private var liveActivity = true
+    // 1.0.13：监测形态自选（覆盖 1.0.10 的平台分流）
+    @AppStorage("monitorMode") private var monitorMode = "liveActivity"
     // 1.0.11：退后台按系统调度周期性唤醒采样（iOS 挂起后唯一正规刷新通道）
     @AppStorage("backgroundCollection") private var backgroundCollection = true
 
@@ -38,16 +40,18 @@ struct DevicePerfMonitorApp: App {
             switch phase {
             case .active:
                 MetricsRepository.shared.sampleOnce()
-                if AlertManager.isSupported {
-                    // 1.0.10：支持实时活动的机型只用灵动岛/锁屏，
-                    // 不挂应用内悬浮窗（用户：「支持的话就直接没有悬浮窗这个选项」）
+                // 1.0.13：按用户选的监测形态分流（不支持实时活动的机型只能悬浮窗）
+                let useOverlay = monitorMode == "overlay" || !AlertManager.isSupported
+                if useOverlay {
+                    FloatingWindowController.shared.hide()
+                    if overlayEnabled {
+                        FloatingWindowController.shared.show()
+                    }
+                } else {
                     FloatingWindowController.shared.hide()
                     if liveActivity {
                         AlertManager.shared.startLiveActivity()
                     }
-                } else if overlayEnabled {
-                    // 回前台：设置开着就自动挂出（隐藏过的也在此恢复）
-                    FloatingWindowController.shared.show()
                 }
             case .background:
                 // 退后台：隐藏应用内悬浮窗 + 立即落盘历史
@@ -81,12 +85,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // 1.0.11：注册后台刷新任务（注册 ≠ 调度，真正提交在退后台时）。
         // 唤醒时走 sampleOnce → evaluate → 实时活动更新，不需要 UI
         BackgroundRefresh.register()
-        // 1.0.10：支持实时活动的机型，监测数据直接上灵动岛/锁屏，
-        // 冷启动即自动申请（内部优先收养系统里仍在运行的实例，不重复创建）。
-        // 鸿蒙 6 实况窗需人工审核申请，安卓 APK 侧只做悬浮窗，走不到这里。
+        // 1.0.13：仅灵动岛模式冷启动自动申请实时活动（悬浮窗模式不申请，
+        // 等 scenePhase .active 时挂窗）。内部优先收养系统里仍在运行的
+        // 实例，不重复创建。鸿蒙 6 实况窗需人工审核申请，安卓 APK 侧
+        // 只做悬浮窗，走不到这里。
         if AlertManager.isSupported {
             let liveOn = UserDefaults.standard.object(forKey: "liveActivity") as? Bool ?? true
-            if liveOn {
+            let mode = UserDefaults.standard.string(forKey: "monitorMode") ?? "liveActivity"
+            if liveOn && mode != "overlay" {
                 AlertManager.shared.startLiveActivity()
             }
         }

@@ -51,12 +51,15 @@ struct OverlayData {
 
 /// 悬浮窗 UI 状态（由 FloatingWindowController 驱动）。
 struct OverlayUiState {
-    /// 三态：完整卡片 / 纯数字 / 收起。顺序即单击循环顺序。
+    /// 形态：完整卡片 / 纯数字 / 收起 / 灵动岛（1.0.13 新增，仿灵动岛药丸）。
+    /// 顺序即单击循环顺序（island 不参与循环——它的单击是展开/收起）。
     enum Mode {
-        case card, numbers, collapsed
+        case card, numbers, collapsed, island
     }
 
     var mode: Mode = .card
+    /// 灵动岛态展开标志：false = 紧凑药丸，true = 展开面板（1.0.13）。
+    var islandExpanded: Bool = false
     var alert: Bool = false
     /// 是否正在拖动（拖动期间主界面要挂出底部的删除区）。
     var dragging: Bool = false
@@ -80,6 +83,13 @@ struct OverlayView: View {
                 NumbersStrip(data: data, alert: state.alert, intervalMs: intervalMs)
             case .card:
                 CardContent(data: data, alert: state.alert, intervalMs: intervalMs)
+            case .island:
+                // 1.0.13 仿灵动岛：紧凑药丸 ↔ 展开面板（单击切换，spring 形变）
+                if state.islandExpanded {
+                    IslandExpanded(data: data, alert: state.alert, intervalMs: intervalMs)
+                } else {
+                    IslandBar(data: data, alert: state.alert, intervalMs: intervalMs)
+                }
             }
         }
         // 形态切换的形变在内容层完成（spring，token：motion.spring.defaultSpatial），
@@ -90,6 +100,14 @@ struct OverlayView: View {
                 dampingFraction: DesignTokens.Motion.Spring.DefaultSpatial.dampingFraction
             ),
             value: state.mode
+        )
+        // 灵动岛展开/收起独立形变（同一 token，与形态切换解耦）
+        .animation(
+            .spring(
+                response: DesignTokens.Motion.Spring.DefaultSpatial.response,
+                dampingFraction: DesignTokens.Motion.Spring.DefaultSpatial.dampingFraction
+            ),
+            value: state.islandExpanded
         )
     }
 }
@@ -256,5 +274,130 @@ private struct CollapsedStrip: View {
                 .frame(width: 4, height: 4)
                 .offset(y: 26)
         }
+    }
+}
+
+// MARK: - 灵动岛态（1.0.13）：仿灵动岛药丸 + 展开面板
+//
+// 背景：原生灵动岛（实时活动）退后台即被挂起、数据冻结，用户要求做一个
+// 「跟灵动岛一样」的悬浮窗扛实时显示。iOS 平台没有全局悬浮窗权限
+// （无 SYSTEM_ALERT_WINDOW 等价物），本形态是应用内悬浮窗的一种皮肤：
+// 前台实时（采集循环直推），退后台随窗口一起隐藏。
+//
+// 交互（对齐真灵动岛）：紧凑药丸单击展开、展开态单击收起；窗口尺寸瞬切 +
+// 内容 spring 形变（与其他形态同一原则）；展开态以紧凑态顶边为锚向下增长，
+// 药丸条视觉上原地撑开成圆角面板。
+
+/// 紧凑药丸：综合评分小环 + 一个核心指标（帧率优先，采不到退内存）。
+private struct IslandBar: View {
+    @Environment(\.colors) private var colors
+    let data: OverlayData
+    let alert: Bool
+    var intervalMs: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            MiniHealthRing(health: data.health, diameter: 18, lineWidth: 2)
+            // 药丸窄，只放一个数：帧率优先（实时感最强），采不到退内存
+            let cell: (id: MetricId, value: Float)? = data.fps.value.map { (.fps, $0) }
+                ?? data.memoryRatio.value.map { (.memoryUsageRatio, $0) }
+            if let cell {
+                HStack(alignment: .lastTextBaseline, spacing: 2) {
+                    AnimatedNumber(
+                        value: Double(cell.value),
+                        decimals: cell.id.decimals,
+                        color: alert ? colors.danger : colors.metricColor(cell.id.colorKey),
+                        font: Typography.mono(15, .semibold),
+                        intervalMs: intervalMs
+                    )
+                    Text(cell.id.unit)
+                        .font(Typography.mono(9))
+                        .foregroundStyle(colors.textSecondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 36)
+        .liquidGlass(
+            GlassStyle(
+                material: .frosted,
+                surfaceAlpha: alert
+                    ? DesignTokens.Glass.BackgroundAlpha.max
+                    : DesignTokens.Glass.BackgroundAlpha.min,
+                cornerRadius: 18
+            ),
+            tint: alert ? colors.danger : colors.surface
+        )
+    }
+}
+
+/// 展开面板：顶部药丸条（岛锚）+ 综合评判 + 指标行。
+private struct IslandExpanded: View {
+    @Environment(\.colors) private var colors
+    let data: OverlayData
+    let alert: Bool
+    var intervalMs: Double
+
+    var body: some View {
+        VStack(spacing: 10) {
+            // 岛锚：与紧凑药丸同款，展开时视觉连续
+            IslandBar(data: data, alert: alert, intervalMs: intervalMs)
+            Divider().overlay(colors.textSecondary.opacity(0.2))
+            HStack {
+                HealthBadge(health: data.health, diameter: 44, lineWidth: 4)
+                Spacer()
+                Text("综合评判")
+                    .font(Typography.mono(10))
+                    .foregroundStyle(colors.textSecondary)
+            }
+            let cells = data.cells
+            ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                MetricRow(cell: cell, intervalMs: intervalMs)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .liquidGlass(
+            GlassStyle(
+                material: .frosted,
+                surfaceAlpha: alert
+                    ? DesignTokens.Glass.BackgroundAlpha.max
+                    : DesignTokens.Glass.BackgroundAlpha.min,
+                cornerRadius: 28
+            ),
+            tint: alert ? colors.danger : colors.surface
+        )
+    }
+}
+
+/// 综合评分小环（药丸用）：无中心文字，纯进度环。
+private struct MiniHealthRing: View {
+    @Environment(\.colors) private var colors
+    let health: FocusedHealthResult
+    var diameter: CGFloat
+    var lineWidth: CGFloat
+
+    var body: some View {
+        let total = health.total
+        let tint: Color = {
+            guard let total else { return colors.textSecondary }
+            switch total {
+            case 75...: return colors.success
+            case 50..<75: return colors.accent
+            default: return colors.danger
+            }
+        }()
+        ProgressRing(
+            progress: (total ?? 0) / 100,
+            centerText: "",
+            caption: "",
+            color: tint,
+            trackColor: tint.opacity(0.2),
+            lineWidth: lineWidth,
+            centerFontSize: 1,
+            captionFontSize: 1
+        )
+        .frame(width: diameter, height: diameter)
     }
 }
