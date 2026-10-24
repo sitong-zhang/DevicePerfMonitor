@@ -224,9 +224,10 @@ class OverlayService : android.app.Service() {
                 val snapshot by repository.snapshot.collectAsState()
                 val state by controllerRef.uiState.collectAsState()
                 // 帧率走**全局帧率**（前台应用/游戏的真实帧率，需 Shizuku 或 root，
-                // 见 GlobalFpsCollector）。未授权时 Metric 带 NeedsPermission 三态，
-                // 悬浮窗显示「需 Shizuku」引导行，而不是像 1.0.9 以前那样直接消失
-                // （那时读的是本 App 帧率：退出应用后本 App 不绘制，永远 null）。
+                // 见 GlobalFpsCollector）。未授权时 Metric 带 NeedsPermission 三态。
+                // 注意：1.0.17 起悬浮窗那一格显示的是屏幕刷新率而非帧率（用户要求），
+                // 这里的 fps 只用于综合评判的流畅度（按 fps ÷ refreshHz 算达成率），
+                // 不再直接上悬浮窗的行。
                 val data = OverlayData.from(
                     fps = snapshot.display.globalFps,
                     snapshot = snapshot,

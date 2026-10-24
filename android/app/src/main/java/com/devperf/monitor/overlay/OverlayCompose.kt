@@ -78,8 +78,8 @@ private data class GridCell(
     val hint: String? = null,
 )
 
-/** 帧率采不到时的引导文案：告诉用户去哪开启，而不是莫名其妙少一行。 */
-private fun fpsHint(state: MetricState<Float>): String = when (state) {
+/** 指标读不到时的引导文案：告诉用户去哪开启，而不是莫名其妙少一行。 */
+private fun metricHint(state: MetricState<Float>): String = when (state) {
     is MetricState.NeedsPermission -> "需 ${state.permissionLabel}"
     is MetricState.Unavailable -> "暂无数据"
     else -> "暂无数据"
@@ -88,7 +88,7 @@ private fun fpsHint(state: MetricState<Float>): String = when (state) {
 /**
  * 悬浮窗内容：三态（卡片 / 纯数字 / 收起），单击循环切换。
  *
- * - CARD：默认形态。左侧综合评判小环 + 右侧三项指标竖排（温度 / 实时帧率 /
+ * - CARD：默认形态。左侧综合评判小环 + 右侧三项指标竖排（温度 / 屏幕刷新率 /
  *   内存占用率）。一退出应用就稳定显示这张卡片，不自动变形
  *   （用户原话：「等它显示那张卡片，不要动它」）；
  * - NUMBERS：只要卡片上的数字——去掉卡片容器、阴影、小环，三个数字横排；
@@ -206,13 +206,14 @@ private fun HealthBadge(health: FocusedHealth.Result) {
 }
 
 /**
- * 悬浮窗显示的三项：内存占用率 / 温度 / 实时帧率，竖排三行。
+ * 悬浮窗显示的三项：内存占用率 / 温度 / 屏幕刷新率，竖排三行。
  *
- * 1.0.9 起去掉刷新率（用户要求它只留在应用内）。剩三项再排 2×2 会空出一格，
- * 所以改成单列：标签在左、数值右对齐，扫一眼更整齐。
+ * 早年这里放四项（含刷新率），1.0.9 应要求去掉刷新率、只留实时帧率，会出现
+ * 2×2 缺一格，故改单列：标签在左、数值右对齐，扫一眼更整齐。
+ * **1.0.17 起反过来**：用户要求悬浮窗显示手机屏幕刷新率取代实时帧率，所以第三行
+ * 现在是「屏幕刷新率」（读 data 里的 `refreshHz`，无需任何授权就一定读得到）。
  * 只放采得到的，采不到的直接不进列表（悬浮窗寸土寸金，不放占位符）——
- * **帧率例外**：它采不到是因为缺 Shizuku 授权（不是设备不支持），必须留一行
- * 引导，否则用户完全看不出帧率是没做还是没授权。
+ * 例外：缺权限才能解释清楚的项要留一行引导，否则用户看不出是没做还是没授权。
  */
 @Composable
 private fun MetricGrid(
@@ -223,12 +224,14 @@ private fun MetricGrid(
     val cells = buildList<GridCell> {
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
-        // 刷新率不进悬浮窗（1.0.9）：只用于综合评判的流畅度计算
-        val fpsValue = data.fps.value
-        if (fpsValue != null) {
-            add(GridCell(CoreMetricId.FPS, fpsValue))
+        // 1.0.17：显示手机屏幕刷新率取代实时帧率（用户要求）。
+        // 1.0.9~1.0.16 这里挂的是 FPS，且当时刻意不让刷新率进悬浮窗
+        //（只用于综合评判的流畅度计算）；现在反过来。
+        val refreshValue = data.refreshHz.value
+        if (refreshValue != null) {
+            add(GridCell(CoreMetricId.REFRESH_RATE, refreshValue))
         } else {
-            add(GridCell(CoreMetricId.FPS, null, fpsHint(data.fps.state)))
+            add(GridCell(CoreMetricId.REFRESH_RATE, null, metricHint(data.refreshHz.state)))
         }
     }
 
@@ -316,12 +319,12 @@ private fun NumbersStrip(
     val cells = buildList<GridCell> {
         data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
         data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
-        // 刷新率不进悬浮窗（1.0.9）：只用于综合评判的流畅度计算
-        val fpsValue = data.fps.value
-        if (fpsValue != null) {
-            add(GridCell(CoreMetricId.FPS, fpsValue))
+        // 1.0.17：显示手机屏幕刷新率取代实时帧率（用户要求），见 MetricGrid 注释
+        val refreshValue = data.refreshHz.value
+        if (refreshValue != null) {
+            add(GridCell(CoreMetricId.REFRESH_RATE, refreshValue))
         } else {
-            add(GridCell(CoreMetricId.FPS, null, fpsHint(data.fps.state)))
+            add(GridCell(CoreMetricId.REFRESH_RATE, null, metricHint(data.refreshHz.state)))
         }
     }
 
