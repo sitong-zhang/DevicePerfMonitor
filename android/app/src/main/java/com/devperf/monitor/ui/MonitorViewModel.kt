@@ -298,8 +298,10 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private var updateSessionHandled = false
 
     /**
-     * 打开 App 时调用：查 GitHub Releases 最新版，有更新的版本且未被忽略就提示。
-     * 失败按「无更新」静默降级，绝不阻塞主流程。
+     * 打开 App 时调用：查 GitHub Releases 最新版。**强制更新**——只要发现比当前
+     * 更新的版本，就弹「不可关闭」的更新提示，旧版本任何功能都无法使用，必须更新。
+     * 仅当「能连上 GitHub 且确认有更新」时才拦截；网络失败（查不到）按无更新处理，
+     * 绝不锁死离线用户。每次进程启动都重新检查，因此「忽略版本」不再持久化。
      */
     fun checkForUpdate() {
         if (updateSessionHandled) return
@@ -311,13 +313,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             when {
                 release == null -> _updateState.value = UpdateUiState.Error
                 isNewer(release.version, current) -> {
-                    val ignored = settings.value.ignoredVersion
-                    if (ignored == release.tag) {
-                        updateSessionHandled = true
-                        _updateState.value = UpdateUiState.NoUpdate
-                    } else {
-                        _updateState.value = UpdateUiState.Available(release)
-                    }
+                    // 有更新：弹不可关闭的强制更新框，不写忽略、不留「稍后」
+                    _updateState.value = UpdateUiState.Available(release)
                 }
                 else -> {
                     updateSessionHandled = true
@@ -327,19 +324,13 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** 「稍后」：本次会话不再弹，但不写入忽略版本（下次打开还会提示）。 */
-    fun dismissUpdateLater() {
-        updateSessionHandled = true
-        _updateState.value = UpdateUiState.Dismissed
-    }
-
-    /** 「忽略此版本」：写入忽略版本，以后也不再为该版本弹窗。 */
-    fun ignoreUpdate() {
-        updateSessionHandled = true
-        (_updateState.value as? UpdateUiState.Available)?.release?.tag?.let { tag ->
-            viewModelScope.launch { settingsRepository.setIgnoredVersion(tag) }
-        }
-        _updateState.value = UpdateUiState.Dismissed
+    /**
+     * 检查更新连不上服务器时调用（[Error] 态的「关闭」）。仅把本次提示关闭、允许
+     * 暂时继续使用，但**不**置 updateSessionHandled，下次打开 App 仍会重新检查——
+     * 这样既能让离线用户用旧版，又不会让「其实有更新但刚好断网」的用户永久绕过。
+     */
+    fun dismissForOffline() {
+        _updateState.value = UpdateUiState.NoUpdate
     }
 
     /** 开始下载 APK（对应 flavor）。下载完成进入 Ready 态，由 UI 触发安装。 */

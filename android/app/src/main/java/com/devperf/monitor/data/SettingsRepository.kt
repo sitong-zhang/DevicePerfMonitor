@@ -76,12 +76,6 @@ data class MonitorSettings(
     val alertByNotification: Boolean = true,
     val alertByOverlayPopup: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.DARK,
-    /**
-     * 已忽略的更新版本 tag（如 "v1.0.14"）。用户点「忽略此版本」后写入，
-     * 之后即使重新打开也不再弹该版本的更新提示；装上新版本后该值自然失效
-     * （新版本号 > 忽略的 tag，checkForUpdate 会重新提示）。
-     */
-    val ignoredVersion: String? = null,
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -117,7 +111,6 @@ class SettingsRepository(private val context: Context) {
             themeMode = prefs[KEY_THEME]?.let { name ->
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
             } ?: ThemeMode.DARK,
-            ignoredVersion = prefs[KEY_IGNORED_VERSION]?.takeIf { it.isNotEmpty() },
         )
     }
 
@@ -160,14 +153,6 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAlertByOverlayPopup(value: Boolean) = put(KEY_ALERT_POPUP, value)
     suspend fun setThemeMode(mode: ThemeMode) = put(KEY_THEME, mode.name)
 
-    /** 记录/清除已忽略的更新版本（null 表示清除）。 */
-    suspend fun setIgnoredVersion(version: String?) {
-        context.settingsDataStore.edit { prefs ->
-            if (version == null) prefs.remove(KEY_IGNORED_VERSION)
-            else prefs[KEY_IGNORED_VERSION] = version
-        }
-    }
-
     private suspend fun <T> put(key: Preferences.Key<T>, value: T) {
         context.settingsDataStore.edit { it[key] = value }
     }
@@ -207,6 +192,5 @@ class SettingsRepository(private val context: Context) {
         val KEY_ALERT_NOTIFICATION = booleanPreferencesKey("alert_notification")
         val KEY_ALERT_POPUP = booleanPreferencesKey("alert_popup")
         val KEY_THEME = stringPreferencesKey("theme_mode")
-        val KEY_IGNORED_VERSION = stringPreferencesKey("ignored_update_version")
     }
 }
