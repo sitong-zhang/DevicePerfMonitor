@@ -59,22 +59,30 @@ class UpdateRepository(private val app: Application) {
         }
     }
 
-    /** 按当前 flavor 选对应 APK 资产（glass 用主包，plain 用 -plain 包）。 */
+    /**
+     * 选 APK 资产。1.0.16 起只发布一个液态玻璃包，因此固定取主资产
+     * `DevicePerfMonitor-<版本>-release.apk`；历史 Release 里还有旧的无玻璃包
+     * （`-plain-release.apk`），它的文件名同样以 "release.apk" 结尾，所以这里显式排除
+     * 带 "-plain" 的名字，避免旧版本的双包资产把 Tester 引到已经停产的包上。
+     */
     private fun pickApk(assets: JSONArray, version: String): String? {
-        val suffix = if (BuildConfig.LIQUID_GLASS) "release.apk" else "plain-release.apk"
+        val suffix = "release.apk"
+        val isCandidate: (String) -> Boolean = { name ->
+            name.endsWith(suffix) && !name.contains("-plain")
+        }
         // 先精确匹配版本号，避免拿到旧资产
         for (i in 0 until assets.length()) {
             val obj = assets.getJSONObject(i)
             val name = obj.optString("name", "")
             val url = obj.optString("browser_download_url", "")
-            if (name.endsWith(suffix) && name.contains(version)) return url
+            if (isCandidate(name) && name.contains(version)) return url
         }
         // 兜底：只匹配后缀
         for (i in 0 until assets.length()) {
             val obj = assets.getJSONObject(i)
             val name = obj.optString("name", "")
             val url = obj.optString("browser_download_url", "")
-            if (name.endsWith(suffix)) return url
+            if (isCandidate(name)) return url
         }
         return null
     }

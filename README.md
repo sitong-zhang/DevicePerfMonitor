@@ -4,13 +4,13 @@
 
 两个端的界面是同一套设计：`design-tokens.json` 是唯一真源。色板由 Google 官方算法生成——种子色取 Catppuccin Mauve `#CBA6F7`，走 Material 3 Expressive（`SchemeExpressive` + SPEC_2025），深/浅各一套，共 24 个语义色（含 surface 层次、描边、tertiary）。生成工具在 `Tools/palette-gen/`，**构建期/离线跑一次，色值固化进 design-tokens.json，运行时零依赖**。
 
-**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），1.0.13 起玻璃包（glass flavor）引入开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
+**视觉方案分端演进**：iOS 端用开源库 [LiquidGlassKit](https://github.com/muhittincamdali/LiquidGlassKit)（MIT，SPM 依赖）承载液态玻璃，iOS 26 上自动走苹果原生 `glassEffect`；Android 端 1.0.8 起换用 Material 3 Expressive（Compose Material3 稳定组件 + 官方同参数弹簧），1.0.13 起引入开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）——1.0.16 起合并为单一发布包，不再提供「无玻璃」版本——两端各自使用平台最地道的表达，共享同一份色板与动效 token。
 
 几条从一开始就定下的规矩：
 
 - 采不到的数据就显示"不可用"并说明原因，不拿估算值冒充
 - 液态玻璃（iOS）走开源库 LiquidGlassKit 的真实材质：iOS 26 上是原生 `glassEffect`（折射 + 高光 + 交互形变），低版本是库的纯 SwiftUI fallback，不是半透明纯色
-- Android 用 Material 3 Expressive：官方稳定组件（SegmentedButton / Card / Surface）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API；1.0.13 起 glass flavor 在 MD3 组件之上叠开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）的真实折射（vibrancy + blur + lens），plain flavor 不叠——两个包由构建期 flavor 决定
+- Android 用 Material 3 Expressive：官方稳定组件（SegmentedButton / Card / Surface）+ 与 androidx `ExpressiveMotionTokens` 同参数的弹簧，不引 internal API；1.0.13 起在其之上叠开源液态玻璃库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）的真实折射（vibrancy + blur + lens）；1.0.16 起这是唯一发布版本（原 glass / plain 双包已合并）
 - 视觉参数不写死：层次、描边、投影、底栏几何全部来自 design-tokens 的 `surface` / `elevation` / `bottomBar` 三段
 - 不用系统默认控件和默认蓝，按钮卡片开关滑块全部自己封装
 - 不申请 INTERNET 权限——**例外**：1.0.15 起为应用内版本检查申请了 `INTERNET`，但仅读取公开的 GitHub Releases 元数据，不向任何服务器上报数据；采集/分析/历史仍 100% 本地
@@ -18,7 +18,7 @@
 
 ## 版本
 
-当前 **1.0.15**。安装包（Android 双包：液态玻璃 / 无玻璃）在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。iOS 安装包自 1.0.14 起已下架。
+当前 **1.0.16**。安装包（Android 液态玻璃版，单一发布包）在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，仓库里不存二进制。iOS 安装包自 1.0.14 起已下架；「无玻璃」的 `-plain` 包自 1.0.16 起停产。
 
 发版要改的地方就这几处，漏一处两边就对不上：
 
@@ -35,11 +35,15 @@
 
 **1.0.14**：修复液态玻璃版真机闪退（挂载结构），修复详情页/总览页「显示靠上、柱状/波状不显示」（滚动容器无界高度约束），修复「回看」窗口不记忆。**iOS 安装包自本版起下架，仅发 Android 双包。**
 
+**1.0.16**：**只保留液态玻璃版**——删除「无玻璃」的 plain 变体与双 flavor，以后只发布这一个版本。
+
+- **单一发布包**（用户要求：只要液态玻璃版，另一版删掉，以后也只发这个）：1.0.13~1.0.15 用 `productFlavors`（`glass` / `plain`）出两个 APK，1.0.16 起删除 flavor，产物固定 `DevicePerfMonitor-<版本>-release.apk`。`BuildConfig.LIQUID_GLASS` 保留并恒为 `true`（避免动到各 UI 组件的分支），原本 glass 专用的 R8 keep 规则合入共享 `proguard-rules.pro`。连带改动：CI 的产物路径要从 `apk/<flavor>/release/` 改成 `apk/release/`（旧 glob 在新布局下取不到文件）；应用内更新的资产选择固定取主 APK，并显式排除历史 Release 里的 `-plain-` 名字——那类文件名同样以 `release.apk` 结尾，不排除会被引到已停产的包上。
+
 **1.0.15**：悬浮窗帧率单位显示「Hz」；采样周期统一为「不慢于 1 秒」；应用内新增「检查新版本 / 强制更新」功能（唯一的联网路径）。
 
 - **悬浮窗帧率显示「Hz」**：`CoreMetricId.FPS` 的单位由 `fps` 改为 `Hz`，悬浮窗 / 详情页 / 总览页三处统一显示「60 Hz」这类读法（帧率本质就是每秒帧数，单位本就是赫兹）。
 - **采样周期统一「不慢于 1 秒」**（用户要求：每个数据都要每秒刷新）：默认档位本来就是 1s，但「极简」档是 2s，会让所有指标的刷新慢于每秒。现在把 1 秒设为硬下限——极简档的采样周期改为 1s（只保留「关动画 + 停历史落盘」的省电特性），并在 `MetricsRepository` 里用 `MAX_TICK_MS` 把 tickMs 兜底钳到 1000ms，将来新增更慢的档位也会被钳住。四个核心指标因此每秒至少更新一次。
-- **应用内「强制更新」**（用户要求：打开 App 自动检查，有新版本就必须更新，不更新整个应用任何功能都用不了）：打开 App 时查询 GitHub Releases 最新版，**只要确认有比当前更新的版本**，就弹「不可关闭」的更新提示（点背景、按返回键都关不掉，只有「立即更新」能走），旧版本在更新前任何功能都无法使用；点「立即更新」下载对应 flavor 的 APK（玻璃包下玻璃版、无玻璃包下无玻璃版）并拉起系统安装器完成升级。每次启动都重新检查，因此不再持久化「忽略版本」。**唯一的例外**：检查更新本身连不上服务器（断网/超时）时，按「无更新」处理并允许暂时关闭继续使用——否则会把离线用户永久锁死；联网成功后再打开会重新检查。检查/下载只走公开 Release 元数据，**这是工程唯一主动联网路径**，为它申请了 `INTERNET` 权限，但只读取 Releases、上报零数据（详见「权限」一节）。
+- **应用内「强制更新」**（用户要求：打开 App 自动检查，有新版本就必须更新，不更新整个应用任何功能都用不了）：打开 App 时查询 GitHub Releases 最新版，**只要确认有比当前更新的版本**，就弹「不可关闭」的更新提示（点背景、按返回键都关不掉，只有「立即更新」能走），旧版本在更新前任何功能都无法使用；点「立即更新」下载最新版本 APK 并拉起系统安装器完成升级。每次启动都重新检查，因此不再持久化「忽略版本」。**唯一的例外**：检查更新本身连不上服务器（断网/超时）时，按「无更新」处理并允许暂时关闭继续使用——否则会把离线用户永久锁死；联网成功后再打开会重新检查。检查/下载只走公开 Release 元数据，**这是工程唯一主动联网路径**，为它申请了 `INTERNET` 权限，但只读取 Releases、上报零数据（详见「权限」一节）。
 
 - **液态玻璃版闪退根因与修复**（用户报「一进去就闪退，怀疑库要别的语言」）：不是语言问题——[Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 是 Kotlin Multiplatform 工程，Android 工程消费 backdrop-android 就是官方支持路径；根因是挂载结构用错。1.0.13 把 `layerBackdrop` 挂在 NavHost 上，玻璃卡片因此落在录制子树内：`LayerBackdropNode` 录制时重放玻璃节点的 `drawLayer`，采样到的是正在录音的同一个 RenderNode——自指采样，未定义行为，一进首页就崩。1.0.14 照库官方 catalog `BackdropDemoScaffold` 的标准结构重写：`layerBackdrop` 只挂纯背景节点（主题渐变层，与各页面背景同源同色），NavHost 与浮动底栏互为兄弟，所有 `drawBackdrop` 玻璃元素都在录制子树之外。效果参数不变，仍全部取自库教程既有值。
 - **详情页/总览页「显示靠上、图表不显示」根因与修复**（两个包都中招，与玻璃无关）：页面在 `verticalScroll` / `LazyColumn` 里，子节点拿到的是无界高度约束；卡片写 `heightIn(min=…)` 时高度按内容收缩，内部 `Box(fillMaxSize)` 退化成 wrap——数字/环形被 GlassCard 的 TopStart 对齐顶到卡顶，Sparkline / BarSeries 是无固有尺寸的 `Canvas`，拿到零高度什么都不画。1.0.10 只修了图表 Y 轴量程（数据层），没修这个布局根因，所以「和上一个状况一样」。现在图表卡改固定 240dp、指标卡 120dp、综合评判卡 176dp，详情页顶部卡交回内容高度，`fillMaxSize` 恢复有界，居中对齐与 Canvas 绘制全部正常（`Crossfade` 根节点是普通 Box，约束原样透传，固定卡片高度即可治愈整条链）。
@@ -47,7 +51,7 @@
 
 **1.0.13**：iOS 悬浮窗新增「仿灵动岛」态，监测形态改为用户自选；Android 出液态玻璃/无玻璃双包。
 
-- **Android 双包**（用户要求）：同一版本两个 APK——`DevicePerfMonitor-1.0.13-release.apk`（液态玻璃，默认）与 `DevicePerfMonitor-1.0.13-plain-release.apk`（无玻璃）。玻璃版用开源库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）：AppNav 根创建 `LayerBackdrop`（主题背景色 + 页面内容录制成层），卡片与浮动底栏按库教程既有参数采样折射（vibrancy + blur(4dp) + lens(16dp, 32dp)，surface 层主题色 40% 透明；底栏 blur(8dp) + lens(24dp, 24dp)）——参数全部取自库文档与 catalog 示例，没有自拟。无玻璃版回归纯 MD3 Card。两包同 applicationId / versionCode，装哪个覆盖哪个。开关是构建期 flavor（`glass` / `plain`，BuildConfig.LIQUID_GLASS），不是运行时开关；plain 包经 R8 把整个库裁干净（dex 内 0 处 kyant 引用，包体小 16KB）。blur 需 Android 12+、lens 需 Android 13+，更低版本库内部自动跳过效果不崩。
+- **Android 液态玻璃**（1.0.13 起，1.0.16 起为唯一发布版本）：用开源库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.0-alpha03，Apache-2.0）：AppNav 根创建 `LayerBackdrop`（纯背景节点 + 页面内容录制成层），卡片与浮动底栏按库教程既有参数采样折射（vibrancy + blur(4dp) + lens(16dp, 32dp)，surface 层主题色 40% 透明；底栏 blur(8dp) + lens(24dp, 24dp)）——参数全部取自库文档与 catalog 示例，没有自拟。1.0.13~1.0.15 曾用构建期 flavor（`glass` / `plain`，`BuildConfig.LIQUID_GLASS`）出「玻璃 / 无玻璃」双包，其中 plain 包经 R8 把整个库裁干净（dex 内 0 处 kyant 引用，包体小 16KB）；**1.0.16 起按用户要求删除 plain 变体，只发布液态玻璃这一个版本**，产物固定为 `DevicePerfMonitor-<版本>-release.apk`。blur 需 Android 12+、lens 需 Android 13+，更低版本库内部自动跳过效果不崩。
 
 - **新增灵动岛态悬浮窗**（overlayDefaultMode 默认 island，1.0.13 起默认形态）：紧凑药丸 = 综合评分小环 + 一个核心指标（帧率优先，采不到退内存）；单击展开为大圆角面板（药丸条作岛锚 + 综合评判 + 指标行），再单击收起；展开态以紧凑态顶边为锚向下增长，与真灵动岛展开方向一致。窗口尺寸瞬切 + 内容 spring 形变（与其他形态同一原则）。
 - **监测形态自选**（覆盖 1.0.10 的「支持灵动岛就不给悬浮窗选项」）：设置页新增「监测形态」二选一——灵动岛/锁屏（实时活动）或应用内悬浮窗，两种互斥切换；悬浮窗形态三选一（灵动岛/卡片/纯数字）。1.0.10 分流规则的背景：灵动岛退后台即冻结，用户要悬浮窗扛前台实时显示。
@@ -307,7 +311,7 @@ Android 的版本统一在 `android/gradle/libs.versions.toml`，iOS 的 Charts 
 | Shizuku | 13.1.5 | Apache-2.0 | 免 root 提权通道，可选。13.1.5 起 `Shizuku.newProcess` 私有化了，改成走公开 AIDL `IShizukuService.Stub.asInterface(...)` |
 | Charts (iOS) | 5.0.0+ | Apache-2.0 | iOS 图表，对应 Android 的 Vico。注意：这个库 4.0 起把包名和 SPM 产品名改成了 `DGCharts`，所以 import 和 pbxproj 里的 productName 都用 DGCharts |
 | LiquidGlassKit (iOS) | 2.1.0+ | MIT | iOS 液态玻璃（muhittincamdali/LiquidGlassKit，SPM）。iOS 26 走原生 `glassEffect`，低版本走库的纯 SwiftUI fallback |
-| Backdrop (Android) | 2.0.0-alpha03 | Apache-2.0 | Android 液态玻璃（Kyant0/AndroidLiquidGlass，Maven Central）。仅 glass flavor 引用，参数照库文档/catalog；2.0.0 正式版要 compileSdk 37 / AGP 9.1+，本项目 AGP 8.13.2 + compileSdk 36，故选 API 完全一致的 alpha03（javap 核对签名，minCompileSdk=36） |
+| Backdrop (Android) | 2.0.0-alpha03 | Apache-2.0 | Android 液态玻璃（Kyant0/AndroidLiquidGlass，Maven Central）。参数照库文档/catalog；2.0.0 正式版要 compileSdk 37 / AGP 9.1+，本项目 AGP 8.13.2 + compileSdk 36，故选 API 完全一致的 alpha03（javap 核对签名，minCompileSdk=36）。1.0.16 起为唯一发布版本，不再存在无玻璃的 plain 变体 |
 | kyant-shapes (Android) | 1.2.0 | Apache-2.0 | Backdrop 的 G2 平滑圆角（RoundedRectangle / Capsule），随 Backdrop 传递引入 |
 | material-color-utilities | 5.0.1 | MIT | **仅离线工具，不进 APK、不进 CI**。Google 官方 Material Color Utilities 的 KMP 移植（com.materialkolor），在 `Tools/palette-gen/` 里生成 1.0.9 的色板，结果固化进 design-tokens.json。只依赖 kotlin-stdlib，零 Compose 依赖——用它而不是 material-kolor，是因为后者 5.0.1 依赖 material3 1.12.0-alpha03（alpha），会逼着升 alpha 依赖 |
 
@@ -352,7 +356,7 @@ Android 在 `AndroidManifest.xml` 里逐条声明：
 | PACKAGE_USAGE_STATS | 全局 FPS 拿前台包名 | 可选 | 相关指标不可用，可改走 Shizuku |
 | moe.shizuku.manager.permission.API_V23 | Shizuku 免 root 提权 | 可选 | 无特权指标照常工作 |
 
-`INTERNET`：1.0.15 起为应用内版本检查申请，仅用于读取公开的 GitHub Releases 元数据（查新版本 + 下载对应 flavor 的 APK），不向任何服务器上报数据；其余功能全程离线。
+`INTERNET`：1.0.15 起为应用内版本检查申请，仅用于读取公开的 GitHub Releases 元数据（查新版本 + 下载最新 APK），不向任何服务器上报数据；其余功能全程离线。
 
 iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSupportsLiveActivity` 声明，数据经 ContentState 下发，不需要 App Group（两个 entitlements 是空的，文件里有注释说明原因）。
 
@@ -375,7 +379,7 @@ iOS 侧没有运行时权限，采集全走公开 API。Live Activity 靠 `NSSup
 1. 电池健康百分比没有公开接口，只展示 EXTRA_HEALTH 的粗粒度档位。
 2. 后台应用内存、各核心频率、GPU 节点要 root 或 Shizuku。普通 App 读不了，这是 Android 8 之后的沙箱规定。
 3. Shizuku 13.1.5 把 `newProcess` 私有化了，改走公开 AIDL。
-4. **Android 液态玻璃按包分发**（1.0.13 起，修正 1.0.8「Android 没有液态玻璃」的决策）：安卓真实背景模糊要么走 API 33 的 `RuntimeShader`（Android 12 及以下直接崩）、要么观感与服务端合成对不上，所以 1.0.8 起全面换 Material 3 Expressive。1.0.13 应用户要求出双包：glass flavor 引入开源库 Kyant0/AndroidLiquidGlass（backdrop 2.0.0-alpha03）把液态玻璃做上——blur 需 Android 12+、lens 需 Android 13+，更低版本库内部自动跳过效果只保留采样层，不崩；plain flavor 不引效果回归纯 MD3。玻璃质感 iOS 端仍走 LiquidGlassKit（1.0.8 起），两端共用同一份色板与动效 token。
+4. **Android 液态玻璃**（1.0.13 起落地，1.0.16 起为唯一发布版本；修正 1.0.8「Android 没有液态玻璃」的决策）：安卓真实背景模糊要么走 API 33 的 `RuntimeShader`（Android 12 及以下直接崩）、要么观感与服务端合成对不上，所以 1.0.8 起全面换 Material 3 Expressive。1.0.13 应用户要求引入开源库 Kyant0/AndroidLiquidGlass（backdrop 2.0.0-alpha03）把液态玻璃做上——blur 需 Android 12+、lens 需 Android 13+，更低版本库内部自动跳过效果只保留采样层，不崩；当时为保守起见同时出了一份不引效果的 plain 版。**1.0.16 起按用户要求只保留玻璃版，删掉 plain 变体与双 flavor，单一发布包。** 玻璃质感 iOS 端仍走 LiquidGlassKit（1.0.8 起），两端共用同一份色板与动效 token。
 
 ## design-tokens.json
 
