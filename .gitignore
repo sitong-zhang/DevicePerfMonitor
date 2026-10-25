@@ -45,3 +45,6 @@ Tools/palette-gen/build/
 # Python 编译缓存
 tools/__pycache__/
 *.pyc
+
+# 发布公告软件：仅本地开发者使用，不进公开仓库
+tools/AnnouncementPublisher.py
