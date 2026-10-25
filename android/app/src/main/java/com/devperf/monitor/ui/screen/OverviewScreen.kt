@@ -25,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.TextStyle
@@ -75,14 +74,12 @@ fun OverviewScreen(
     // 首帧还没采上来：先给骨架，别让界面先闪一下空白再跳成有内容
     val awaitingFirstSample = focused.updatedAtMs <= 0L && visible.isEmpty()
 
+    // 1.0.24：列表背景改为透明——壁纸（公司 logo）像 Kyant0 catalog demo 那样
+    // 直接可见，玻璃卡片浮在它上面。以前这里刷了一层不透明主题渐变，壁纸被完全
+    // 遮住，只能透过玻璃看见，logo 等于白换。
     LazyColumn(
         modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(colors.background, colors.surface, colors.background),
-                ),
-            ),
+            .fillMaxSize(),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = 16.dp,

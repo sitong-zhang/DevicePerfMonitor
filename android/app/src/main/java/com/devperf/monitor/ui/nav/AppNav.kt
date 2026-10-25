@@ -40,15 +40,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -56,6 +61,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.devperf.monitor.R
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.AnnouncementDialog
 import com.devperf.monitor.ui.UpdateDialog
@@ -75,6 +81,7 @@ import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 /**
  * 应用导航：首页（总览）/ 设置 两个顶级目的地 + 指标详情页。
@@ -141,16 +148,19 @@ fun AppNav(
             null
         }
         if (backdrop != null) {
-            // 背景层：一张「黄昏山景」风景壁纸（Canvas 手绘，离线可用、无版权风险）。
-            // 玻璃的折射/模糊就采样这一层——层叠山峦 + 太阳光晕 + 星空提供了丰富的
-            // 亮度/色相变化，透镜失真（lens）才有东西可折，液态玻璃才显眼。
+            // 背景层：公司品牌壁纸（1.0.24 起，原「黄昏山景」手绘壁纸更换为公司 logo）。
+            // 深色紫调渐变底与 App 深色主题同源；中央是「分子智能科技」logo 白底板——
+            // 画面里最亮的一块，lens 的边缘失真正好"有东西可折"，液态玻璃才显眼。
+            // 各页面背景已随之改为透明（见 OverviewScreen / MetricDetailScreen），
+            // 壁纸像 Kyant0 catalog demo 那样直接可见，玻璃面板浮在它上面。
+            val logo = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .appLayerBackdrop(backdrop),
             ) {
                 Canvas(Modifier.matchParentSize()) {
-                    drawScenicWallpaper()
+                    drawBrandWallpaper(logo)
                 }
             }
         }
@@ -411,124 +421,99 @@ private fun NavBarItem(
 }
 
 // ---------------------------------------------------------------------------
-// 背景风景壁纸：黄昏山景（Canvas 手绘，离线可用）
+// 背景品牌壁纸：公司 logo（1.0.24 起，替换原黄昏山景手绘壁纸）
 //
 // 这是 App 根背景层要录进 backdrop 的内容。玻璃元素折射/模糊采样它，所以画面要有
-// 丰富的亮度与色相层次（天空渐变 + 太阳光晕 + 星空 + 层叠山峦 + 水面倒影），
-// lens 的折射失真才"有东西可折"。最后叠一层上浅下深的轻压暗，保证直接压在壁纸上
-// 的标题/次级文字可读，同时不牺牲玻璃背后的色彩。
+// 亮度层次：深色紫调渐变底（与 App 深色主题同源，surfaceDim→background→surface）
+// + 中央「分子智能科技」logo 白底板（画面最亮的一块，lens 边缘失真主要来自它）
+// + 板后柔光 + 低透明度分子点点（呼应 logo 的分子图形）。顶/底各一层轻压暗，
+// 保证状态栏区与底部内容区的直接文字可读。
 // ---------------------------------------------------------------------------
-private fun DrawScope.drawScenicWallpaper() {
+private fun DrawScope.drawBrandWallpaper(logo: ImageBitmap) {
     val w = size.width
     val h = size.height
 
-    // 天空：深夜蓝 → 紫 → 暖橙 → 金（黄昏）
+    // 深色紫调底：与深色主题同源的三级表面色
     drawRect(
         brush = Brush.verticalGradient(
-            0.00f to Color(0xFF0B1026),
-            0.30f to Color(0xFF231B4D),
-            0.55f to Color(0xFF5E3566),
-            0.72f to Color(0xFFB85A4E),
-            0.86f to Color(0xFFE8956A),
-            1.00f to Color(0xFFF3C282),
+            0.00f to Color(0xFF0F0817),
+            0.55f to Color(0xFF17101F),
+            1.00f to Color(0xFF241B2E),
         ),
     )
 
-    // 星点（上半部，确定性伪随机，避免每次重组跳动）
-    var seed = 12345
+    // 分子点点（品牌装饰，确定性伪随机，避免每次重组跳动）
+    var seed = 20260101
     fun rnd(): Float {
         seed = seed * 1103515245 + 12345
         return ((seed ushr 8) and 0xFFFF) / 65535f
     }
-    repeat(46) {
+    repeat(30) {
         val x = rnd() * w
-        val y = rnd() * h * 0.45f
-        val r = 0.6f + rnd() * 1.4f
-        drawCircle(Color.White.copy(alpha = 0.12f + rnd() * 0.35f), radius = r, center = Offset(x, y))
+        val y = rnd() * h
+        val r = 1.5f + rnd() * 3.5f
+        // 避开中央 logo 板区域（板约在 20%~36% 高度）
+        if (y < h * 0.15f || y > h * 0.42f) {
+            drawCircle(
+                color = Color(0xFFDEC0FF).copy(alpha = 0.05f + rnd() * 0.10f),
+                radius = r,
+                center = Offset(x, y),
+            )
+        }
     }
 
-    // 太阳 + 径向光晕（落在远山之后）
-    val sunX = w * 0.7f
-    val sunY = h * 0.6f
+    // logo 白底板：屏宽 62%、水平居中、垂直中心在 26% 高度处
+    val plateW = w * 0.62f
+    val plateH = plateW * logo.height / logo.width
+    val left = (w - plateW) / 2f
+    val top = h * 0.26f - plateH / 2f
+    val center = Offset(left + plateW / 2f, top + plateH / 2f)
+    val corner = CornerRadius(plateW * 0.045f)
+
+    // 板后柔光：白板边缘是画面里最强的亮度台阶，给 lens 提供折射内容
     drawCircle(
         brush = Brush.radialGradient(
-            0f to Color(0xFFFFD79A).copy(alpha = 0.55f),
-            0.5f to Color(0xFFFF9E5E).copy(alpha = 0.20f),
+            0f to Color.White.copy(alpha = 0.10f),
+            0.55f to Color.White.copy(alpha = 0.04f),
             1f to Color.Transparent,
-            center = Offset(sunX, sunY),
-            radius = w * 0.42f,
+            center = center,
+            radius = plateW * 0.95f,
         ),
-        radius = w * 0.42f,
-        center = Offset(sunX, sunY),
-    )
-    drawCircle(Color(0xFFFFE7B8), radius = w * 0.055f, center = Offset(sunX, sunY))
-
-    // 层叠山峦（远→近，越近越暗，形成空气透视）
-    ridge(
-        color = Color(0xFF4B3B73).copy(alpha = 0.92f),
-        points = listOf(
-            0.00f to 0.60f, 0.12f to 0.49f, 0.22f to 0.56f, 0.34f to 0.45f,
-            0.46f to 0.55f, 0.58f to 0.47f, 0.70f to 0.57f, 0.82f to 0.51f, 1.00f to 0.60f,
-        ),
-    )
-    ridge(
-        color = Color(0xFF332A52),
-        points = listOf(
-            0.00f to 0.72f, 0.10f to 0.61f, 0.20f to 0.70f, 0.30f to 0.57f,
-            0.42f to 0.69f, 0.55f to 0.59f, 0.66f to 0.71f, 0.80f to 0.62f, 1.00f to 0.72f,
-        ),
-    )
-    ridge(
-        color = Color(0xFF1E1A38),
-        points = listOf(
-            0.00f to 0.84f, 0.15f to 0.75f, 0.30f to 0.83f, 0.45f to 0.73f,
-            0.60f to 0.82f, 0.75f to 0.74f, 0.90f to 0.83f, 1.00f to 0.80f,
-        ),
+        radius = plateW * 0.95f,
+        center = center,
     )
 
-    // 前景地面 + 水面（底部渐变）
-    drawRect(
-        brush = Brush.verticalGradient(
-            0f to Color(0xFF241C3E),
-            1f to Color(0xFF0E0B1E),
-        ),
-        topLeft = Offset(0f, h * 0.84f),
-        size = Size(w, h * 0.16f),
-    )
-    // 太阳在水面的倒影光带
-    drawRect(
-        brush = Brush.horizontalGradient(
-            0f to Color.Transparent,
-            0.5f to Color(0xFFFFC98A).copy(alpha = 0.20f),
-            1f to Color.Transparent,
-        ),
-        topLeft = Offset(sunX - w * 0.12f, h * 0.84f),
-        size = Size(w * 0.24f, h * 0.16f),
-    )
-
-    // 轻度压暗（上浅下深）：保证标题/次级文字可读
-    drawRect(
-        brush = Brush.verticalGradient(
-            0f to Color.Black.copy(alpha = 0.10f),
-            0.5f to Color.Black.copy(alpha = 0.16f),
-            1f to Color.Black.copy(alpha = 0.34f),
-        ),
-    )
-}
-
-/** 画一道山脊剪影：[points] 为 (x 比例, y 比例) 折线，底部闭合到屏幕底。 */
-private fun DrawScope.ridge(color: Color, points: List<Pair<Float, Float>>) {
-    val w = size.width
-    val h = size.height
-    val path = Path().apply {
-        moveTo(0f, h)
-        lineTo(0f, points.first().second * h)
-        for (i in 1 until points.size) {
-            val (px, py) = points[i]
-            lineTo(px * w, py * h)
-        }
-        lineTo(w, h)
-        close()
+    // logo 图（圆角裁剪，白底板保持原图不改色）
+    clipPath(
+        path = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = left,
+                    top = top,
+                    right = left + plateW,
+                    bottom = top + plateH,
+                    topLeftCornerRadius = corner,
+                    topRightCornerRadius = corner,
+                    bottomRightCornerRadius = corner,
+                    bottomLeftCornerRadius = corner,
+                ),
+            )
+        },
+    ) {
+        drawImage(
+            image = logo,
+            dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+            dstSize = IntSize(plateW.roundToInt(), plateH.roundToInt()),
+        )
     }
-    drawPath(path, color)
+
+    // 顶/底轻压暗：状态栏区与底部内容区的直接文字可读
+    drawRect(
+        brush = Brush.verticalGradient(
+            0.00f to Color.Black.copy(alpha = 0.30f),
+            0.16f to Color.Transparent,
+            0.80f to Color.Transparent,
+            1.00f to Color.Black.copy(alpha = 0.36f),
+        ),
+    )
 }

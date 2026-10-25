@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -105,14 +104,11 @@ fun MetricDetailScreen(
     }
 
     EnterStagger(index = 0, modifier = Modifier.fillMaxSize()) {
+        // 1.0.24：根背景改为透明——壁纸（公司 logo）直接可见，玻璃面板浮在它上面
+        // （同 OverviewScreen）。以前这里刷不透明主题渐变，壁纸只能透过玻璃看见。
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(colors.background, colors.surface, colors.background),
-                    ),
-                )
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
