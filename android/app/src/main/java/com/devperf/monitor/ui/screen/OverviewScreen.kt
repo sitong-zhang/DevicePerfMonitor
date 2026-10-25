@@ -82,7 +82,9 @@ fun OverviewScreen(
             .fillMaxSize(),
         contentPadding = PaddingValues(
             start = 16.dp,
-            top = 16.dp,
+            // 顶部 72dp：给壁纸右上角的公司 logo 角标留位（角标占 10~60dp，
+            // 见 AppNav.drawBrandWallpaper），首屏不重叠。
+            top = 72.dp,
             end = 16.dp,
             // 底部必须给浮动胶囊底栏让出空间（底栏高度 + 下边距 + 一点呼吸），
             // 否则最后一张卡片会被底栏压住——1.0.9 之前没留，列表滚到底也看不见末尾。

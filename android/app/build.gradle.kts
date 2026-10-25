@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 25
-        versionName = "1.0.24"
+        versionCode = 26
+        versionName = "1.0.25"
         vectorDrawables.useSupportLibrary = true
 
         // 液态玻璃开关。1.0.13~1.0.15 曾用 productFlavors 出「玻璃 / 无玻璃」双包，
@@ -50,8 +50,9 @@ android {
 
     // 说明：1.0.16 起不再有 productFlavors（原 glass / plain 双包已合并为单包），
     // 产物固定为 app-release.apk，发版命名为 DevicePerfMonitor-<版本>-release.apk。
-    // 玻璃实现：Kyant0 Backdrop（io.github.kyant0:backdrop 2.0.0-alpha03），
-    // 参数取自库教程既有值（vibrancy + blur + lens），UI 控件仍是 MD3 标准件。
+    // 玻璃实现：Kyant0 Backdrop 引擎 + catalog 组件（1.0.25 起源码 vendor 到
+    // app/src/main/java/com/kyant/backdrop/，见 dependencies 段说明），
+    // 主窗口按钮/开关/滑块/底栏直接调用 catalog 组件，参数取自官方 demo 既有值。
 
     androidResources {
         // 仅保留中英文资源（AGP 8.5+ 新 API，替代已废弃的 resourceConfigurations）
@@ -118,6 +119,8 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Robolectric 渲染冒烟测试需要真实资源（壁纸 / logo 走 R.drawable）
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -145,6 +148,14 @@ dependencies {
     // ServiceViewTreeOwnerTest 需要给 LifecycleRegistry 的主线程校验设委托
     testImplementation(libs.androidx.arch.core.runtime)
     testImplementation(libs.androidx.arch.core.common)
+    // 无头渲染冒烟（GlassComponentsRenderTest）：Robolectric + Compose 截图，
+    // 验证玻璃结构 / 新壁纸 / 弹窗在真实绘制路径下不崩（backdrop 自指采样这类
+    // 问题只有真画一遍才会暴露）
+    val composeBomForTest = platform(libs.compose.bom)
+    testImplementation(composeBomForTest)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     // 图表（Apache-2.0）
     implementation(libs.vico.compose.m3)
@@ -155,7 +166,9 @@ dependencies {
     implementation(libs.shizuku.provider)
 
     // Kyant0 液态玻璃（1.0.16 起是唯一发布版本，不再有「无玻璃」变体）
-    // 版本锁 2.0.0-alpha03 的理由见 libs.versions.toml（2.0.0 正式版要 compileSdk 37 / AGP 9.1+）
-    implementation(libs.backdrop)
+    // backdrop 引擎 + catalog 组件已按 Kyant0/AndroidLiquidGlass 开源仓库（kmp 分支）
+    // 原样 vendor 进 app/src/main/java/com/kyant/backdrop/（2.0.1 源码），不再走 Maven：
+    // 2.0.0 正式版 AAR 要求 compileSdk 37 / AGP 9.1+，本工程 compileSdk 36 装不了。
+    // shapes 仍走 Maven 1.2.0（提供 Capsule / RoundedRectangle，1.2.1 同样要 SDK 37）。
     implementation(libs.kyant.shapes)
 }

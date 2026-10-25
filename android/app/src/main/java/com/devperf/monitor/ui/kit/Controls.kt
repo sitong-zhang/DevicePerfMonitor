@@ -15,13 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -51,40 +47,43 @@ import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.catalog.components.LiquidButton
+import com.kyant.backdrop.catalog.components.LiquidSlider
+import com.kyant.backdrop.catalog.components.LiquidToggle
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import kotlin.math.roundToInt
 
 /**
- * 控件层：Material 3 Expressive 组件 + 品牌语义色（1.0.8 起，取代液态玻璃自绘控件）。
+ * 控件层：主窗口按钮/开关/滑块直接调用 Kyant0 catalog 液态玻璃组件，
+ * 其余为 Material 3 Expressive 组件 + 品牌语义色（1.0.8 起取代自绘控件）。
  *
  * 设计原则：
- * 1. 能用 MD3 标准件的全部换成标准件（Button / Switch / Slider / SegmentedButton /
- *    Card），交互、无障碍（TalkBack / 触摸目标 48dp）、状态层全部由框架保证——
- *    自绘时代这三样都要自己维护，是「适配不完整」的重灾区；
- * 2. 配色不用 MD3 默认蓝：主题层（DevicePerfTheme）已把 Catppuccin 语义色映射进
+ * 1. 主窗口（[LocalBackdrop] 非 null）的 GlassButton / GlassSwitch / GlassSlider
+ *    直接调用 Kyant0/AndroidLiquidGlass catalog 的 LiquidButton / LiquidToggle /
+ *    LiquidSlider——源码已原样 vendor 到 com.kyant.backdrop.catalog.components，
+ *    效果参数与官方 demo 完全一致（vibrancy + blur + lens + InteractiveHighlight +
+ *    DampedDragAnimation），不自己调参；
+ * 2. 悬浮窗 / 无玻璃（backdrop 为 null）回落 MD3 标准件（Button / Switch / Slider /
+ *    SegmentedButton / Card），交互、无障碍（TalkBack / 触摸目标 48dp）、状态层
+ *    全部由框架保证；
+ * 3. 配色不用 MD3 默认蓝：主题层（DevicePerfTheme）已把语义色映射进
  *    ColorScheme，标准件自动跟随；
- * 3. 按压反馈走主题 ripple（accent）， Expressive 的弹簧动效由
- *    MaterialExpressiveTheme(motionScheme = MotionScheme.expressive()) 统一驱动；
  * 4. 公开 API 名保留 GlassXxx，调用方（四个界面 + 悬浮窗）零改动。
  */
 
@@ -123,11 +122,36 @@ fun GlassButton(
             contentColor = cs.onError
         }
     }
+    if (backdrop != null && enabled) {
+        // 主窗口（可交互态）：直接调用 Kyant0/AndroidLiquidGlass catalog 的
+        // LiquidButton——源码已原样 vendor 到 com.kyant.backdrop.catalog.components，
+        // 效果参数（Capsule + vibrancy + blur(2dp) + lens(12dp,24dp) + InteractiveHighlight
+        // 按压高光/拖动回弹）与官方 demo 完全一致，一个数不改。
+        // 变体色经 surfaceColor 叠加（0.5 透明，玻璃纹样透出）；compact 的高度走
+        // 外层 modifier——修饰符链最外层的高度优先生效，组件内部的 48dp 会被压到 36dp。
+        LiquidButton(
+            onClick = onClick,
+            backdrop = backdrop,
+            modifier = modifier
+                .then(if (compact) Modifier.height(36.dp) else Modifier),
+            isInteractive = true,
+            surfaceColor = container.copy(alpha = 0.5f),
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = contentColor,
+                maxLines = 1,
+            )
+        }
+        return
+    }
+    // 悬浮窗 / 无玻璃 / 禁用态：MD3 原样按钮
     val height = if (compact) 36.dp else 48.dp
     val shape = Pill
     val interaction = remember { MutableInteractionSource() }
     val surface = if (backdrop != null) {
-        // 照抄 Kyant0 catalog LiquidButton 的效果参数：vibrancy + blur(2dp) + lens(12dp,24dp)
+        // 禁用态兜底：仍用 backdrop 玻璃面，整体 alpha 压暗
         Modifier.drawBackdrop(
             backdrop = backdrop,
             shape = { Capsule() },
@@ -195,52 +219,16 @@ fun GlassSwitch(
         )
         return
     }
-    // glass flavor 主窗口：照抄 catalog LiquidToggle 的「玻璃滑块」观感——
-    // 轨道是随状态插色的胶囊，滑块是 drawBackdrop 玻璃：blur(8dp*(1-progress))
-    // + lens(5dp*progress, 10dp*progress, chromaticAberration)，按压时透镜/高光增强。
-    val accent = colors.accent
-    val trackOff = colors.surfaceElevated
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val progress by animateFloatAsState(if (pressed) 1f else 0f, label = "switchPress")
-    val fraction by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
-        label = "switchThumb",
+    // 主窗口：直接调用 Kyant0/AndroidLiquidGlass catalog 的 LiquidToggle
+    // （vendor 源码，未改任何参数）——64×28dp 轨道 + 40×24dp 玻璃滑块，
+    // blur/lens 随按压进度插值，支持拖动切换；滑块内部再叠一层轨道录制的
+    // backdrop（官方同款「玻璃嵌玻璃」结构）。
+    LiquidToggle(
+        selected = { checked },
+        onSelect = onCheckedChange,
+        backdrop = backdrop,
+        modifier = modifier,
     )
-    Box(
-        modifier = modifier
-            .size(width = 52.dp, height = 32.dp)
-            .toggleable(
-                value = checked,
-                interactionSource = interaction,
-                indication = null,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            )
-            .clip(Pill)
-            .background(lerp(trackOff, accent, fraction)),
-    ) {
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .offset(x = 3.dp + 20.dp * fraction)
-                .size(26.dp)
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { Capsule() },
-                    effects = {
-                        blur(8f.dp.toPx() * (1f - progress))
-                        lens(
-                            5f.dp.toPx() * progress,
-                            10f.dp.toPx() * progress,
-                            chromaticAberration = true,
-                        )
-                    },
-                    onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - progress)) },
-                ),
-        )
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +246,21 @@ fun GlassSlider(
 ) {
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     val colors = LocalTokenColors.current
+    if (backdrop != null && steps == 0) {
+        // 主窗口 + 连续值：直接调用 Kyant0/AndroidLiquidGlass catalog 的 LiquidSlider
+        // （vendor 源码，未改任何参数）——6dp 细轨 + 40×24dp 玻璃滑块，
+        // blur/lens/色散随按压进度插值，点击定位 + 拖动取值，滑块内部叠加
+        // 轨道录制的 backdrop（官方同款「玻璃嵌玻璃」结构）。
+        LiquidSlider(
+            value = { value },
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            visibilityThreshold = (valueRange.endInclusive - valueRange.start) * 0.001f,
+            backdrop = backdrop,
+            modifier = modifier.alpha(if (enabled) 1f else 0.45f),
+        )
+        return
+    }
     if (backdrop == null) {
         Slider(
             value = value,
@@ -274,9 +277,8 @@ fun GlassSlider(
         )
         return
     }
-    // glass flavor 主窗口：照抄 catalog LiquidSlider 的「玻璃滑块」——细轨道 + 玻璃滑块，
-    // blur(8dp*(1-progress)) + lens(10dp*progress, 14dp*progress, chromaticAberration)，
-    // 按压拖动时透镜/色散增强。交互用标准手势（点击定位 + 拖动取值），支持 steps 吸附。
+    // 主窗口 + 离散步进（steps > 0，如温度告警阈值）：catalog 组件只支持连续值，
+    // 这里保留同引擎的自绘玻璃滑块——blur/lens/色散参数与 catalog LiquidSlider 一致。
     val accent = colors.accent
     val trackColor = colors.surfaceElevated
     val span = valueRange.endInclusive - valueRange.start

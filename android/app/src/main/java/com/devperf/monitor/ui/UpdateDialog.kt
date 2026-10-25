@@ -4,13 +4,16 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,28 +41,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.devperf.monitor.BuildConfig
+import com.devperf.monitor.R
 import java.io.File
 
 /**
- * 应用内「强制更新」对话框（1.0.20 重做 UI）。
+ * 应用内「新版本提示」对话框（1.0.20 重做 UI，1.0.25 柔化说法并加公司 logo）。
  *
  * UI 要点：
- * - 不再是「一坨原始 Markdown + 一堆符号」：图标 + 版本对照 + 分隔线 + 可滚动的
- *   更新说明（[ReleaseNotes] 做标题 / 引用 / 列表 / 加粗的正常排版）+ 实心按钮；
- * - 更新说明区最高 280dp，超出滚动，避免长文案把按钮顶出屏幕。
+ * - 不再是「一坨原始 Markdown + 一堆符号」：公司 logo + 状态图标 + 版本对照 +
+ *   分隔线 + 可滚动的更新说明（[ReleaseNotes] 做标题 / 引用 / 列表 / 加粗的正常
+ *   排版）+ 实心按钮；
+ * - 更新说明区最高 280dp，超出滚动，避免长文案把按钮顶出屏幕；
+ * - 1.0.25 起说法改正常：「发现新版本 / 更新内容如下，建议更新」，不再说
+ *   「必须更新才能继续使用」，也不再列安装包文件名。
  *
- * 强制更新要点：[Available] / [Downloading] / [Ready] 三个态全部
- * `onDismissRequest = {}`——点背景、按返回键都关不掉，旧版本在更新前任何功能都
- * 用不了；只有 [Error]（连不上服务器、无法确认有新版本）允许关闭，避免把离线用户锁死。
+ * 拦截要点：[Available] / [Downloading] / [Ready] 三个态全部
+ * `onDismissRequest = {}`——点背景、按返回键都关不掉；只有 [Error]（连不上服务器、
+ * 无法确认有新版本）允许关闭，避免把离线用户锁死。
  */
 @Composable
 fun UpdateDialog(viewModel: MonitorViewModel) {
@@ -80,8 +90,8 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
             }
             UpdateDialogShell(
                 icon = Icons.Filled.Refresh,
-                title = "必须更新才能继续使用",
-                subtitle = "当前版本已停用，更新后才能继续使用",
+                title = "发现新版本",
+                subtitle = "更新内容如下，建议更新",
                 dismissible = false,
                 confirmText = "立即更新",
                 onConfirm = {
@@ -159,17 +169,12 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
                     }
                 },
             ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Text(
-                        text = file.name,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
+                // 1.0.25 起不再把安装包文件名列出来（下载页本来就有），这里只留一句人话
+                Text(
+                    text = "安装包已经准备好，点下方按钮按系统提示装完即可",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -198,8 +203,11 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
 }
 
 /**
- * 对话框外壳：图标 + 标题 + 副标题 + 内容槽 + 按钮行。
- * [dismissible] 为 false 时背景点击与返回键都无效（强制更新）。
+ * 对话框外壳：公司 logo + 状态图标 + 标题 + 副标题 + 内容槽 + 按钮行。
+ * [dismissible] 为 false 时背景点击与返回键都无效。
+ *
+ * 1.0.25 起顶部放公司 logo（分子智能科技，白底板圆角）——公告与更新弹窗都带
+ * 品牌标识；状态图标（刷新 / 完成 / 警告）移到标题行左侧，不再单独占一行。
  */
 @Composable
 private fun UpdateDialogShell(
@@ -213,29 +221,40 @@ private fun UpdateDialogShell(
     onDismiss: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val logo = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
     AlertDialog(
         onDismissRequest = { if (dismissible) onDismiss?.invoke() },
         icon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp),
+            Image(
+                bitmap = logo,
+                contentDescription = "分子智能科技",
+                modifier = Modifier
+                    .width(84f.dp)
+                    .clip(RoundedCornerShape(10f.dp)),
             )
         },
         title = {
             Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20f.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6f.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 if (subtitle.isNotBlank()) {
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = 4f.dp),
                     )
                 }
             }

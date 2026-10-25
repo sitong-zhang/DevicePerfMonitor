@@ -10,12 +10,12 @@
 - **综合评分** = 流畅度（帧率 ÷ 刷新率）0.4 + 温度 0.35 + 内存 0.25。
 - **历史回看**：秒级采样，本地保留 2 小时，详情页可回看 1 分钟到 2 小时。
 - **全局悬浮窗**：拖动能移动、靠边吸附、拖到垃圾桶关闭；可切换卡片 / 纯数字 / 收起三种形态，不透明度也能调。
-- **强制更新**：打开 App 发现有新版本就必须更新，不更新用不了（断网时放行，不会锁死离线用户）。
+- **更新提示**：打开 App 发现有新版本会提示更新，更新前旧版本功能暂不可用（断网时放行，不会锁死离线用户）。
 - **公告**：开发者发公告后，用户下次打开 App 会收到，必须从头滑到尾才能关掉。
 
 ## 视觉
 
-界面用 Material 3 Expressive。玻璃质感（卡片、底栏）用的是开源库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Apache-2.0，Maven Central 上的 `backdrop`），效果参数直接照抄它官方示例的写法。低版本系统（Android 12 以下）自动退化为普通半透明，不会崩。
+界面用 Material 3 Expressive。玻璃质感（按钮、开关、滑块、底栏、卡片）用的是开源库 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Apache-2.0，引擎与官方 catalog 组件源码已原样收进工程 `android/app/src/main/java/com/kyant/backdrop/`），效果参数直接照抄它官方示例的写法。低版本系统（Android 12 以下）自动退化为普通半透明，不会崩。
 
 ## 下载与版本
 

@@ -110,7 +110,9 @@ fun MetricDetailScreen(
             modifier = modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                // 顶部 72dp：给壁纸右上角的公司 logo 角标留位（角标占 10~60dp，
+                // 见 AppNav.drawBrandWallpaper），返回 + 指标名卡片不压着角标。
+                .padding(start = 16.dp, end = 16.dp, top = 72.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
         // 顶部：返回 + 指标名 + 当前值

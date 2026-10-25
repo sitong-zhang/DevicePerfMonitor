@@ -41,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -76,10 +75,8 @@ import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.shapes.Capsule
+import com.kyant.backdrop.catalog.components.LiquidBottomTab
+import com.kyant.backdrop.catalog.components.LiquidBottomTabs
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -148,11 +145,11 @@ fun AppNav(
             null
         }
         if (backdrop != null) {
-            // 背景层：公司品牌壁纸（1.0.24 起，原「黄昏山景」手绘壁纸更换为公司 logo）。
-            // 深色紫调渐变底与 App 深色主题同源；中央是「分子智能科技」logo 白底板——
-            // 画面里最亮的一块，lens 的边缘失真正好"有东西可折"，液态玻璃才显眼。
-            // 各页面背景已随之改为透明（见 OverviewScreen / MetricDetailScreen），
-            // 壁纸像 Kyant0 catalog demo 那样直接可见，玻璃面板浮在它上面。
+            // 背景层：浅蓝绿抽象壁纸（1.0.25 起更换，原「深色渐变 + 中央 logo 大图」
+            // 方案下线）+ 暗色罩层 + 右上角公司 logo 角标。
+            // 罩层的理由：新壁纸是浅色的，而 App 是深色主题（浅色文字），直接铺
+            // 浅色壁纸所有文字都会糊；角标位置与各页顶部留白见 drawBrandWallpaper。
+            val wallpaper = ImageBitmap.imageResource(R.drawable.wallpaper_light)
             val logo = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
             Box(
                 modifier = Modifier
@@ -160,10 +157,13 @@ fun AppNav(
                     .appLayerBackdrop(backdrop),
             ) {
                 Canvas(Modifier.matchParentSize()) {
-                    drawBrandWallpaper(logo)
+                    drawBrandWallpaper(wallpaper, logo)
                 }
             }
         }
+        // LocalBackdrop 下发范围必须覆盖 NavHost + 底栏 + 弹窗：1.0.24 及以前
+        // 只包了 NavHost，底栏与弹窗取到 null，玻璃分支全是死代码（底栏因此
+        // 一直走 MD3 Surface 兜底，观感掉一个档次）。
         androidx.compose.runtime.CompositionLocalProvider(
             com.devperf.monitor.ui.kit.LocalBackdrop provides backdrop
         ) {
@@ -204,51 +204,53 @@ fun AppNav(
                     )
                 }
             }
-        }
 
-        // 底部导航栏：Material 3 NavigationBar（Expressive 动效由 motionScheme 提供）
-        AnimatedVisibility(
-            visible = showBottomBar,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(animationSpec = enterSpec) { it },
-            exit = slideOutVertically(animationSpec = exitSpec) { it },
-        ) {
-            BottomNavBar(
-                currentRoute = currentRoute,
-                onSelect = { route ->
-                    if (route != currentRoute) {
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+            // 底部导航栏
+            AnimatedVisibility(
+                visible = showBottomBar,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically(animationSpec = enterSpec) { it },
+                exit = slideOutVertically(animationSpec = exitSpec) { it },
+            ) {
+                BottomNavBar(
+                    currentRoute = currentRoute,
+                    onSelect = { route ->
+                        if (route != currentRoute) {
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
                         }
-                    }
-                },
-            )
-        }
+                    },
+                )
+            }
 
-        // 应用内更新提示（1.0.15 新增）：有新版本时弹窗，其余状态不显示
-        UpdateDialog(viewModel)
-        // 公告（1.0.22 新增）：强制更新拦截期间不弹，避免两个不可关闭框叠在一起
-        val updateBlocking = updateState is UpdateUiState.Available ||
-            updateState is UpdateUiState.Downloading ||
-            updateState is UpdateUiState.Ready
-        if (!updateBlocking) AnnouncementDialog(viewModel)
+            // 应用内更新提示（1.0.15 新增）：有新版本时弹窗，其余状态不显示
+            UpdateDialog(viewModel)
+            // 公告（1.0.22 新增）：强制更新拦截期间不弹，避免两个不可关闭框叠在一起
+            val updateBlocking = updateState is UpdateUiState.Available ||
+                updateState is UpdateUiState.Downloading ||
+                updateState is UpdateUiState.Ready
+            if (!updateBlocking) AnnouncementDialog(viewModel)
+        }
     }
 }
 
 /**
- * 浮动胶囊底栏（自绘，1.0.9）。
+ * 浮动胶囊底栏（1.0.25 起主窗口直接调用 Kyant0 catalog 组件）。
  *
  * 以前用 M3 的 NavigationBar：直角矩形、贴着屏幕边缘、选中态是方形的
- * secondaryContainer 指示器——形态和配色都偏"系统默认"。现在改成：
- * 圆角胶囊容器 + 真投影（浮在内容之上）+ 描边，选中态是一条**滑动的 pill 指示器**，
- * 用 Expressive 的 fastSpatial 弹簧从一个 tab 滑到另一个。
+ * secondaryContainer 指示器——形态和配色都偏"系统默认"。1.0.9 起改成自绘
+ * 浮动胶囊；1.0.25 起主窗口（[LocalBackdrop] 非 null）直接调用 Kyant0/
+ * AndroidLiquidGlass catalog 的 LiquidBottomTabs + LiquidBottomTab（源码
+ * vendor，参数未改）：64dp 玻璃胶囊栏 + 滑动玻璃 pill 指示器，支持拖动切换。
  *
- * 几何参数全部来自 design-tokens 的 bottomBar 段，与 iOS 的 FloatingCapsuleBar
- * 用同一组数字，双端视觉一致。
+ * 悬浮窗 / 无玻璃（backdrop 为 null）保留自绘路径：Surface + 投影 + 描边 +
+ * fastSpatial 弹簧滑动指示器，几何参数仍取 design-tokens 的 bottomBar 段，
+ * 与 iOS 的 FloatingCapsuleBar 用同一组数字。
  */
 @Composable
 private fun BottomNavBar(
@@ -261,10 +263,8 @@ private fun BottomNavBar(
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
     val selectedIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
-    // glass flavor：容器走 Kyant0 Backdrop 的 drawBackdrop，参数照抄库 catalog 的
-    // ControlCenter 示例（vibrancy() + lens(24dp, 48dp, depthEffect=true)，不另加
-    // blur），surface 用主题 surfaceContainer 40% 透明保证可读性；plain flavor
-    // 保留原 Surface + 投影 + 描边。
+    // 主窗口（backdrop 非 null）走 catalog LiquidBottomTabs（见下方 glassOn 分支）；
+    // 悬浮窗 / 无玻璃保留自绘路径：Surface + 投影 + 描边 + 弹簧滑动指示器。
     val backdrop = LocalBackdrop.current
     val glassOn = com.devperf.monitor.BuildConfig.LIQUID_GLASS && backdrop != null
 
@@ -320,23 +320,52 @@ private fun BottomNavBar(
         }
 
         if (glassOn) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(DesignTokens.BottomBar.HEIGHT.dp)
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { Capsule() },
-                        effects = {
-                            vibrancy()
-                            lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
-                        },
-                        onDrawSurface = {
-                            drawRect(cs.surfaceContainer.copy(alpha = 0.4f))
-                        }
-                    )
+            // 主窗口：直接调用 Kyant0/AndroidLiquidGlass catalog 的 LiquidBottomTabs +
+            // LiquidBottomTab（源码已原样 vendor，未改任何效果参数）——64dp 胶囊玻璃栏
+            // （vibrancy + blur(8dp) + lens(24dp,24dp)），选中态是滑动的玻璃 pill：
+            // DampedDragAnimation 弹簧物理 + 按压放大/速度形变 + InteractiveHighlight 高光，
+            // 且支持左右拖动切换 tab；tab 图标/文字染色后录进 tabsBackdrop，pill 玻璃透出
+            // 选中项内容（官方 demo 同款结构）。高度由组件内部的 64dp 行驱动。
+            LiquidBottomTabs(
+                selectedTabIndex = { selectedIndex },
+                onTabSelected = { index ->
+                    // 拖动 pill 切换：与点击 tab 走同一条导航链路
+                    val route = topLevelTabs[index].route
+                    if (route != currentRoute) {
+                        haptics.select()
+                        onSelect(route)
+                    }
+                },
+                backdrop = backdrop,
+                tabsCount = topLevelTabs.size,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                barContent()
+                topLevelTabs.forEach { tab ->
+                    LiquidBottomTab(
+                        onClick = {
+                            if (tab.route != currentRoute) {
+                                haptics.select()
+                                onSelect(tab.route)
+                            }
+                        },
+                    ) {
+                        // 图标/文字用统一内容色：选中感由滑动玻璃 pill 提供（官方 demo 同款），
+                        // 不再按 selected 换色——pill 会把这层染色后透出来。
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = cs.onSurface,
+                            modifier = Modifier.size(DesignTokens.BottomBar.ICON_SIZE.dp),
+                        )
+                        Text(
+                            text = tab.label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = DesignTokens.BottomBar.LABEL_SIZE.sp,
+                            ),
+                            color = cs.onSurface,
+                        )
+                    }
+                }
             }
         } else {
             // 容器：level2 投影（比卡片高一级，因为它浮在内容之上）
@@ -421,77 +450,76 @@ private fun NavBarItem(
 }
 
 // ---------------------------------------------------------------------------
-// 背景品牌壁纸：公司 logo（1.0.24 起，替换原黄昏山景手绘壁纸）
+// 背景品牌壁纸：浅蓝绿抽象壁纸 + 暗色罩层 + 右上角公司 logo 角标（1.0.25 起）
 //
 // 这是 App 根背景层要录进 backdrop 的内容。玻璃元素折射/模糊采样它，所以画面要有
-// 亮度层次：深色紫调渐变底（与 App 深色主题同源，surfaceDim→background→surface）
-// + 中央「分子智能科技」logo 白底板（画面最亮的一块，lens 边缘失真主要来自它）
-// + 板后柔光 + 低透明度分子点点（呼应 logo 的分子图形）。顶/底各一层轻压暗，
-// 保证状态栏区与底部内容区的直接文字可读。
+// 亮度层次：原壁纸本身是浅色蓝绿曲线（明暗都有），叠一层竖向黑色罩层把整体压暗
+// 到深色主题可用的程度——上（状态栏区）/下（浮动底栏区）加重，中部略轻（中部是
+// 玻璃卡片区，卡片自带 tint）。右上角是「分子智能科技」logo 白板角标：选右上是
+// 因为各页左上角是返回键 / 标题；Overview / Settings / 详情页顶部留出 72dp 空白
+// 就是给它让的位置（角标占 10~60dp）。
 // ---------------------------------------------------------------------------
-private fun DrawScope.drawBrandWallpaper(logo: ImageBitmap) {
+// 1.0.25 起：浅色抽象壁纸满铺 + 竖向黑色罩层（浅壁纸 × 深色主题的必选项）+
+// 右上角公司 logo 角标。internal 是为了无头渲染冒烟测试（GlassComponentsRenderTest）
+// 能直接驱动这份生产代码路径。
+internal fun DrawScope.drawBrandWallpaper(wallpaper: ImageBitmap, logo: ImageBitmap) {
     val w = size.width
     val h = size.height
 
-    // 深色紫调底：与深色主题同源的三级表面色
+    // 1. 壁纸满铺（center-crop：按屏幕与壁纸的较大缩放比铺，长边溢出裁掉，不变形）
+    val scale = maxOf(w / wallpaper.width, h / wallpaper.height)
+    val dw = wallpaper.width * scale
+    val dh = wallpaper.height * scale
+    drawImage(
+        image = wallpaper,
+        dstOffset = IntOffset(((w - dw) / 2f).roundToInt(), ((h - dh) / 2f).roundToInt()),
+        dstSize = IntSize(dw.roundToInt(), dh.roundToInt()),
+    )
+
+    // 2. 暗色罩层：浅色壁纸 + 深色主题的必选项。上/下重、中部轻。
     drawRect(
         brush = Brush.verticalGradient(
-            0.00f to Color(0xFF0F0817),
-            0.55f to Color(0xFF17101F),
-            1.00f to Color(0xFF241B2E),
+            0.00f to Color.Black.copy(alpha = 0.55f),
+            0.50f to Color.Black.copy(alpha = 0.42f),
+            1.00f to Color.Black.copy(alpha = 0.58f),
         ),
     )
 
-    // 分子点点（品牌装饰，确定性伪随机，避免每次重组跳动）
-    var seed = 20260101
-    fun rnd(): Float {
-        seed = seed * 1103515245 + 12345
-        return ((seed ushr 8) and 0xFFFF) / 65535f
-    }
-    repeat(30) {
-        val x = rnd() * w
-        val y = rnd() * h
-        val r = 1.5f + rnd() * 3.5f
-        // 避开中央 logo 板区域（板约在 20%~36% 高度）
-        if (y < h * 0.15f || y > h * 0.42f) {
-            drawCircle(
-                color = Color(0xFFDEC0FF).copy(alpha = 0.05f + rnd() * 0.10f),
-                radius = r,
-                center = Offset(x, y),
+    // 3. 公司 logo 角标：右上角白底板 + 圆角 + 轻投影（假阴影：下移 2dp、外扩 2dp
+    //    的黑色圆角板）。尺寸 88×50dp，距顶 10dp、距右 14dp。
+    val badgeW = 88f.dp.toPx()
+    val badgeH = badgeW * logo.height / logo.width
+    val left = w - 14f.dp.toPx() - badgeW
+    val top = 10f.dp.toPx()
+    val corner = CornerRadius(10f.dp.toPx())
+    val shadowInset = 2f.dp.toPx()
+    // 投影
+    drawPath(
+        path = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = left - shadowInset,
+                    top = top - shadowInset + 2f.dp.toPx(),
+                    right = left + badgeW + shadowInset,
+                    bottom = top + badgeH + shadowInset + 2f.dp.toPx(),
+                    topLeftCornerRadius = corner,
+                    topRightCornerRadius = corner,
+                    bottomRightCornerRadius = corner,
+                    bottomLeftCornerRadius = corner,
+                ),
             )
-        }
-    }
-
-    // logo 白底板：屏宽 62%、水平居中、垂直中心在 26% 高度处
-    val plateW = w * 0.62f
-    val plateH = plateW * logo.height / logo.width
-    val left = (w - plateW) / 2f
-    val top = h * 0.26f - plateH / 2f
-    val center = Offset(left + plateW / 2f, top + plateH / 2f)
-    val corner = CornerRadius(plateW * 0.045f)
-
-    // 板后柔光：白板边缘是画面里最强的亮度台阶，给 lens 提供折射内容
-    drawCircle(
-        brush = Brush.radialGradient(
-            0f to Color.White.copy(alpha = 0.10f),
-            0.55f to Color.White.copy(alpha = 0.04f),
-            1f to Color.Transparent,
-            center = center,
-            radius = plateW * 0.95f,
-        ),
-        radius = plateW * 0.95f,
-        center = center,
+        },
+        color = Color.Black.copy(alpha = 0.28f),
     )
-
-    // logo 图（圆角裁剪，白底板保持原图不改色）
+    // logo 白板（圆角裁剪）
     clipPath(
         path = Path().apply {
             addRoundRect(
                 RoundRect(
                     left = left,
                     top = top,
-                    right = left + plateW,
-                    bottom = top + plateH,
+                    right = left + badgeW,
+                    bottom = top + badgeH,
                     topLeftCornerRadius = corner,
                     topRightCornerRadius = corner,
                     bottomRightCornerRadius = corner,
@@ -503,17 +531,7 @@ private fun DrawScope.drawBrandWallpaper(logo: ImageBitmap) {
         drawImage(
             image = logo,
             dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-            dstSize = IntSize(plateW.roundToInt(), plateH.roundToInt()),
+            dstSize = IntSize(badgeW.roundToInt(), badgeH.roundToInt()),
         )
     }
-
-    // 顶/底轻压暗：状态栏区与底部内容区的直接文字可读
-    drawRect(
-        brush = Brush.verticalGradient(
-            0.00f to Color.Black.copy(alpha = 0.30f),
-            0.16f to Color.Transparent,
-            0.80f to Color.Transparent,
-            1.00f to Color.Black.copy(alpha = 0.36f),
-        ),
-    )
 }
