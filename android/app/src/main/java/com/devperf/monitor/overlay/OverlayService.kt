@@ -10,10 +10,15 @@ import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
@@ -28,7 +33,11 @@ import com.devperf.monitor.core.Metric
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.SettingsRepository
+import com.devperf.monitor.ui.kit.LocalBackdrop
+import com.devperf.monitor.ui.kit.appLayerBackdrop
+import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.theme.DevicePerfTheme
+import com.devperf.monitor.ui.wallpaper.rememberWallpaperImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -230,10 +239,8 @@ class OverlayService : android.app.Service() {
                 val snapshot by repository.snapshot.collectAsState()
                 val state by controllerRef.uiState.collectAsState()
                 // 帧率走**全局帧率**（前台应用/游戏的真实帧率，需 Shizuku 或 root，
-                // 见 GlobalFpsCollector）。未授权时 Metric 带 NeedsPermission 三态。
-                // 注意：1.0.17 起悬浮窗那一格显示的是屏幕刷新率而非帧率（用户要求），
-                // 这里的 fps 只用于综合评判的流畅度（按 fps ÷ refreshHz 算达成率），
-                // 不再直接上悬浮窗的行。
+                // 见 GlobalFpsCollector）。未授权时 Metric 带 NeedsPermission 三态，
+                // 悬浮窗卡片行留引导小字（1.0.26 起 FPS 正式进悬浮窗）。
                 val data = OverlayData.from(
                     fps = snapshot.display.globalFps,
                     snapshot = snapshot,
@@ -252,13 +259,33 @@ class OverlayService : android.app.Service() {
                 )
 
                 DevicePerfTheme(settings.themeMode) {
-                    OverlayContent(
-                        state = state,
-                        data = data,
-                        health = health,
-                        intervalMs = settings.refreshMode.tickMs,
-                        callbacks = callbacks,
-                    )
+                    // 1.0.26 悬浮窗玻璃化：窗口是独立的，跨窗口捕获背后应用没有意义，
+                    // 玻璃采样的是「窗口内画的壁纸背景层」——结构照搬 AppNav：
+                    // 背景层（layerBackdrop 只录壁纸+罩层）与玻璃内容互为兄弟，
+                    // 玻璃元素绝不进录制子树（1.0.13 自指采样崩溃教训）。
+                    // 壁纸与主界面同一份设置（1.0.26 起用户可自由切换）。
+                    val overlayBackdrop = rememberAppBackdrop()
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .appLayerBackdrop(overlayBackdrop),
+                        ) {
+                            val wallpaper = rememberWallpaperImage(settings)
+                            Canvas(modifier = Modifier.matchParentSize()) {
+                                drawOverlayWallpaper(wallpaper)
+                            }
+                        }
+                        CompositionLocalProvider(LocalBackdrop provides overlayBackdrop) {
+                            OverlayContent(
+                                state = state,
+                                data = data,
+                                health = health,
+                                intervalMs = settings.refreshMode.tickMs,
+                                callbacks = callbacks,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -279,14 +306,19 @@ class OverlayService : android.app.Service() {
         )
     }
 
-    /** 告警态观察：机身/CPU/电池温度任一超过阈值 → 悬浮窗整体变红。 */
+    /** 告警态观察：机身/CPU/GPU/电池温度任一超过阈值 → 悬浮窗整体变红（1.0.26 扩展热源）。 */
     @Composable
     private fun AlertWatcher(
         data: OverlayData,
         thresholdC: Float,
         controller: OverlayController,
     ) {
-        val temps = listOfNotNull(data.deviceTemp.value)
+        val temps = listOfNotNull(
+            data.deviceTemp.value,
+            data.cpuTemp.value,
+            data.gpuTemp.value,
+            data.batteryTemp.value,
+        )
         val alert = temps.any { it >= thresholdC }
         LaunchedEffect(alert) { controller.setAlert(alert) }
     }

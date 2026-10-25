@@ -1,15 +1,36 @@
 package com.devperf.monitor.ui.screen
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,17 +38,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.BuildConfig
+import com.devperf.monitor.R
+import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.data.ThemeMode
+import com.devperf.monitor.data.WallpaperId
 import com.devperf.monitor.data.collectors.PrivilegedShell
 import com.devperf.monitor.overlay.OverlayPermissions
+import com.devperf.monitor.ui.FeedbackUiState
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.EnterStagger
 import com.devperf.monitor.ui.kit.GlassButton
@@ -41,6 +75,11 @@ import com.devperf.monitor.ui.kit.GlassTabs
 import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
+import com.devperf.monitor.ui.wallpaper.Wallpapers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 设置页：悬浮窗 / 采集 / 告警 / 提权 / 主题 / 权限状态 / 关于。
@@ -75,6 +114,21 @@ fun SettingsScreen(
         if (overlayGranted && pendingEnable) {
             pendingEnable = false
             viewModel.setOverlayEnabled(true)
+        }
+    }
+
+    // 1.0.26 相册选图（自定义壁纸）：PickVisualMedia 走系统相册面板，不需要
+    // 存储权限；选中后当场把字节复制进 filesDir（返回的 Uri 授权是临时的，
+    // 存 Uri 会失效），复制或解码失败就保持当前壁纸，不打扰用户。
+    val scope = rememberCoroutineScope()
+    val pickWallpaperLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val path = Wallpapers.importFromUri(context, uri)
+                if (path != null) viewModel.setWallpaperCustom(path)
+            }
         }
     }
 
@@ -403,6 +457,135 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
+                    // 1.0.26 壁纸自由切换：内置三张 + 相册自定义。
+                    // 选择立即生效（DataStore 流驱动，主界面与悬浮窗背景同步换）。
+                    Text(
+                        text = "壁纸",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary,
+                    )
+                    WallpaperPicker(
+                        settings = settings,
+                        onSelectBuiltIn = { id ->
+                            haptics.select()
+                            viewModel.setWallpaper(id)
+                        },
+                        onPickFromGallery = {
+                            pickWallpaperLauncher.launch(
+                                androidx.activity.result.PickVisualMediaRequest(
+                                    androidx.activity.result.contract.ActivityResultContracts
+                                        .PickVisualMedia.ImageOnly,
+                                ),
+                            )
+                        },
+                    )
+                    Text(
+                        text = "壁纸同时作为全局悬浮窗的背景。自定义图片只在本机处理，" +
+                            "不上传、不进相册，随时可以换回内置的。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
+
+            // ================= 意见反馈（1.0.26） =================
+            GlassSectionHeader(text = "意见反馈")
+            GlassPanel {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+                ) {
+                    Text(
+                        text = "遇到问题、想要新功能，或者任何想说的话，写在这里就能送到开发者手里。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textSecondary,
+                    )
+                    val feedbackState by viewModel.feedbackState.collectAsState()
+                    var feedbackContent by remember { mutableStateOf("") }
+                    var feedbackContact by remember { mutableStateOf("") }
+                    val submitting = feedbackState is FeedbackUiState.Submitting
+
+                    // 降级通道（没配直连 token）：提交结果是一条预填好的 GitHub
+                    // 网页 issue 链接，直接拉起系统浏览器让用户发出去。
+                    LaunchedEffect(feedbackState) {
+                        val fs = feedbackState
+                        if (fs is FeedbackUiState.BrowserFallback) {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(fs.url)),
+                                )
+                            }
+                        }
+                    }
+
+                    GlassTextField(
+                        value = feedbackContent,
+                        onValueChange = {
+                            feedbackContent = it
+                            viewModel.resetFeedbackState()
+                        },
+                        placeholder = "说点什么……（必填）",
+                        minLines = 4,
+                    )
+                    GlassTextField(
+                        value = feedbackContact,
+                        onValueChange = {
+                            feedbackContact = it
+                            viewModel.resetFeedbackState()
+                        },
+                        placeholder = "联系方式（选填：邮箱 / 微信 / QQ 均可）",
+                    )
+                    GlassButton(
+                        text = if (submitting) "提交中……" else "提交反馈",
+                        onClick = {
+                            haptics.select()
+                            viewModel.submitFeedback(
+                                feedbackContent.trim(),
+                                feedbackContact.trim(),
+                            )
+                        },
+                        enabled = feedbackContent.isNotBlank() && !submitting,
+                    )
+                    // 状态行：每种终态一句话说清楚，失败给原因
+                    val fs = feedbackState
+                    when (fs) {
+                        is FeedbackUiState.Submitted -> {
+                            // 成功后清空草稿，准备下一条
+                            LaunchedEffect(fs) {
+                                feedbackContent = ""
+                                feedbackContact = ""
+                            }
+                            val url = fs.issueUrl
+                            Text(
+                                text = if (url != null) "已提交，感谢！点此查看你提交的反馈 →" else "已提交，感谢！开发者很快会看到。",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.textPrimary,
+                                modifier = if (url != null) {
+                                    Modifier.clickable {
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                        }
+                        is FeedbackUiState.BrowserFallback ->
+                            Text(
+                                text = "已打开 GitHub 反馈页，点「Submit new issue」即可发出。",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.textPrimary,
+                            )
+                        is FeedbackUiState.Failed ->
+                            Text(
+                                text = "提交失败：${fs.reason}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        else -> Unit
+                    }
                 }
             }
 
@@ -448,3 +631,214 @@ fun SettingsScreen(
 /** 读取当前特权通道（每次组合刷新；三态指标由采集器维护）。 */
 private fun snapshotBackend(viewModel: MonitorViewModel): PrivilegedShell.Backend =
     viewModel.snapshotShellBackend()
+
+// ---------------------------------------------------------------------------
+// 1.0.26 壁纸选择（外观区）
+//
+// 一行横滑缩略图：三张内置（青蓝 / 极光 / 薄荷）+「从相册选」入口；已经选过
+// 自定义图时，行首插入当前自定义图的缩略图（再点一次 = 重新选图）。
+// 内置缩略图走 320px 专用小图（wallpaper_thumb_*.jpg），不整图解码；
+// 自定义缩略图现取现解码（2048px 封顶），文件没了就只显示相册入口。
+// ---------------------------------------------------------------------------
+
+/** 壁纸缩略图的统一外框尺寸（竖版，与壁纸 1024x2220 同比例）。 */
+private val ThumbWidth = 76.dp
+private val ThumbHeight = 108.dp
+
+/** internal：设置页外观区直接调用；冒烟测试（WallpaperRenderTest）直接驱动它。 */
+@Composable
+internal fun WallpaperPicker(
+    settings: MonitorSettings,
+    onSelectBuiltIn: (WallpaperId) -> Unit,
+    onPickFromGallery: () -> Unit,
+) {
+    val builtIns = listOf(
+        Triple(WallpaperId.LIGHT_TEAL, R.drawable.wallpaper_thumb_light, "青蓝"),
+        Triple(WallpaperId.AURORA, R.drawable.wallpaper_thumb_aurora, "极光"),
+        Triple(WallpaperId.MINT, R.drawable.wallpaper_thumb_mint, "薄荷"),
+    )
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp)) {
+        if (settings.wallpaper == WallpaperId.CUSTOM) {
+            item(key = "custom") {
+                CustomWallpaperThumb(
+                    path = settings.wallpaperCustomPath,
+                    onClick = onPickFromGallery,
+                )
+            }
+        }
+        items(items = builtIns, key = { it.first.name }) { (id, thumbRes, label) ->
+            WallpaperThumbItem(
+                painter = painterResource(thumbRes),
+                label = label,
+                selected = settings.wallpaper == id,
+                onClick = { onSelectBuiltIn(id) },
+            )
+        }
+        item(key = "gallery") {
+            GalleryTile(onClick = onPickFromGallery)
+        }
+    }
+}
+
+/** 一张壁纸缩略图：图 + 底部名称；选中时主色描边 + 右上角对勾。 */
+@Composable
+private fun WallpaperThumbItem(
+    painter: Painter,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(14.dp)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(ThumbWidth, ThumbHeight)
+                .clip(shape)
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) cs.primary else cs.outline.copy(alpha = 0.4f),
+                    shape = shape,
+                )
+                .clickable(onClick = onClick),
+        ) {
+            Image(
+                painter = painter,
+                contentDescription = label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(cs.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "已选中",
+                    tint = cs.onPrimary,
+                    modifier = Modifier.size(12.dp),
+                )
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) cs.primary else cs.onSurfaceVariant,
+        )
+    }
+}
+
+/** 自定义壁纸缩略图：现取现解码，解码不出来就不占位（相册入口仍在）。 */
+@Composable
+private fun CustomWallpaperThumb(path: String?, onClick: () -> Unit) {
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, path) {
+        value = path?.takeIf { File(it).isFile }?.let { p ->
+            withContext(Dispatchers.IO) { Wallpapers.decodeCustom(p) }
+        }
+    }
+    val image = bitmap
+    if (image != null) {
+        WallpaperThumbItem(
+            painter = BitmapPainter(image),
+            label = "自定义",
+            selected = true,
+            onClick = onClick,
+        )
+    }
+}
+
+/** 「从相册选」入口：虚线感（细描边）方块 + 加号。 */
+@Composable
+private fun GalleryTile(onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(14.dp)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(ThumbWidth, ThumbHeight)
+                .clip(shape)
+                .border(
+                    width = 1.dp,
+                    color = cs.outline.copy(alpha = 0.4f),
+                    shape = shape,
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    tint = cs.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "相册",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = cs.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "自定义",
+            style = MaterialTheme.typography.labelSmall,
+            color = cs.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * 玻璃风文本输入框（1.0.26 意见反馈用）。
+ *
+ * 项目此前没有任何输入场景，没有 M3 TextField 的封装；反馈卡片是第一个，
+ * 先做一个够用的：BasicTextField + 与 GlassPanel 同款的描边/底色/圆角，
+ * 空态显示 placeholder。只有这一个调用方，不强行抽进 kit。
+ */
+@Composable
+private fun GlassTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    minLines: Int = 1,
+) {
+    val cs = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(cs.surfaceContainer)
+            .border(
+                width = DesignTokens.Surface.BORDER_WIDTH.dp,
+                color = cs.outline.copy(alpha = DesignTokens.Surface.BORDER_ALPHA),
+                shape = shape,
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        if (value.isEmpty()) {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyLarge,
+                color = cs.onSurfaceVariant,
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface),
+            cursorBrush = SolidColor(cs.primary),
+            minLines = minLines,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}

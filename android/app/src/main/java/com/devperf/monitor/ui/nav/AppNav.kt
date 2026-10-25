@@ -75,6 +75,7 @@ import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
+import com.devperf.monitor.ui.wallpaper.rememberWallpaperImage
 import com.kyant.backdrop.catalog.components.LiquidBottomTab
 import com.kyant.backdrop.catalog.components.LiquidBottomTabs
 import androidx.compose.ui.unit.dp
@@ -115,6 +116,8 @@ fun AppNav(
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in topLevelTabs.map { it.route }
     val updateState by viewModel.updateState.collectAsState()
+    // 1.0.26 壁纸自由切换：背景层按设置解析（内置三选一 / 相册自定义）
+    val settings by viewModel.settings.collectAsState()
 
     // NavHost / AnimatedVisibility 的 enter/exit 均为非 Composable lambda，
     // 不能在其中读取 CompositionLocal —— 先在 Composable 作用域取出曲线值
@@ -145,11 +148,12 @@ fun AppNav(
             null
         }
         if (backdrop != null) {
-            // 背景层：浅蓝绿抽象壁纸（1.0.25 起更换，原「深色渐变 + 中央 logo 大图」
-            // 方案下线）+ 暗色罩层 + 右上角公司 logo 角标。
-            // 罩层的理由：新壁纸是浅色的，而 App 是深色主题（浅色文字），直接铺
-            // 浅色壁纸所有文字都会糊；角标位置与各页顶部留白见 drawBrandWallpaper。
-            val wallpaper = ImageBitmap.imageResource(R.drawable.wallpaper_light)
+            // 背景层：品牌壁纸（1.0.26 起可在设置页切换：青蓝 / 极光 / 薄荷 /
+            // 相册自定义）+ 暗色罩层 + 右上角公司 logo 角标。
+            // 罩层的理由：内置壁纸是浅色的，而 App 是深色主题（浅色文字），
+            // 直接铺浅色壁纸所有文字都会糊；角标位置与各页顶部留白见
+            // drawBrandWallpaper。
+            val wallpaper = rememberWallpaperImage(settings)
             val logo = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
             Box(
                 modifier = Modifier
@@ -263,6 +267,14 @@ private fun BottomNavBar(
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
     val selectedIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
+    // 1.0.26 修复「底栏 pill 拖回失效」：LiquidBottomTabs 的 selectedTabIndex 是
+    // () -> Int 读取器，组件内部用它做 remember 的 key。若每次重组都传新 lambda
+    // 实例，key 就每次都变——路由异步更新（navigate 后 currentRoute 下一帧才变）
+    // 的窗口内只要发生一次重组，currentIndex 就被重置回路由旧值：pill 弹回原
+    // tab、onTabSelected 被重复回调、页面被导航回原页面，用户感知「拖回去卡死，
+    // 必须点第 1 个 tab」。按 selectedIndex 的值 remember，保证值不变时实例稳定。
+    val selectedTabIndexProvider = remember(selectedIndex) { { selectedIndex } }
+
     // 主窗口（backdrop 非 null）走 catalog LiquidBottomTabs（见下方 glassOn 分支）；
     // 悬浮窗 / 无玻璃保留自绘路径：Surface + 投影 + 描边 + 弹簧滑动指示器。
     val backdrop = LocalBackdrop.current
@@ -327,7 +339,7 @@ private fun BottomNavBar(
             // 且支持左右拖动切换 tab；tab 图标/文字染色后录进 tabsBackdrop，pill 玻璃透出
             // 选中项内容（官方 demo 同款结构）。高度由组件内部的 64dp 行驱动。
             LiquidBottomTabs(
-                selectedTabIndex = { selectedIndex },
+                selectedTabIndex = selectedTabIndexProvider,
                 onTabSelected = { index ->
                     // 拖动 pill 切换：与点击 tab 走同一条导航链路
                     val route = topLevelTabs[index].route
@@ -476,12 +488,14 @@ internal fun DrawScope.drawBrandWallpaper(wallpaper: ImageBitmap, logo: ImageBit
         dstSize = IntSize(dw.roundToInt(), dh.roundToInt()),
     )
 
-    // 2. 暗色罩层：浅色壁纸 + 深色主题的必选项。上/下重、中部轻。
+    // 2. 暗色罩层：浅色壁纸 + 深色主题的必选项，但 1.0.25 压得太暗（用户反馈壁纸
+    //    看不清），1.0.26 调轻——上（状态栏区）/下（浮动底栏区）略重，中部最轻
+    //    （中部是玻璃卡片区，卡片自带 tint）。亮度回归见 BackdropDrawingRenderTest。
     drawRect(
         brush = Brush.verticalGradient(
-            0.00f to Color.Black.copy(alpha = 0.55f),
-            0.50f to Color.Black.copy(alpha = 0.42f),
-            1.00f to Color.Black.copy(alpha = 0.58f),
+            0.00f to Color.Black.copy(alpha = 0.30f),
+            0.50f to Color.Black.copy(alpha = 0.16f),
+            1.00f to Color.Black.copy(alpha = 0.34f),
         ),
     )
 

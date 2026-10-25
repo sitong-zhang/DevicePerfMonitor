@@ -144,13 +144,56 @@ class BackdropDrawingRenderTest {
             paintedPixels > 0,
         )
 
-        // 罩层生效回归：绘制结果的平均亮度应显著低于壁纸原图的平均亮度。
-        // 浅色壁纸（平均亮度高）在深色主题下必须被竖向罩层压暗，否则文字不可读。
+        // 罩层生效回归（1.0.26 更新阈值口径）：
+        // 1.0.25 的罩层压得太暗（用户反馈「壁纸看不清」），1.0.26 调亮为
+        // 0.30/0.16/0.34（上/中/下），设计意图是**壁纸可辨 + 深色文字仍可读**：
+        // - 上限 0.92：仍必须压暗，不能比原图还亮（浅壁纸 × 深色文字会糊）；
+        // - 下限 0.70：不能退回 1.0.25 的重罩层（压暗到看不清壁纸的程度）。
         val drawnAvgLuminance = drawnLuminanceSum / paintedPixels
         assertTrue(
             "罩层应把浅色壁纸压暗：绘制平均亮度 $drawnAvgLuminance 应低于" +
-                "壁纸原图平均亮度 $wallpaperAvgLuminance 的 80%",
-            drawnAvgLuminance < wallpaperAvgLuminance * 0.8,
+                "壁纸原图平均亮度 $wallpaperAvgLuminance 的 92%",
+            drawnAvgLuminance < wallpaperAvgLuminance * 0.92,
+        )
+        assertTrue(
+            "罩层不应过暗（1.0.26 调亮回归）：绘制平均亮度 $drawnAvgLuminance " +
+                "不应低于壁纸原图平均亮度 $wallpaperAvgLuminance 的 70%",
+            drawnAvgLuminance > wallpaperAvgLuminance * 0.70,
+        )
+
+        // 渐变方向回归：罩层是竖向渐变（上/下重、中部轻），三段亮度应满足
+        // top < middle 且 bottom < middle。取屏幕 5%~15% / 45%~55% / 85%~95%
+        // 三个横带采样（避开顶部 logo 角标区）。
+        fun bandLuminance(yFrom: Float, yTo: Float): Double {
+            val y0 = (pixels.height * yFrom).toInt()
+            val y1 = (pixels.height * yTo).toInt()
+            var sum = 0.0
+            var count = 0
+            var y = y0
+            while (y < y1) {
+                var x = 0
+                while (x < pixels.width) {
+                    val c = pixels[x, y]
+                    if (c.alpha > 0.01f) {
+                        sum += (0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue) * 255f
+                        count++
+                    }
+                    x += stride
+                }
+                y += stride
+            }
+            return if (count > 0) sum / count else 0.0
+        }
+        val topLum = bandLuminance(0.05f, 0.15f)
+        val middleLum = bandLuminance(0.45f, 0.55f)
+        val bottomLum = bandLuminance(0.85f, 0.95f)
+        assertTrue(
+            "罩层上部（状态栏区）应比中部暗：top=$topLum, middle=$middleLum",
+            topLum < middleLum,
+        )
+        assertTrue(
+            "罩层下部（浮动底栏区）应比中部暗：bottom=$bottomLum, middle=$middleLum",
+            bottomLum < middleLum,
         )
     }
 

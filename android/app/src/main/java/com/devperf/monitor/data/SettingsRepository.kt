@@ -32,6 +32,21 @@ enum class ThemeMode(val label: String) {
     AUTO("跟随系统"),
 }
 
+/**
+ * 1.0.26 壁纸选择：内置三张（浅色基调，适配深色主题罩层）+ 用户相册自定义。
+ *
+ * 自定义图不在 DataStore 里存位图——只存「选了自定义」这个事实，
+ * 图片字节由设置页复制到 `filesDir/wallpaper_custom.jpg`（见
+ * [com.devperf.monitor.ui.wallpaper.Wallpapers]），路径随设置一起持久化。
+ * 文件缺失（被清理）时读取侧回落到 [LIGHT_TEAL]，不白屏。
+ */
+enum class WallpaperId(val label: String) {
+    LIGHT_TEAL("青蓝"),
+    AURORA("极光"),
+    MINT("薄荷"),
+    CUSTOM("自定义"),
+}
+
 /** 每个核心指标默认的可视化模式（占用率用环形、温度和帧率看波动、刷新率看数字）。 */
 fun defaultMetricViewModes(): Map<CoreMetricId, MetricViewMode> = mapOf(
     CoreMetricId.MEMORY_RATIO to MetricViewMode.RING,
@@ -82,6 +97,10 @@ data class MonitorSettings(
     val alertByNotification: Boolean = true,
     val alertByOverlayPopup: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.DARK,
+    /** 当前壁纸（1.0.26 新增）；CUSTOM 表示用 [wallpaperCustomPath] 的图片。 */
+    val wallpaper: WallpaperId = WallpaperId.LIGHT_TEAL,
+    /** 自定义壁纸文件绝对路径（wallpaper = CUSTOM 时有效）。 */
+    val wallpaperCustomPath: String? = null,
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -117,6 +136,10 @@ class SettingsRepository(private val context: Context) {
             themeMode = prefs[KEY_THEME]?.let { name ->
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
             } ?: ThemeMode.DARK,
+            wallpaper = prefs[KEY_WALLPAPER]?.let { name ->
+                runCatching { WallpaperId.valueOf(name) }.getOrNull()
+            } ?: WallpaperId.LIGHT_TEAL,
+            wallpaperCustomPath = prefs[KEY_WALLPAPER_CUSTOM],
         )
     }
 
@@ -159,6 +182,20 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAlertByOverlayPopup(value: Boolean) = put(KEY_ALERT_POPUP, value)
     suspend fun setThemeMode(mode: ThemeMode) = put(KEY_THEME, mode.name)
 
+    /** 切换壁纸（内置三选一；自定义走 [setWallpaperCustom]）。 */
+    suspend fun setWallpaper(id: WallpaperId) = put(KEY_WALLPAPER, id.name)
+
+    /**
+     * 设置自定义壁纸：写入文件路径并把当前壁纸切到 CUSTOM。
+     * 1.0.26：图片字节由设置页先复制到 filesDir 再调这里，只存路径。
+     */
+    suspend fun setWallpaperCustom(path: String) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_WALLPAPER_CUSTOM] = path
+            prefs[KEY_WALLPAPER] = WallpaperId.CUSTOM.name
+        }
+    }
+
     private suspend fun <T> put(key: Preferences.Key<T>, value: T) {
         context.settingsDataStore.edit { it[key] = value }
     }
@@ -198,5 +235,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_ALERT_NOTIFICATION = booleanPreferencesKey("alert_notification")
         val KEY_ALERT_POPUP = booleanPreferencesKey("alert_popup")
         val KEY_THEME = stringPreferencesKey("theme_mode")
+        val KEY_WALLPAPER = stringPreferencesKey("wallpaper")
+        val KEY_WALLPAPER_CUSTOM = stringPreferencesKey("wallpaper_custom_path")
     }
 }

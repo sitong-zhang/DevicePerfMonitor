@@ -392,9 +392,12 @@ class OverlayController(
         // 悬浮窗三态基准尺寸（dp）。阴影边距 10dp 含在窗口内（窗口尺寸=可见区域含阴影）。
         const val SHADOW_PADDING_DP = 10f
         const val CARD_W_DP = 272f
-        const val CARD_H_DP = 156f
-        const val NUMBERS_W_DP = 224f
-        const val NUMBERS_H_DP = 48f
+        // 1.0.26：卡片态指标从 3 行扩到全量明细（最多 12 行：CPU/GPU 使用率、
+        // 四路温度、电池电压/电流/电量、内存、FPS、刷新率），高度随之放大。
+        const val CARD_H_DP = 204f
+        // 1.0.26：纯数字态从 3 格扩到 4 格（CPU / 温度 / FPS / 刷新率），宽度对齐卡片。
+        const val NUMBERS_W_DP = 272f
+        const val NUMBERS_H_DP = 52f
         const val COLLAPSED_W_DP = 26f
         const val COLLAPSED_H_DP = 148f
 

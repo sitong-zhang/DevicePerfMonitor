@@ -63,9 +63,13 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.semantics.Role
 import kotlin.math.roundToInt
 
@@ -232,7 +236,7 @@ fun GlassSwitch(
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（MD3 Slider，支持 steps 吸附）
+// 滑块（1.0.26：主窗口统一走 catalog LiquidSlider + 全区域拖拽覆盖层）
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -244,119 +248,109 @@ fun GlassSlider(
     steps: Int = 0,
     enabled: Boolean = true,
 ) {
-    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     val colors = LocalTokenColors.current
-    if (backdrop != null && steps == 0) {
-        // 主窗口 + 连续值：直接调用 Kyant0/AndroidLiquidGlass catalog 的 LiquidSlider
-        // （vendor 源码，未改任何参数）——6dp 细轨 + 40×24dp 玻璃滑块，
-        // blur/lens/色散随按压进度插值，点击定位 + 拖动取值，滑块内部叠加
-        // 轨道录制的 backdrop（官方同款「玻璃嵌玻璃」结构）。
-        LiquidSlider(
-            value = { value },
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            visibilityThreshold = (valueRange.endInclusive - valueRange.start) * 0.001f,
-            backdrop = backdrop,
-            modifier = modifier.alpha(if (enabled) 1f else 0.45f),
-        )
-        return
-    }
-    if (backdrop == null) {
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = modifier.alpha(if (enabled) 1f else 0.45f),
-            valueRange = valueRange,
-            steps = steps,
-            enabled = enabled,
-            colors = SliderDefaults.colors(
-                thumbColor = colors.accent,
-                activeTrackColor = colors.accent,
-                inactiveTrackColor = colors.surfaceElevated,
-            ),
-        )
-        return
-    }
-    // 主窗口 + 离散步进（steps > 0，如温度告警阈值）：catalog 组件只支持连续值，
-    // 这里保留同引擎的自绘玻璃滑块——blur/lens/色散参数与 catalog LiquidSlider 一致。
-    val accent = colors.accent
-    val trackColor = colors.surfaceElevated
-    val span = valueRange.endInclusive - valueRange.start
-    val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
-    var pressed by remember { mutableStateOf(false) }
-    val progress by animateFloatAsState(if (pressed) 1f else 0f, label = "sliderPress")
-    val thumbW = 32.dp
-    val thumbH = 28.dp
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .alpha(if (enabled) 1f else 0.45f)
-            .pointerInput(valueRange, steps, enabled) {
-                if (!enabled) return@pointerInput
-                awaitEachGesture {
-                    fun commit(x: Float) {
-                        val f = (x / size.width.toFloat()).coerceIn(0f, 1f)
-                        var v = valueRange.start + f * span
-                        if (steps > 0) {
-                            val stepSize = span / (steps + 1)
-                            val idx = ((v - valueRange.start) / stepSize).roundToInt()
-                            v = valueRange.start + idx * stepSize
-                        }
-                        onValueChange(v.coerceIn(valueRange))
+    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
+    if (backdrop != null) {
+        val span = valueRange.endInclusive - valueRange.start
+        val stepSize = if (steps > 0) span / (steps + 1) else 0f
+        fun snap(v: Float): Float =
+            if (steps > 0) {
+                val idx = ((v - valueRange.start) / stepSize).roundToInt()
+                (valueRange.start + idx * stepSize).coerceIn(valueRange)
+            } else {
+                v
+            }
+        // 连续值喂给 LiquidSlider 让 thumb 跟手；离散步进只在跨档时上报上层，
+        // 松手时吸附回档位（1.0.26 起温度阈值也走官方组件，不再用自绘滑块）。
+        var raw by remember { mutableStateOf(value) }
+        LaunchedEffect(value) {
+            if (kotlin.math.abs(value - snap(raw)) > 0.0001f) raw = value
+        }
+        val currentValue by rememberUpdatedState(value)
+        val currentOnValueChange by rememberUpdatedState(onValueChange)
+        Box(modifier = modifier.alpha(if (enabled) 1f else 0.45f)) {
+            LiquidSlider(
+                value = { raw },
+                onValueChange = { v ->
+                    raw = v
+                    val s = snap(v)
+                    if (steps == 0 || kotlin.math.abs(s - currentValue) > 0.0001f) {
+                        currentOnValueChange(s)
                     }
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    pressed = true
-                    commit(down.position.x)
-                    drag(down.id) { change -> commit(change.position.x) }
-                    pressed = false
-                }
-            },
-    ) {
-        val travel = maxWidth - thumbW
-        // 底轨
-        Box(
-            Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(Pill)
-                .background(trackColor),
-        )
-        // 已选轨（延伸到滑块中心）
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .height(6.dp)
-                .width(thumbW / 2f + travel * fraction)
-                .clip(Pill)
-                .background(accent),
-        )
-        // 玻璃滑块
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .offset(x = travel * fraction)
-                .size(width = thumbW, height = thumbH)
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { Capsule() },
-                    effects = {
-                        blur(8f.dp.toPx() * (1f - progress))
-                        lens(
-                            10f.dp.toPx() * progress,
-                            14f.dp.toPx() * progress,
-                            chromaticAberration = true,
-                        )
-                    },
-                    onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - progress)) },
-                ),
-        )
+                },
+                valueRange = valueRange,
+                visibilityThreshold = span * 0.001f,
+                backdrop = backdrop,
+            )
+            if (enabled) {
+                // 官方拖动手势只挂在 40×24dp 的 thumb 上：按住轨道拖动没有响应
+                // （用户反馈「有移动效果但拖不动」就是按住轨道时只有 tap 跳转）。
+                // 这里补一层全区域水平拖拽：thumb 命中区放行给官方手势（保留按压
+                // 玻璃反馈），垂直意图放行给外层 LazyColumn 滚动。
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .pointerInput(valueRange, steps) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Initial,
+                                )
+                                val fraction =
+                                    ((currentValue - valueRange.start) / span)
+                                        .coerceIn(0f, 1f)
+                                val thumbCenterX = size.width * fraction
+                                val hit = 28.dp.toPx()
+                                if (down.position.x in
+                                    (thumbCenterX - hit)..(thumbCenterX + hit)
+                                ) {
+                                    return@awaitEachGesture
+                                }
+                                drag(down.id) { change ->
+                                    val pc = change.positionChange()
+                                    if (kotlin.math.abs(pc.x) >= kotlin.math.abs(pc.y)) {
+                                        change.consume()
+                                        val f = (change.position.x / size.width.toFloat())
+                                            .coerceIn(0f, 1f)
+                                        val v = valueRange.start + f * span
+                                        raw = v
+                                        val s = snap(v)
+                                        if (steps == 0 ||
+                                            kotlin.math.abs(s - currentValue) > 0.0001f
+                                        ) {
+                                            currentOnValueChange(s)
+                                        }
+                                    }
+                                }
+                                // 松手吸附到步进档
+                                val s = snap(raw)
+                                raw = s
+                                if (steps > 0) currentOnValueChange(s)
+                            }
+                        },
+                )
+            }
+        }
+        return
     }
+    // 悬浮窗 / 无玻璃（backdrop 为 null）：MD3 标准件
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.alpha(if (enabled) 1f else 0.45f),
+        valueRange = valueRange,
+        steps = steps,
+        enabled = enabled,
+        colors = SliderDefaults.colors(
+            thumbColor = colors.accent,
+            activeTrackColor = colors.accent,
+            inactiveTrackColor = colors.surfaceElevated,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------------------
-// 标签页（分段）：MD3 SingleChoiceSegmentedButtonRow
+// 标签页（分段）：主窗口用 LiquidButton 三联胶囊，悬浮窗回落 MD3 分段按钮
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -368,64 +362,69 @@ fun GlassTabs(
 ) {
     val colors = LocalTokenColors.current
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
-    val shape = Pill
-    // glass：整条分段控件坐在一层玻璃胶囊上，分段本身透明，只保留选中态强调色；
-    // plain / 悬浮窗（backdrop 为 null）：保留原 MD3 分段配色。
-    val segColors = if (backdrop != null) {
-        SegmentedButtonDefaults.colors(
-            activeContainerColor = colors.accent.copy(alpha = 0.28f),
-            activeContentColor = colors.accent,
-            activeBorderColor = Color.Transparent,
-            inactiveContainerColor = Color.Transparent,
-            inactiveContentColor = colors.textSecondary,
-            inactiveBorderColor = Color.Transparent,
-        )
-    } else {
-        SegmentedButtonDefaults.colors(
-            activeContainerColor = colors.accent.copy(alpha = 0.22f),
-            activeContentColor = colors.accent,
-            activeBorderColor = colors.accent.copy(alpha = 0.5f),
-            inactiveContainerColor = colors.surface.copy(alpha = 0.5f),
-            inactiveContentColor = colors.textSecondary,
-            inactiveBorderColor = colors.textSecondary.copy(alpha = 0.25f),
-        )
-    }
-    val row = @Composable {
-        SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+    if (backdrop != null) {
+        // 每个选项一颗独立的 LiquidButton 玻璃胶囊（官方组件：vibrancy + blur +
+        // lens + InteractiveHighlight 按压反馈），选中态用 tint 区分。
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             options.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = index == selectedIndex,
+                val selected = index == selectedIndex
+                LiquidButton(
                     onClick = { onSelect(index) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    colors = segColors,
-                    label = {
-                        Text(
-                            text = option,
-                            style = MaterialTheme.typography.labelLarge,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                        )
+                    backdrop = backdrop,
+                    modifier = Modifier.weight(1f),
+                    isInteractive = true,
+                    tint = if (selected) {
+                        colors.accent.copy(alpha = 0.35f)
+                    } else {
+                        Color.Transparent
                     },
-                )
+                    surfaceColor = if (selected) {
+                        colors.accent.copy(alpha = 0.5f)
+                    } else {
+                        Color.White.copy(alpha = 0.06f)
+                    },
+                ) {
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        color = if (selected) colors.accent else colors.textSecondary,
+                    )
+                }
             }
         }
+        return
     }
-    if (backdrop != null) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .glassSurface(
-                    backdrop = backdrop,
-                    shape = shape,
-                    tint = MaterialTheme.colorScheme.surfaceContainer,
-                )
-                .padding(4.dp),
-        ) {
-            row()
+    // 悬浮窗 / 无玻璃（backdrop 为 null）：MD3 标准分段按钮
+    val segColors = SegmentedButtonDefaults.colors(
+        activeContainerColor = colors.accent.copy(alpha = 0.22f),
+        activeContentColor = colors.accent,
+        activeBorderColor = colors.accent.copy(alpha = 0.5f),
+        inactiveContainerColor = colors.surface.copy(alpha = 0.5f),
+        inactiveContentColor = colors.textSecondary,
+        inactiveBorderColor = colors.textSecondary.copy(alpha = 0.25f),
+    )
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = index == selectedIndex,
+                onClick = { onSelect(index) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                colors = segColors,
+                label = {
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                },
+            )
         }
-    } else {
-        row()
     }
 }
 

@@ -38,14 +38,23 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 26
-        versionName = "1.0.25"
+        versionCode = 27
+        versionName = "1.0.26"
         vectorDrawables.useSupportLibrary = true
 
         // 液态玻璃开关。1.0.13~1.0.15 曾用 productFlavors 出「玻璃 / 无玻璃」双包，
         // 1.0.16 起用户要求只保留液态玻璃版（单一发布包），这里恒为 true；
         // 保留常量是为了不动各 UI 组件里已有的 BuildConfig.LIQUID_GLASS 分支判定。
         buildConfigField("boolean", "LIQUID_GLASS", "true")
+
+        // 反馈通道 token（1.0.26）：GitHub fine-grained PAT（issues:write）。
+        // 本地/CI 用 -PdevperfFeedbackToken=... 或环境变量 DEVPERF_FEEDBACK_TOKEN
+        // 注入；为空串时 App 自动降级为「打开 GitHub 网页预填 issue」，
+        // 反馈路径不断（见 data/FeedbackRepository）。
+        val feedbackToken = (project.findProperty("devperfFeedbackToken") as String?)
+            ?: System.getenv("DEVPERF_FEEDBACK_TOKEN")
+            ?: ""
+        buildConfigField("String", "GITHUB_FEEDBACK_TOKEN", "\"$feedbackToken\"")
     }
 
     // 说明：1.0.16 起不再有 productFlavors（原 glass / plain 双包已合并为单包），

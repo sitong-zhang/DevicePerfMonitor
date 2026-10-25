@@ -17,12 +17,15 @@ import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.AppRelease
+import com.devperf.monitor.data.FeedbackRepository
+import com.devperf.monitor.data.FeedbackRepository.SubmitResult
 import com.devperf.monitor.data.SettingsRepository
 import com.devperf.monitor.data.AnnouncementRepository
 import com.devperf.monitor.data.UpdateRepository
 import com.devperf.monitor.data.defaultMetricViewModes
 import com.devperf.monitor.data.isNewer
 import com.devperf.monitor.data.ThemeMode
+import com.devperf.monitor.data.WallpaperId
 import com.devperf.monitor.ui.AnnouncementUiState
 import java.io.File
 import com.devperf.monitor.data.collectors.DeviceSnapshot
@@ -272,6 +275,49 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch {
         settingsRepository.setThemeMode(mode)
+    }
+
+    /** 切换内置壁纸（1.0.26）。 */
+    fun setWallpaper(id: WallpaperId) = viewModelScope.launch {
+        settingsRepository.setWallpaper(id)
+    }
+
+    /** 应用相册选图作为自定义壁纸（1.0.26；path 为已复制到 filesDir 的文件）。 */
+    fun setWallpaperCustom(path: String) = viewModelScope.launch {
+        settingsRepository.setWallpaperCustom(path)
+    }
+
+    // ---------------------------------------------------------------------
+    // 意见反馈（1.0.26 新增）：反馈 → GitHub Issue（label=feedback），
+    // 管理端「反馈收件箱」按 label 拉取。无 token 时降级网页通道。
+    // ---------------------------------------------------------------------
+
+    private val feedbackRepo = FeedbackRepository()
+
+    private val _feedbackState = MutableStateFlow<FeedbackUiState>(FeedbackUiState.Idle)
+    val feedbackState = _feedbackState.asStateFlow()
+
+    /**
+     * 提交反馈。[content] 反馈正文（非空白由设置页按钮禁用态保证），
+     * [contact] 可选联系方式。重复提交直接复用同一入口，状态机自然覆盖。
+     */
+    fun submitFeedback(content: String, contact: String) {
+        if (_feedbackState.value == FeedbackUiState.Submitting) return
+        _feedbackState.value = FeedbackUiState.Submitting
+        viewModelScope.launch {
+            _feedbackState.value = when (val result = feedbackRepo.submit(content, contact)) {
+                is SubmitResult.Submitted -> FeedbackUiState.Submitted(result.issueUrl)
+                is SubmitResult.BrowserFallback -> FeedbackUiState.BrowserFallback(result.url)
+                is SubmitResult.Failed -> FeedbackUiState.Failed(result.reason)
+            }
+        }
+    }
+
+    /** 用户改过反馈内容时，把上次的终态清掉（避免「已提交」和草稿并存）。 */
+    fun resetFeedbackState() {
+        if (_feedbackState.value !is FeedbackUiState.Submitting) {
+            _feedbackState.value = FeedbackUiState.Idle
+        }
     }
 
     /** 当前采集间隔（数值动画打断策略用）。 */
