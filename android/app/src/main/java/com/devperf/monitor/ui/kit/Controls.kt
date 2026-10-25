@@ -52,8 +52,27 @@ import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import com.kyant.shapes.Capsule
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import kotlin.math.roundToInt
 
 /**
  * 控件层：Material 3 Expressive 组件 + 品牌语义色（1.0.8 起，取代液态玻璃自绘控件）。
@@ -86,39 +105,65 @@ fun GlassButton(
     enabled: Boolean = true,
     compact: Boolean = false,
 ) {
+    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
+    val cs = MaterialTheme.colorScheme
+    val container: Color
+    val contentColor: Color
+    when (variant) {
+        GlassButtonVariant.PRIMARY -> {
+            container = cs.primary
+            contentColor = cs.onPrimary
+        }
+        GlassButtonVariant.SECONDARY -> {
+            container = cs.secondaryContainer
+            contentColor = cs.onSecondaryContainer
+        }
+        GlassButtonVariant.DANGER -> {
+            container = cs.error
+            contentColor = cs.onError
+        }
+    }
+    val height = if (compact) 36.dp else 48.dp
     val shape = Pill
-    val content: @Composable () -> Unit = {
+    val interaction = remember { MutableInteractionSource() }
+    val surface = if (backdrop != null) {
+        // 照抄 Kyant0 catalog LiquidButton 的效果参数：vibrancy + blur(2dp) + lens(12dp,24dp)
+        Modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { Capsule() },
+            effects = {
+                vibrancy()
+                blur(2f.dp.toPx())
+                lens(12f.dp.toPx(), 24f.dp.toPx())
+            },
+            onDrawSurface = { drawRect(container.copy(alpha = 0.5f)) },
+        )
+    } else {
+        Modifier.background(container, shape)
+    }
+    Box(
+        modifier = Modifier
+            .height(height)
+            .then(modifier)
+            .then(surface)
+            .clip(shape)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(color = contentColor),
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .then(if (enabled) Modifier else Modifier.alpha(0.45f))
+            .padding(horizontal = if (compact) 14.dp else 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
+            color = contentColor,
+            maxLines = 1,
         )
-    }
-    val base = if (compact) Modifier.height(36.dp) else Modifier
-    when (variant) {
-        GlassButtonVariant.PRIMARY -> Button(
-            onClick = onClick,
-            modifier = base.then(modifier),
-            enabled = enabled,
-            shape = shape,
-            colors = ButtonDefaults.buttonColors(),
-        ) { content() }
-        GlassButtonVariant.SECONDARY -> FilledTonalButton(
-            onClick = onClick,
-            modifier = base.then(modifier),
-            enabled = enabled,
-            shape = shape,
-            colors = ButtonDefaults.filledTonalButtonColors(),
-        ) { content() }
-        GlassButtonVariant.DANGER -> Button(
-            onClick = onClick,
-            modifier = base.then(modifier),
-            enabled = enabled,
-            shape = shape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error,
-                contentColor = MaterialTheme.colorScheme.onError,
-            ),
-        ) { content() }
     }
 }
 
@@ -132,20 +177,70 @@ fun GlassSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     val colors = LocalTokenColors.current
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        modifier = modifier,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = colors.background,
-            checkedTrackColor = colors.accent,
-            checkedBorderColor = colors.accent,
-            uncheckedThumbColor = colors.textSecondary,
-            uncheckedTrackColor = colors.surfaceElevated,
-            uncheckedBorderColor = colors.textSecondary.copy(alpha = 0.4f),
-        ),
+    if (backdrop == null) {
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = modifier,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = colors.background,
+                checkedTrackColor = colors.accent,
+                checkedBorderColor = colors.accent,
+                uncheckedThumbColor = colors.textSecondary,
+                uncheckedTrackColor = colors.surfaceElevated,
+                uncheckedBorderColor = colors.textSecondary.copy(alpha = 0.4f),
+            ),
+        )
+        return
+    }
+    // glass flavor 主窗口：照抄 catalog LiquidToggle 的「玻璃滑块」观感——
+    // 轨道是随状态插色的胶囊，滑块是 drawBackdrop 玻璃：blur(8dp*(1-progress))
+    // + lens(5dp*progress, 10dp*progress, chromaticAberration)，按压时透镜/高光增强。
+    val accent = colors.accent
+    val trackOff = colors.surfaceElevated
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val progress by animateFloatAsState(if (pressed) 1f else 0f, label = "switchPress")
+    val fraction by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
+        label = "switchThumb",
     )
+    Box(
+        modifier = modifier
+            .size(width = 52.dp, height = 32.dp)
+            .toggleable(
+                value = checked,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .clip(Pill)
+            .background(lerp(trackOff, accent, fraction)),
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = 3.dp + 20.dp * fraction)
+                .size(26.dp)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { Capsule() },
+                    effects = {
+                        blur(8f.dp.toPx() * (1f - progress))
+                        lens(
+                            5f.dp.toPx() * progress,
+                            10f.dp.toPx() * progress,
+                            chromaticAberration = true,
+                        )
+                    },
+                    onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - progress)) },
+                ),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -161,20 +256,101 @@ fun GlassSlider(
     steps: Int = 0,
     enabled: Boolean = true,
 ) {
+    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     val colors = LocalTokenColors.current
-    Slider(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.alpha(if (enabled) 1f else 0.45f),
-        valueRange = valueRange,
-        steps = steps,
-        enabled = enabled,
-        colors = SliderDefaults.colors(
-            thumbColor = colors.accent,
-            activeTrackColor = colors.accent,
-            inactiveTrackColor = colors.surfaceElevated,
-        ),
-    )
+    if (backdrop == null) {
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = modifier.alpha(if (enabled) 1f else 0.45f),
+            valueRange = valueRange,
+            steps = steps,
+            enabled = enabled,
+            colors = SliderDefaults.colors(
+                thumbColor = colors.accent,
+                activeTrackColor = colors.accent,
+                inactiveTrackColor = colors.surfaceElevated,
+            ),
+        )
+        return
+    }
+    // glass flavor 主窗口：照抄 catalog LiquidSlider 的「玻璃滑块」——细轨道 + 玻璃滑块，
+    // blur(8dp*(1-progress)) + lens(10dp*progress, 14dp*progress, chromaticAberration)，
+    // 按压拖动时透镜/色散增强。交互用标准手势（点击定位 + 拖动取值），支持 steps 吸附。
+    val accent = colors.accent
+    val trackColor = colors.surfaceElevated
+    val span = valueRange.endInclusive - valueRange.start
+    val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
+    var pressed by remember { mutableStateOf(false) }
+    val progress by animateFloatAsState(if (pressed) 1f else 0f, label = "sliderPress")
+    val thumbW = 32.dp
+    val thumbH = 28.dp
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .pointerInput(valueRange, steps, enabled) {
+                if (!enabled) return@pointerInput
+                awaitEachGesture {
+                    fun commit(x: Float) {
+                        val f = (x / size.width.toFloat()).coerceIn(0f, 1f)
+                        var v = valueRange.start + f * span
+                        if (steps > 0) {
+                            val stepSize = span / (steps + 1)
+                            val idx = ((v - valueRange.start) / stepSize).roundToInt()
+                            v = valueRange.start + idx * stepSize
+                        }
+                        onValueChange(v.coerceIn(valueRange))
+                    }
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    pressed = true
+                    commit(down.position.x)
+                    drag(down.id) { change -> commit(change.position.x) }
+                    pressed = false
+                }
+            },
+    ) {
+        val travel = maxWidth - thumbW
+        // 底轨
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(Pill)
+                .background(trackColor),
+        )
+        // 已选轨（延伸到滑块中心）
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .height(6.dp)
+                .width(thumbW / 2f + travel * fraction)
+                .clip(Pill)
+                .background(accent),
+        )
+        // 玻璃滑块
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = travel * fraction)
+                .size(width = thumbW, height = thumbH)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { Capsule() },
+                    effects = {
+                        blur(8f.dp.toPx() * (1f - progress))
+                        lens(
+                            10f.dp.toPx() * progress,
+                            14f.dp.toPx() * progress,
+                            chromaticAberration = true,
+                        )
+                    },
+                    onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - progress)) },
+                ),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -189,30 +365,65 @@ fun GlassTabs(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
-        options.forEachIndexed { index, option ->
-            SegmentedButton(
-                selected = index == selectedIndex,
-                onClick = { onSelect(index) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                colors = SegmentedButtonDefaults.colors(
-                    activeContainerColor = colors.accent.copy(alpha = 0.22f),
-                    activeContentColor = colors.accent,
-                    activeBorderColor = colors.accent.copy(alpha = 0.5f),
-                    inactiveContainerColor = colors.surface.copy(alpha = 0.5f),
-                    inactiveContentColor = colors.textSecondary,
-                    inactiveBorderColor = colors.textSecondary.copy(alpha = 0.25f),
-                ),
-                label = {
-                    Text(
-                        text = option,
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                    )
-                },
-            )
+    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
+    val shape = Pill
+    // glass：整条分段控件坐在一层玻璃胶囊上，分段本身透明，只保留选中态强调色；
+    // plain / 悬浮窗（backdrop 为 null）：保留原 MD3 分段配色。
+    val segColors = if (backdrop != null) {
+        SegmentedButtonDefaults.colors(
+            activeContainerColor = colors.accent.copy(alpha = 0.28f),
+            activeContentColor = colors.accent,
+            activeBorderColor = Color.Transparent,
+            inactiveContainerColor = Color.Transparent,
+            inactiveContentColor = colors.textSecondary,
+            inactiveBorderColor = Color.Transparent,
+        )
+    } else {
+        SegmentedButtonDefaults.colors(
+            activeContainerColor = colors.accent.copy(alpha = 0.22f),
+            activeContentColor = colors.accent,
+            activeBorderColor = colors.accent.copy(alpha = 0.5f),
+            inactiveContainerColor = colors.surface.copy(alpha = 0.5f),
+            inactiveContentColor = colors.textSecondary,
+            inactiveBorderColor = colors.textSecondary.copy(alpha = 0.25f),
+        )
+    }
+    val row = @Composable {
+        SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, option ->
+                SegmentedButton(
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                    colors = segColors,
+                    label = {
+                        Text(
+                            text = option,
+                            style = MaterialTheme.typography.labelLarge,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                        )
+                    },
+                )
+            }
         }
+    }
+    if (backdrop != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .glassSurface(
+                    backdrop = backdrop,
+                    shape = shape,
+                    tint = MaterialTheme.colorScheme.surfaceContainer,
+                )
+                .padding(4.dp),
+        ) {
+            row()
+        }
+    } else {
+        row()
     }
 }
 
@@ -242,9 +453,16 @@ fun GlassChip(
         )
     } else {
         // 纯展示 chip（指标说明等）：无点击态，用同款容器保持视觉一致
+        val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
+        val chipSurface = if (backdrop != null) {
+            Modifier.glassSurface(backdrop = backdrop, shape = Pill, tint = base.copy(alpha = 0.18f))
+        } else {
+            Modifier.background(base.copy(alpha = 0.10f), Pill)
+        }
         Box(
             modifier = modifier
                 .clip(shape = Pill)
+                .then(chipSurface)
                 .padding(horizontal = 10.dp, vertical = 5.dp),
             contentAlignment = Alignment.Center,
         ) {

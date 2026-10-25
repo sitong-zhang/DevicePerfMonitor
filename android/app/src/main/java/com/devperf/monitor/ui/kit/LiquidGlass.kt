@@ -40,8 +40,8 @@ val LocalBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
  * }
  * ```
  *
- * 为什么背景层只放渐变：玻璃折射的是「玻璃后面看到的画面」，本项目的画面就是
- * 主题渐变，录制它即可。1.0.13 曾把 layerBackdrop 挂到 NavHost 上，玻璃卡片
+ * 为什么背景层只放「风景壁纸」：玻璃折射的是「玻璃后面看到的画面」，本项目的画面
+ * 就是 AppNav 背景层手绘的黄昏山景壁纸，录制它即可。1.0.13 曾把 layerBackdrop 挂到 NavHost 上，玻璃卡片
  * 因此进入录制子树，录制重放时采样正在录音的同一个 RenderNode（自指采样），
  * 真机一进首页就闪退——详见 AppNav 内注释。
  */
