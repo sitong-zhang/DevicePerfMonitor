@@ -77,7 +77,9 @@ android {
                 keystorePropertiesFile.inputStream().use { load(it) }
             }
             create("release") {
-                storeFile = file(props.getProperty("storeFile"))
+                // storeFile 相对路径相对 android/ 目录（keystore.properties 所在处）解析，
+                // 也支持绝对路径；不能写成 file(...)——那会相对 app/ 模块目录解析
+                storeFile = rootProject.file(props.getProperty("storeFile"))
                 storePassword = props.getProperty("storePassword")
                 keyAlias = props.getProperty("keyAlias")
                 keyPassword = props.getProperty("keyPassword")

@@ -30,7 +30,13 @@ cd android
 ./build-apk.sh
 ```
 
-脚本会检查 JDK 17+ 和 Android SDK，构建完打印签名指纹。要出签名包，复制 `android/keystore.properties.template` 为 `keystore.properties` 并按模板生成密钥即可（该文件已 gitignore）。
+脚本会检查 JDK 17+ 和 Android SDK，构建完打印签名指纹。
+
+**签名（重要）**：release 包的正式签名密钥是 `android/keystore.properties` 指向的 `devperf-release.keystore`（均已被 gitignore，不进仓库）。配置方法见 `android/keystore.properties.template`。要点：
+
+- **同一个 keystore 签所有版本**。1.0.26 之前误用 debug keystore 签名，构建机器/沙箱一重建，签名就变，用户覆盖安装会报「签名不一致」，只能卸载重装（设置和历史清空）。1.0.26 起改用正式 keystore，本地与 CI（GitHub secrets 里的同一份密钥）同签名，不再漂移。
+- **keystore 和密码务必备份**。私钥丢了无法补签，只能换签名让用户卸载重装。备份建议放密码管理器 + 离线副本。
+- GitHub 仓库 secrets 已配置：`DEVPERF_KEYSTORE_BASE64` / `DEVPERF_KEYSTORE_PASSWORD` / `DEVPERF_KEY_ALIAS` / `DEVPERF_KEY_PASSWORD`，CI 构建时自动还原签名配置，并在产物里核对证书是 `CN=DevicePerfMonitor`。
 
 **iOS**：用 Xcode 26+ 打开 `ios/DevicePerfMonitor.xcodeproj`。本仓库在 Linux 上构建，打不出 IPA，改用 GitHub Actions 的 macOS runner 自动构建（产物未签名，装机需重签名）。
 
