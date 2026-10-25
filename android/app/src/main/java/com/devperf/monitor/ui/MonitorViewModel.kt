@@ -1,6 +1,7 @@
 package com.devperf.monitor.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.devperf.monitor.MonitorApp
@@ -17,10 +18,12 @@ import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.AppRelease
 import com.devperf.monitor.data.SettingsRepository
+import com.devperf.monitor.data.AnnouncementRepository
 import com.devperf.monitor.data.UpdateRepository
 import com.devperf.monitor.data.defaultMetricViewModes
 import com.devperf.monitor.data.isNewer
 import com.devperf.monitor.data.ThemeMode
+import com.devperf.monitor.ui.AnnouncementUiState
 import java.io.File
 import com.devperf.monitor.data.collectors.DeviceSnapshot
 import com.devperf.monitor.data.storage.HistoryPoint
@@ -365,6 +368,46 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             }.getOrElse { false }
             _updateState.value = if (ok) UpdateUiState.Ready(file) else UpdateUiState.Error
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // 公告（1.0.22 新增）：打开 App 时拉取，有新公告（id 变化）才弹，读完即止
+    // ---------------------------------------------------------------------
+
+    private val announcementRepo = AnnouncementRepository(getApplication())
+    private val _announcementState =
+        MutableStateFlow<AnnouncementUiState>(AnnouncementUiState.Idle)
+    val announcementState = _announcementState.asStateFlow()
+
+    /**
+     * 打开 App 时调用：从仓库拉公告。若 id 与本地已读 id 不同，弹「必须读完」公告。
+     * 网络失败 / 文件不存在都按「无公告」处理，不阻塞主流程（也不会锁死离线用户）。
+     */
+    fun checkAnnouncement() {
+        if (_announcementState.value is AnnouncementUiState.Show) return
+        viewModelScope.launch {
+            val announcement = runCatching { announcementRepo.latestAnnouncement() }
+                .getOrNull() ?: return@launch
+            if (announcement.id != lastSeenAnnouncementId()) {
+                _announcementState.value = AnnouncementUiState.Show(announcement)
+            }
+        }
+    }
+
+    /** 用户读完点确认：记已读 id 并收起。 */
+    fun markAnnouncementRead(id: String) {
+        saveLastSeenAnnouncementId(id)
+        _announcementState.value = AnnouncementUiState.Idle
+    }
+
+    private fun announcementPrefs() =
+        getApplication<Application>().getSharedPreferences("announcement", Context.MODE_PRIVATE)
+
+    private fun lastSeenAnnouncementId(): String =
+        announcementPrefs().getString("last_seen_id", "") ?: ""
+
+    private fun saveLastSeenAnnouncementId(id: String) {
+        announcementPrefs().edit().putString("last_seen_id", id).apply()
     }
 
     companion object {

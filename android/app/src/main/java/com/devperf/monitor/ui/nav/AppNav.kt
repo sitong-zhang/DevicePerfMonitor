@@ -6,6 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,12 +33,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -51,7 +54,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.devperf.monitor.ui.MonitorViewModel
+import com.devperf.monitor.ui.AnnouncementDialog
 import com.devperf.monitor.ui.UpdateDialog
+import com.devperf.monitor.ui.UpdateUiState
 import com.devperf.monitor.ui.kit.LocalBackdrop
 import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
@@ -64,7 +69,6 @@ import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
@@ -104,6 +108,7 @@ fun AppNav(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in topLevelTabs.map { it.route }
+    val updateState by viewModel.updateState.collectAsState()
 
     // NavHost / AnimatedVisibility 的 enter/exit 均为非 Composable lambda，
     // 不能在其中读取 CompositionLocal —— 先在 Composable 作用域取出曲线值
@@ -136,17 +141,35 @@ fun AppNav(
             null
         }
         if (backdrop != null) {
-            // 背景层：主题渐变与各页面背景同源同色，玻璃的折射/模糊采样这一层
+            // 背景层：主题渐变 + 两团低透明度强调色光斑。玻璃的折射/模糊就采样这一层；
+            // 光斑提供亮度变化，否则纯渐变太平、透镜失真看不出来（液态玻璃要"有东西可折"）。
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .appLayerBackdrop(backdrop)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(colors.background, colors.surface, colors.background),
+                    .appLayerBackdrop(backdrop),
+            ) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(colors.background, colors.surface, colors.background),
+                            ),
                         ),
-                    ),
-            )
+                )
+                Canvas(Modifier.matchParentSize()) {
+                    drawCircle(
+                        color = colors.accent.copy(alpha = 0.25f),
+                        radius = size.minDimension * 0.55f,
+                        center = Offset(size.width * 0.2f, size.height * 0.16f),
+                    )
+                    drawCircle(
+                        color = colors.tertiary.copy(alpha = 0.20f),
+                        radius = size.minDimension * 0.62f,
+                        center = Offset(size.width * 0.86f, size.height * 0.88f),
+                    )
+                }
+            }
         }
         androidx.compose.runtime.CompositionLocalProvider(
             com.devperf.monitor.ui.kit.LocalBackdrop provides backdrop
@@ -215,6 +238,11 @@ fun AppNav(
 
         // 应用内更新提示（1.0.15 新增）：有新版本时弹窗，其余状态不显示
         UpdateDialog(viewModel)
+        // 公告（1.0.22 新增）：强制更新拦截期间不弹，避免两个不可关闭框叠在一起
+        val updateBlocking = updateState is UpdateUiState.Available ||
+            updateState is UpdateUiState.Downloading ||
+            updateState is UpdateUiState.Ready
+        if (!updateBlocking) AnnouncementDialog(viewModel)
     }
 }
 
@@ -240,9 +268,9 @@ private fun BottomNavBar(
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
     val selectedIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
-    // 1.0.13 glass flavor：容器走 Kyant0 Backdrop 的 drawBackdrop（参数用
-    // LiquidBottomTabs 示例既有值：Capsule + vibrancy/blur 8dp/lens 24dp×24dp，
-    // surface 用主题 surfaceContainer 40% 透明保证可读性）；plain flavor
+    // glass flavor：容器走 Kyant0 Backdrop 的 drawBackdrop，参数照抄库 catalog 的
+    // ControlCenter 示例（vibrancy() + lens(24dp, 48dp, depthEffect=true)，不另加
+    // blur），surface 用主题 surfaceContainer 40% 透明保证可读性；plain flavor
     // 保留原 Surface + 投影 + 描边。
     val backdrop = LocalBackdrop.current
     val glassOn = com.devperf.monitor.BuildConfig.LIQUID_GLASS && backdrop != null
@@ -308,8 +336,7 @@ private fun BottomNavBar(
                         shape = { Capsule() },
                         effects = {
                             vibrancy()
-                            blur(8f.dp.toPx())
-                            lens(24f.dp.toPx(), 24f.dp.toPx())
+                            lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
                         },
                         onDrawSurface = {
                             drawRect(cs.surfaceContainer.copy(alpha = 0.4f))

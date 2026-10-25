@@ -52,7 +52,6 @@ import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 
@@ -464,16 +463,14 @@ private fun Modifier.elevatedCardChrome(
  * 玻璃表面：Kyant0 Backdrop 的 drawBackdrop（1.0.13 glass flavor 专用）。
  *
  * 库：io.github.kyant0:backdrop 2.0.0-alpha03（Kyant0/AndroidLiquidGlass，Apache-2.0）。
- * 效果参数全部取自库教程 glass-bottom-bar 的既有值，不自拟：
- * vibrancy + blur(4dp) + lens(16dp, 32dp)；高光与投影用库默认值
- * （DefaultHighlight / DefaultShadow，取代手绘三件套的高光与阴影）。
- * surface 层用主题 surfaceContainer 40% 透明（catalog LiquidBottomTabs 的
- * containerColor 模式）：玻璃可见的同时，文字对比度不塌。
+ * 效果参数直接照抄库 catalog 的 ControlCenter 示例（catalog/destinations/
+ * ControlCenterContent.kt 的既有值）：vibrancy() + lens(24dp, 48dp, depthEffect=true)，
+ * 不再自调 blur。高光/投影走库默认值（DefaultHighlight / DefaultShadow）。
+ * surface 层用主题 surfaceContainer 40% 透明：玻璃透出来、文字对比度也不塌。
  *
  * 生效条件：glass flavor 且处于主窗口（[LocalBackdrop] 非 null）。plain flavor
  * 与悬浮窗窗口由调用方回落 [elevatedCardChrome]。
- * 降版本由库内部处理：blur 需 Android 12+、lens 需 Android 13+，更低版本
- * 自动跳过效果（只保留采样层），不崩。
+ * 降版本由库内部处理：lens 需 Android 13+，更低版本自动跳过效果（只保留采样层），不崩。
  */
 private fun Modifier.glassSurface(
     backdrop: LayerBackdrop,
@@ -484,8 +481,7 @@ private fun Modifier.glassSurface(
     shape = { shape },
     effects = {
         vibrancy()
-        blur(4f.dp.toPx())
-        lens(16f.dp.toPx(), 32f.dp.toPx())
+        lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
     },
     onDrawSurface = {
         drawRect(color = tint, alpha = 0.4f)

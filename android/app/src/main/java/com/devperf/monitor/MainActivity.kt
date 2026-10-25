@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // 打开 App 时检查新版本（1.0.15 新增）：有新版本且未忽略则弹窗提示
         viewModel.checkForUpdate()
+        // 打开 App 时拉公告（1.0.22 新增）：有新公告才弹「必须读完」框
+        viewModel.checkAnnouncement()
         // 从系统设置页返回：重新问一次权限，权限给了就把悬浮窗服务拉起来
         viewModel.refreshOverlayPermission()
         val settings = viewModel.settings.value

@@ -41,3 +41,7 @@ releases/
 .gradle/
 .kotlin/
 Tools/palette-gen/build/
+
+# Python 编译缓存
+tools/__pycache__/
+*.pyc
