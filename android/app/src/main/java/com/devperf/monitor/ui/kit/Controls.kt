@@ -289,7 +289,7 @@ fun GlassSlider(
     val haptics = rememberHaptics()
 
     BoxWithConstraints(
-        modifier = modifier.fillMaxWidth().requiredHeight(40.dp),
+        modifier = modifier.fillMaxWidth().height(40.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         val w = maxWidth
