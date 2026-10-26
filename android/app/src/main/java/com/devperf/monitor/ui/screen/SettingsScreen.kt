@@ -76,6 +76,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+
 /**
  * 设置页：悬浮窗 / 采集 / 告警 / 提权 / 主题 / 权限状态 / 关于。
  *
@@ -494,14 +498,15 @@ fun SettingsScreen(
 
             // ================= 关于 =================
             GlassSectionHeader(text = "关于")
+            // 品牌卡：出品方「分子智能科技」logo + 公司名 + 官方宣传语 + 版权落款。
+            // 宣传语「用心感知设备的每一次跳动」为官方 slogan；logo 白底垫块避免深
+            // 色主题下出现突兀白边。
             GlassPanel {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    // 品牌卡（1.0.28）：出品方「分子智能科技」logo 与落款。
-                    // logo 白底，垫在白色圆角块上避免深色主题下出现突兀白边。
                     Image(
                         painter = painterResource(R.drawable.brand_logo),
                         contentDescription = "分子智能科技 Molecule Technology",
@@ -513,21 +518,58 @@ fun SettingsScreen(
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     )
                     Text(
-                        text = "实时性能监测 · 数据全程本地处理，不上传",
+                        text = "分子智能科技",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.textPrimary,
+                    )
+                    Text(
+                        text = "用心感知设备的每一次跳动",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
                     Text(
-                        text = "© 2026 分子智能科技 Molecule Technology",
+                        text = "© 2026 分子智能科技 Molecule Technology. 保留所有权利。",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )
                 }
             }
+            // 应用简介：客观描述产品定位与数据处理方式，非营销话术。
+            GlassPanel {
+                Text(
+                    text = "设备性能监控 由分子智能科技出品，提供 CPU、内存、电池、" +
+                        "网络等设备的实时性能监测与历史记录，帮助你了解设备的运行状态。" +
+                        "所有监测数据均在本地设备上处理，不会上传到任何服务器。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.textSecondary,
+                )
+            }
+            // 公司信息：官网 / 联系 / 隐私 / 协议 / 版本。点击可打开对应页面或邮件，
+            // 与常规商业 App 的「关于」区一致。
             GlassPanel {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                 ) {
+                    GlassInfoRow(
+                        label = "官方网站",
+                        value = "molecule-tech.cn",
+                        onClick = { openUrl(context, "https://sitong-zhang.github.io/DevicePerfMonitor/") },
+                    )
+                    GlassInfoRow(
+                        label = "联系我们",
+                        value = "wpqptwy@qq.com",
+                        onClick = { openMail(context, "wpqptwy@qq.com") },
+                    )
+                    GlassInfoRow(
+                        label = "隐私政策",
+                        value = "查看",
+                        onClick = { openUrl(context, "https://sitong-zhang.github.io/DevicePerfMonitor/privacy.html") },
+                    )
+                    GlassInfoRow(
+                        label = "用户协议",
+                        value = "查看",
+                        onClick = { openUrl(context, "https://sitong-zhang.github.io/DevicePerfMonitor/terms.html") },
+                    )
                     // 版本号读 BuildConfig：与 versionName 永远一致，发版只改一处
                     GlassInfoRow(
                         label = "版本",
@@ -544,6 +586,20 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+/** 打开外部网页（官网 / 隐私政策 / 用户协议）。 */
+private fun openUrl(context: Context, url: String) {
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+}
+
+/** 打开邮件 App 起草邮件（联系我们）。 */
+private fun openMail(context: Context, email: String) {
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email")))
     }
 }
 

@@ -35,3 +35,22 @@
 # BuildConfig：保留反馈 token 字段（值是 base64，配合 R8 混淆；不混淆字段名
 # 以便运行时稳定读取，字符串内容本身已是 base64 不直接可读）
 -keep class com.devperf.monitor.BuildConfig { *; }
+
+# ===========================================================================
+# 最强 R8 混淆（应用自身代码层，进一步提高逆向成本）
+# 注意：被上方 -keep 的类（core / BuildConfig / kyant / vico / shizuku / compose
+# runtime）不会被重包名；其余业务类全部重打包到单一短包并允许同名重载。
+# ===========================================================================
+-repackageclasses com.dp.a
+-allowaccessmodification
+-overloadaggressively
+
+# 编译期移除日志（不进 DEX，降低字符串可分析面）
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+    public static *** w(...);
+    public static *** e(...);
+    public static *** wtf(...);
+}

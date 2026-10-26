@@ -11,6 +11,14 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+
+    // 集中声明 Android Gradle 插件版本：app(application) 与 security(library) 共用同一
+    // AGP 工件，版本在 settings 统一声明后，模块侧以无版本号 alias 引用，可避免
+    // 「plugin already on classpath with unknown version」冲突。
+    plugins {
+        id("com.android.application") version "8.13.2"
+        id("com.android.library") version "8.13.2"
+    }
 }
 
 dependencyResolutionManagement {
@@ -23,3 +31,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "DevicePerfMonitor"
 include(":app")
+include(":security")
+include(":manager")

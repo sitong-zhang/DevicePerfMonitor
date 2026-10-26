@@ -1,6 +1,7 @@
 package com.devperf.monitor.ui.kit
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
@@ -48,7 +52,6 @@ import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.catalog.components.LiquidButton
-import com.kyant.backdrop.catalog.components.LiquidSlider
 import com.kyant.backdrop.catalog.components.LiquidToggle
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -228,27 +231,16 @@ fun GlassSwitch(
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（1.0.27：照搬 Kyant0 catalog destinations/SliderContent 的调用方式）
+// 滑块（1.0.30 重写）
 //
-// 上游用法就这三件事：
-//   LiquidSlider(
-//       value = { value }, onValueChange = { value = it },
-//       valueRange = 0f..100f, visibilityThreshold = 0.01f, backdrop = backdrop,
-//       modifier = Modifier.padding(horizontal = 32f.dp)
-//   )
-// 组件是受控的：拖动由内部 DampedDragAnimation 产出增量 -> 回调 onValueChange
-// -> 上层回写 -> value 变化 -> 组件内的 LaunchedEffect 把动画推向新值。
+// 早期版本主窗口走 Kyant0 catalog 的 LiquidSlider：滑块视觉位置由内部
+// DampedDragAnimation 弹簧物理驱动，手指拖动只更新底层 value，二者之间存在
+// 阻尼延迟 —— 表现就是「完全不跟手」，snapshotFlow 回灌又造成拖动时停顿。
 //
-// 之前版本在它上面叠了一层自研的「全区域拖拽」pointerInput，与组件自带的
-// inspectDragGestures 抢同一个 pointer：两边分别 awaitFirstDown 再互相 consume，
-// 真机上两条手势都会被判 cancel，表现就是「看着是滑块，完全拖不动、点也没反应」。
-// 按上游写法去掉自研层，手势链只剩组件自己那条，行为与 demo 一致。
-//
-// 两点必须注意（也是上游 demo 里隐含的约定）：
-//   1. value 必须读「状态」而不是 Float 形参——组件内的 LaunchedEffect key 恒不变，
-//      捕获的是第一次组合的 lambda；读形参会捕获到不变的浮点快照，滑块彻底不跟手。
-//      所以这里用 rememberUpdatedState 包一层，lambda 捕获 State 引用，读数永远是新的。
-//   2. 回调同样会被捕获，用 rememberUpdatedState 保证调用到最新的 onValueChange。
+// 1.0.30 改为与 Material3 Slider 完全一致的「受控手势模型」（值即真相、拖动直接
+// 回写）：滑块位置 = 当前 value，x 像素 → value 直接线性映射，无任何阻尼/插值，
+// 1:1 跟手；点按即定位、拖动即跟随。玻璃外观保留（胶囊轨道 + 白色胶囊滑块）。
+// 悬浮窗 / 无玻璃 / 禁用态仍回落 MD3 标准 Slider。
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -262,47 +254,103 @@ fun GlassSlider(
 ) {
     val colors = LocalTokenColors.current
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
-    if (backdrop != null && enabled) {
-        val span = valueRange.endInclusive - valueRange.start
-        val stepSize = if (steps > 0) span / (steps + 1) else 0f
-        fun snap(v: Float): Float =
-            if (steps > 0) {
-                val idx = ((v - valueRange.start) / stepSize).roundToInt()
-                (valueRange.start + idx * stepSize).coerceIn(valueRange)
-            } else {
-                v.coerceIn(valueRange)
-            }
-        // 状态引用：避免组件捕获到过期的浮点快照
-        val currentValue by rememberUpdatedState(value)
-        val currentOnValueChange by rememberUpdatedState(onValueChange)
-        LiquidSlider(
-            value = { currentValue },
-            onValueChange = { v ->
-                // 只做「业务档位量化」，手势与动画完全交给组件
-                val s = snap(v)
-                if (s != currentValue) currentOnValueChange(s)
-            },
+
+    // 悬浮窗 / 无玻璃（backdrop 为 null）/ 禁用态：MD3 标准件（本身即 1:1 跟手）
+    if (backdrop == null || !enabled) {
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = modifier.alpha(if (enabled) 1f else 0.45f),
             valueRange = valueRange,
-            visibilityThreshold = span * 0.0001f,
-            backdrop = backdrop,
-            modifier = modifier,
+            steps = steps,
+            enabled = enabled,
+            colors = SliderDefaults.colors(
+                thumbColor = colors.accent,
+                activeTrackColor = colors.accent,
+                inactiveTrackColor = colors.surfaceElevated,
+            ),
         )
         return
     }
-    // 悬浮窗 / 无玻璃（backdrop 为 null）/ 禁用态：MD3 标准件
-    Slider(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.alpha(if (enabled) 1f else 0.45f),
-        valueRange = valueRange,
-        steps = steps,
-        enabled = enabled,
-        colors = SliderDefaults.colors(
-            thumbColor = colors.accent,
-            activeTrackColor = colors.accent,
-            inactiveTrackColor = colors.surfaceElevated,
-        ),
-    )
+
+    // 主窗口：玻璃胶囊滑块，受控手势模型（参考 Material3 Slider 的「值即真相」）。
+    val span = valueRange.endInclusive - valueRange.start
+    val stepSize = if (steps > 0) span / (steps + 1) else 0f
+    fun snap(v: Float): Float =
+        if (steps > 0) {
+            val idx = ((v - valueRange.start) / stepSize).roundToInt()
+            (valueRange.start + idx * stepSize).coerceIn(valueRange)
+        } else {
+            v.coerceIn(valueRange)
+        }
+    // 用 State 引用包裹，确保手势 lambda（pointerInput 不因重组重建）始终读到最新值/回调
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val haptics = rememberHaptics()
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth().requiredHeight(40.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val w = maxWidth
+        val pct = ((currentValue - valueRange.start) / span).coerceIn(0f, 1f)
+
+        // 整条轨道（inactive）
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(Capsule())
+                .background(colors.surfaceElevated)
+                .align(Alignment.CenterStart),
+        )
+        // 已选段（active）：宽度 = 进度比例，1:1 跟手
+        Box(
+            Modifier
+                .width(w * pct)
+                .height(6.dp)
+                .clip(Capsule())
+                .background(colors.accent)
+                .align(Alignment.CenterStart),
+        )
+        // 白色胶囊滑块（与液态主题一致；位置 = 当前值，无阻尼）
+        Box(
+            Modifier
+                .offset {
+                    IntOffset(
+                        ((constraints.maxWidth * pct) - 20.dp.roundToPx()).roundToInt(),
+                        0,
+                    )
+                }
+                .size(40.dp, 24.dp)
+                .clip(Capsule())
+                .background(Color.White.copy(alpha = 0.92f))
+                .border(1.dp, colors.outline.copy(alpha = 0.2f), Capsule())
+                .align(Alignment.CenterStart),
+        )
+        // 手势层：点按定位 + 拖动，x → value 直接映射（跟手，无插值）
+        Box(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            haptics.select()
+                            val width = size.width.toFloat()
+                            val v = valueRange.start + span * (offset.x / width).coerceIn(0f, 1f)
+                            val s = snap(v)
+                            if (s != currentValue) currentOnValueChange(s)
+                        },
+                        onDrag = { _, dragAmount ->
+                            val width = size.width.toFloat()
+                            val v = (currentValue + span * (dragAmount.x / width)).coerceIn(valueRange)
+                            val s = snap(v)
+                            if (s != currentValue) currentOnValueChange(s)
+                        },
+                    )
+                },
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 反逆向辅助：读取应用签名做完整性校验（Anti-Tamper） -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+</manifest>

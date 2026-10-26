@@ -48,3 +48,15 @@ tools/__pycache__/
 
 # 发布公告软件：仅本地开发者使用，不进公开仓库
 tools/AnnouncementPublisher.py
+
+# 安全加固：token 分片由构建期从 local.properties 生成，明文绝不进 git
+android/security/src/main/cpp/generated_shard.h
+android/security/src/main/java/com/molecule/security/generated/DexShard.kt
+
+# 管理端不进公开 CI 发版（含写权限 token，仅本地交付）
+android/manager/release/
+
+# 模块构建产物（manager / security 仅本地构建；CI 只构建 :app，产物不入库）
+android/manager/build/
+android/security/build/
+android/**/.cxx/

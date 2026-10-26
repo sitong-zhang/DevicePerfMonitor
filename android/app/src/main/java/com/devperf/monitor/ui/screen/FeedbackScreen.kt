@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import java.net.URLEncoder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -124,8 +125,9 @@ fun FeedbackScreen(
 
         Text(
             text = "遇到问题、想要新功能，或者任何想说的话，写在这里就能送到开发者手里。" +
-                "点提交会自动打开你手机上的邮件 App，收件人、正文都已填好（自动带上机型、" +
-                "系统版本和 App 版本），点发送即可。",
+                "点「提交反馈」会自动打开你手机上的邮件 App，收件人、正文都已填好（自动带上机型、" +
+                "系统版本和 App 版本），点发送即可。也可以点「在浏览器提交」，会打开 GitHub 预填好的" +
+                "反馈页，登录后提交同样能送达。",
             style = MaterialTheme.typography.bodyMedium,
             color = colors.textSecondary,
         )
@@ -161,6 +163,23 @@ fun FeedbackScreen(
             },
             enabled = contentTrim.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
+        )
+
+        // 免 token 通道：在浏览器打开预填好的 GitHub issue 创建页（label=feedback），
+        // 登录后提交即进入管理端反馈收件箱；用户端公开包不含任何密钥。
+        GlassButton(
+            text = "在浏览器提交到 GitHub",
+            onClick = {
+                haptics.tick()
+                openUrl(
+                    context,
+                    buildGitHubIssueUrl(contentTrim, contact.trim()),
+                )
+            },
+            variant = GlassButtonVariant.SECONDARY,
+            enabled = contentTrim.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+            compact = true,
         )
 
         // 兜底：没装邮件 App / 想换个方式发——复制正文与收件邮箱
@@ -233,4 +252,27 @@ private fun copyToClipboard(context: Context, text: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("DevicePerfMonitor 反馈", text))
     }
+}
+
+/**
+ * 构造预填好的 GitHub issue 创建链接（label=feedback，免 token）。
+ * 用户在浏览器登录 GitHub 后提交即进入管理端反馈收件箱。
+ */
+private fun buildGitHubIssueUrl(content: String, contact: String): String {
+    val body = buildString {
+        append(content.ifBlank { "（用户未填写）" })
+        if (contact.isNotBlank()) append("\n\n联系方式：$contact")
+        append("\n\n（来自 DevicePerfMonitor 应用内反馈）")
+    }
+    val title = URLEncoder.encode("【用户反馈】", Charsets.UTF_8)
+    val bodyEnc = URLEncoder.encode(body, Charsets.UTF_8)
+    return "https://github.com/sitong-zhang/DevicePerfMonitor/issues/new" +
+        "?labels=feedback" +
+        "&title=$title" +
+        "&body=$bodyEnc"
+}
+
+/** 打开外部网页（浏览器提交 GitHub issue）。 */
+private fun openUrl(context: Context, url: String) = runCatching {
+    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }

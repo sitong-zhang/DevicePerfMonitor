@@ -1,10 +1,14 @@
 package com.devperf.monitor.ui.nav
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -107,6 +111,9 @@ private data class TopLevelTab(
     val icon: ImageVector,
 )
 
+/** 顶级 tab 路由集合（总览 / 设置），用于判断「顶层互切」以走瞬时切换。 */
+private val TOP_LEVEL_ROUTES = setOf(Routes.OVERVIEW, Routes.SETTINGS)
+
 private val topLevelTabs = listOf(
     TopLevelTab(Routes.OVERVIEW, "总览", Icons.Filled.Home),
     TopLevelTab(Routes.SETTINGS, "设置", Icons.Filled.Settings),
@@ -135,6 +142,11 @@ fun AppNav(
     val exitSpec = androidx.compose.animation.core.tween<IntOffset>(
         durationMillis = motion.exitDurationMs,
         easing = motion.exit,
+    )
+    // 底栏显隐用渐显渐隐（Float 曲线），开销远低于整栏纵向滑入
+    val fadeSpec = androidx.compose.animation.core.tween<Float>(
+        durationMillis = motion.enterDurationMs,
+        easing = motion.enter,
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -180,12 +192,26 @@ fun AppNav(
             NavHost(
                 navController = navController,
                 startDestination = Routes.OVERVIEW,
-                // 进入使用 enter 曲线（320ms），符合三条动效曲线规范
+                // 过渡策略（1.0.30 重写）：
+                // - 顶层 tab 互切：瞬时切换，不重叠合成新旧两页——既消除卡顿，
+                //   也避免玻璃 backdrop 同时重录两页的开销；旧页直接移除，消失干净。
+                // - 压入详情/反馈：新页从右横滑进入，旧页直接消失（不退出动画），
+                //   同一时刻只合成一页，开销最小、不卡。
+                // - 返回：当前页右滑出，下层页瞬时出现。
                 enterTransition = {
-                    slideInVertically(animationSpec = enterSpec) { it / 6 }
+                    val switching = initialState.destination.route in TOP_LEVEL_ROUTES &&
+                        targetState.destination.route in TOP_LEVEL_ROUTES
+                    if (switching) EnterTransition.None
+                    else slideInHorizontally(animationSpec = enterSpec) { it }
                 },
                 exitTransition = {
-                    slideOutVertically(animationSpec = exitSpec) { -it / 6 }
+                    ExitTransition.None
+                },
+                popEnterTransition = {
+                    EnterTransition.None
+                },
+                popExitTransition = {
+                    slideOutHorizontally(animationSpec = exitSpec) { it }
                 },
             ) {
                 composable(Routes.OVERVIEW) {
@@ -226,8 +252,8 @@ fun AppNav(
             AnimatedVisibility(
                 visible = showBottomBar,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                enter = slideInVertically(animationSpec = enterSpec) { it },
-                exit = slideOutVertically(animationSpec = exitSpec) { it },
+                enter = fadeIn(animationSpec = fadeSpec),
+                exit = fadeOut(animationSpec = fadeSpec),
             ) {
                 BottomNavBar(
                     currentRoute = currentRoute,
