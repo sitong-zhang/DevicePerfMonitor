@@ -49,6 +49,11 @@ jobs:
 
       - name: Build release APK
         working-directory: android
+        # DEVPERF_FEEDBACK_TOKEN：意见反馈直连 GitHub 的最小权限 PAT（仅本仓库
+        # issues:write）。为空时 App 自动降级为「拉起浏览器打开预填 issue 页」，
+        # 反馈路径不断。在仓库 Secrets 里加这个变量即可让每次发版自动注入。
+        env:
+          DEVPERF_FEEDBACK_TOKEN: ${{ secrets.DEVPERF_FEEDBACK_TOKEN }}
         run: |
           # runner 镜像自带 Android SDK；没有时回退到 $ANDROID_SDK_ROOT
           if [ -z "$ANDROID_HOME" ] && [ -z "$ANDROID_SDK_ROOT" ]; then
