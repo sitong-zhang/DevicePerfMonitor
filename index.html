@@ -16,22 +16,27 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",sa
 a{color:inherit;text-decoration:none}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 
+/* 图标（内联 SVG，currentColor 继承文字色） */
+.ic-svg{width:22px;height:22px;display:block}
+
 /* 导航 */
 header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-.nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+.nav{display:flex;align-items:center;justify-content:space-between;height:64px;gap:18px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
-.brand .dot{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 30% 30%,var(--blue),var(--blue-deep));position:relative}
-.brand .dot::after{content:"";position:absolute;right:-4px;top:-2px;width:12px;height:12px;border-radius:50%;background:var(--yellow)}
+.brand .mark{width:34px;height:34px;flex:none}
+.nav-right{display:flex;align-items:center;gap:22px}
 .nav .links{display:flex;gap:26px;font-size:15px;color:var(--ink-2)}
 .nav .links a:hover{color:var(--blue)}
+.nav .logo-slot{display:flex;align-items:center;gap:8px;color:var(--blue);font-weight:700;font-size:15px;white-space:nowrap}
+.nav .logo-slot .mark{width:30px;height:30px}
 
 /* Hero */
 .hero{position:relative;overflow:hidden;background:linear-gradient(160deg,#0E2A66 0%,#0B3FA8 55%,#1B6BFF 100%);color:#fff;padding:96px 0 110px}
-.hero .mol{position:absolute;border-radius:50%;filter:blur(.2px);opacity:.9}
 .hero h1{font-size:44px;line-height:1.3;font-weight:800;letter-spacing:1px}
 .hero p.sub{margin-top:18px;font-size:18px;color:#D9E6FF;max-width:640px}
 .hero .cta{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap}
-.btn{display:inline-block;padding:12px 26px;border-radius:999px;font-size:15px;font-weight:600;transition:.2s}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:12px 26px;border-radius:999px;font-size:15px;font-weight:600;transition:.2s}
+.btn .ic-svg{width:18px;height:18px}
 .btn-primary{background:var(--yellow);color:#3A2B00}
 .btn-primary:hover{filter:brightness(1.06)}
 .btn-ghost{border:1px solid rgba(255,255,255,.55);color:#fff}
@@ -46,7 +51,7 @@ section{padding:76px 0}
 /* 产品 */
 .features{margin-top:44px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px 22px;box-shadow:0 6px 18px rgba(11,31,51,.05)}
-.card .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px}
+.card .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
 .card h3{font-size:17px;margin-bottom:8px}
 .card p{font-size:14px;color:var(--ink-2)}
 .prod-note{margin-top:34px;text-align:center;font-size:14px;color:var(--ink-2)}
@@ -55,6 +60,8 @@ section{padding:76px 0}
 /* 数据承诺 */
 .trust{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .trust .row{margin-top:40px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;text-align:center}
+.trust .item .ic{width:44px;height:44px;margin:0 auto 10px;color:var(--blue)}
+.trust .item .ic .ic-svg{width:26px;height:26px;margin:0 auto}
 .trust .big{font-size:20px;font-weight:800;color:var(--blue)}
 .trust p{font-size:14px;color:var(--ink-2);margin-top:8px}
 
@@ -66,12 +73,15 @@ section{padding:76px 0}
 .fact{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}
 .fact b{display:block;font-size:15px}
 .fact span{font-size:13px;color:var(--ink-2)}
+.logo-card{width:min(320px,80%);aspect-ratio:1;border-radius:28px;background:linear-gradient(150deg,#0B3FA8,#1B6BFF);display:flex;align-items:center;justify-content:center;box-shadow:0 20px 50px rgba(11,63,168,.25)}
+.logo-card .mark{width:62%;height:62%}
 
 /* 联系 */
 .contact{background:linear-gradient(160deg,#0E2A66,#1B6BFF);color:#fff;text-align:center}
 .contact h2{color:#fff}
 .contact p{color:#D9E6FF;margin-top:12px}
-.contact .mail{display:inline-block;margin-top:22px;background:#fff;color:var(--ink);padding:12px 26px;border-radius:999px;font-weight:700}
+.contact .mail{display:inline-flex;align-items:center;gap:10px;margin-top:22px;background:#fff;color:var(--ink);padding:12px 26px;border-radius:999px;font-weight:700}
+.contact .mail .ic-svg{width:18px;height:18px;color:var(--blue)}
 footer{background:#081430;color:#8FA3C8;padding:34px 0;font-size:13px}
 footer .cols{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px}
 footer a:hover{color:#fff}
@@ -86,16 +96,54 @@ footer a:hover{color:#fff}
 </head>
 <body>
 
+<!-- 公司 logo（分子智能科技品牌图形，矢量重绘）+ Lucide 图标 symbol 池 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo-mark" viewBox="0 0 100 100">
+      <!-- 蓝色分子链：右上大团 → 中部 → 左下 -->
+      <g fill="#2B4FD8">
+        <circle cx="68" cy="24" r="19"/>
+        <circle cx="50" cy="41" r="16"/>
+        <circle cx="33" cy="59" r="14"/>
+        <circle cx="21" cy="15" r="7"/>
+        <circle cx="79" cy="84" r="7"/>
+      </g>
+      <!-- 黄色分子团：左上链 + 右下链 -->
+      <g fill="#F5B93B">
+        <circle cx="30" cy="36" r="13"/>
+        <circle cx="43" cy="26" r="10"/>
+        <circle cx="59" cy="74" r="13"/>
+        <circle cx="71" cy="64" r="10"/>
+      </g>
+    </symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect width="10" height="7" x="12" y="13" rx="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m19 9-5 5-4-4-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-droplets" viewBox="0 0 24 24"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 8c0-2.3-.8-4.3-2-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 2C2.8 3.7 2 5.7 2 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" x2="12" y1="15" y2="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-handshake" viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m21 3 1 11h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 4h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
 <header>
   <div class="wrap nav">
-    <a class="brand" href="./"><span class="dot"></span>分子智能科技</a>
-    <nav class="links">
-      <a href="#products">产品</a>
-      <a href="#trust">数据承诺</a>
-      <a href="#about">关于我们</a>
-      <a href="#contact">联系我们</a>
-      <a href="./privacy.html">隐私政策</a>
-    </nav>
+    <a class="brand" href="./"><svg class="mark"><use href="#logo-mark"/></svg>分子智能科技</a>
+    <div class="nav-right">
+      <nav class="links">
+        <a href="#products">产品</a>
+        <a href="#trust">数据承诺</a>
+        <a href="#about">关于我们</a>
+        <a href="#contact">联系我们</a>
+        <a href="./privacy.html">隐私政策</a>
+      </nav>
+      <!-- 右上角公司 logo -->
+      <a class="logo-slot" href="#about" title="分子智能科技 Molecule Technology">
+        <svg class="mark"><use href="#logo-mark"/></svg>
+      </a>
+    </div>
   </div>
 </header>
 
@@ -104,8 +152,8 @@ footer a:hover{color:#fff}
     <h1>用心感知设备的每一次跳动</h1>
     <p class="sub">分子智能科技（Molecule Technology）专注移动设备智能监测与效率工具，让每一位用户都能轻松读懂自己的设备。</p>
     <div class="cta">
-      <a class="btn btn-primary" href="#products">了解「设备性能监控」</a>
-      <a class="btn btn-ghost" href="#contact">商务合作</a>
+      <a class="btn btn-primary" href="#products"><svg class="ic-svg"><use href="#i-download"/></svg>了解「设备性能监控」</a>
+      <a class="btn btn-ghost" href="#contact"><svg class="ic-svg"><use href="#i-handshake"/></svg>商务合作</a>
     </div>
     <div class="meta">实时性能监测 · 数据全程本地处理 · 不上传任何服务器</div>
   </div>
@@ -116,12 +164,12 @@ footer a:hover{color:#fff}
     <h2 class="sec-title">旗下产品</h2>
     <p class="sec-sub">从一颗芯片的温度，到一次卡顿的根源，帮你看清设备的每一面。</p>
     <div class="features">
-      <div class="card"><div class="ic" style="background:#EAF1FF">📊</div><h3>实时性能监测</h3><p>CPU、内存、电池、网络、帧率全维度实时采集，三大核心指标一屏尽览。</p></div>
-      <div class="card"><div class="ic" style="background:#FFF6E0">🪟</div><h3>悬浮窗速览</h3><p>游戏、视频、导航时悬浮窗常驻显示关键指标，无需切换应用。</p></div>
-      <div class="card"><div class="ic" style="background:#EAF1FF">📈</div><h3>历史与图表</h3><p>指标历史曲线与逐时统计，性能变化趋势一眼看懂，支持详情回溯。</p></div>
-      <div class="card"><div class="ic" style="background:#EAF1FF">🧊</div><h3>液态玻璃设计</h3><p>自研液态玻璃视觉体系，通透质感与流畅动效，界面好看更好用。</p></div>
-      <div class="card"><div class="ic" style="background:#FFF6E0">🔔</div><h3>智能告警</h3><p>过热、高负载、低存储等异常自动提醒，问题发生的当下就知道。</p></div>
-      <div class="card"><div class="ic" style="background:#EAF1FF">🔒</div><h3>隐私优先</h3><p>监测数据全部保存在本机，不注册、不登录、不上传，用得安心。</p></div>
+      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-activity"/></svg></div><h3>实时性能监测</h3><p>CPU、内存、电池、网络、帧率全维度实时采集，三大核心指标一屏尽览。</p></div>
+      <div class="card"><div class="ic" style="background:#FFF6E0;color:#B8860B"><svg class="ic-svg"><use href="#i-pip"/></svg></div><h3>悬浮窗速览</h3><p>游戏、视频、导航时悬浮窗常驻显示关键指标，无需切换应用。</p></div>
+      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-chart"/></svg></div><h3>历史与图表</h3><p>指标历史曲线与逐时统计，性能变化趋势一眼看懂，支持详情回溯。</p></div>
+      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-droplets"/></svg></div><h3>液态玻璃设计</h3><p>自研液态玻璃视觉体系，通透质感与流畅动效，界面好看更好用。</p></div>
+      <div class="card"><div class="ic" style="background:#FFF6E0;color:#B8860B"><svg class="ic-svg"><use href="#i-bell"/></svg></div><h3>智能告警</h3><p>过热、高负载、低存储等异常自动提醒，问题发生的当下就知道。</p></div>
+      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-shield"/></svg></div><h3>隐私优先</h3><p>监测数据全部保存在本机，不注册、不登录、不上传，用得安心。</p></div>
     </div>
     <p class="prod-note">「设备性能监控」Android 版已发布，可在 <a href="https://github.com/sitong-zhang/DevicePerfMonitor/releases" target="_blank" rel="noopener">官方发布页</a> 下载最新版本。</p>
   </div>
@@ -132,9 +180,9 @@ footer a:hover{color:#fff}
     <h2 class="sec-title">数据承诺</h2>
     <p class="sec-sub">我们对用户数据的处理原则，简单直接。</p>
     <div class="row">
-      <div><div class="big">0 上传</div><p>性能监测数据仅存储在你的设备本地，不会上传到任何服务器。</p></div>
-      <div><div class="big">0 账号</div><p>无需注册登录，不收集手机号、身份信息等个人资料。</p></div>
-      <div><div class="big">100% 透明</div><p>权限用途逐条说明，隐私政策写得明白，随时可查阅。</p></div>
+      <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-shield"/></svg></div><div class="big">0 上传</div><p>性能监测数据仅存储在你的设备本地，不会上传到任何服务器。</p></div>
+      <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-activity"/></svg></div><div class="big">0 账号</div><p>无需注册登录，不收集手机号、身份信息等个人资料。</p></div>
+      <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-chart"/></svg></div><div class="big">100% 透明</div><p>权限用途逐条说明，隐私政策写得明白，随时可查阅。</p></div>
     </div>
   </div>
 </section>
@@ -148,17 +196,13 @@ footer a:hover{color:#fff}
       <div class="facts">
         <div class="fact"><b>2024</b><span>公司成立</span></div>
         <div class="fact"><b>武汉 · 中国</b><span>总部所在地</span></div>
-        <div class="fact"><b>Android / iOS</b><span>产品平台方向</span></div>
+        <div class="fact"><b>Android</b><span>产品平台方向</span></div>
         <div class="fact"><b>隐私优先</b><span>产品设计底线</span></div>
       </div>
     </div>
     <div style="display:flex;justify-content:center">
-      <div style="width:min(320px,80%);aspect-ratio:1;border-radius:28px;background:linear-gradient(150deg,#0B3FA8,#1B6BFF);display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 20px 50px rgba(11,63,168,.25)">
-        <div style="position:relative;width:150px;height:150px">
-          <span style="position:absolute;left:0;top:38px;width:74px;height:74px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#4D93FF,#0B3FA8)"></span>
-          <span style="position:absolute;right:0;top:0;width:46px;height:46px;border-radius:50%;background:var(--yellow)"></span>
-          <span style="position:absolute;right:8px;bottom:0;width:30px;height:30px;border-radius:50%;background:#9FC4FF"></span>
-        </div>
+      <div class="logo-card">
+        <svg class="mark" viewBox="0 0 100 100" role="img" aria-label="分子智能科技 logo"><use href="#logo-mark"/></svg>
       </div>
     </div>
   </div>
@@ -168,7 +212,7 @@ footer a:hover{color:#fff}
   <div class="wrap">
     <h2 class="sec-title">联系我们</h2>
     <p>产品建议、问题反馈或商务合作，欢迎通过官方邮箱与我们联系。</p>
-    <a class="mail" href="mailto:wpqptwy@qq.com">wpqptwy@qq.com</a>
+    <a class="mail" href="mailto:wpqptwy@qq.com"><svg class="ic-svg"><use href="#i-mail"/></svg>wpqptwy@qq.com</a>
   </div>
 </section>
 
