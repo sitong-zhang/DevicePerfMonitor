@@ -1,7 +1,6 @@
 package com.devperf.monitor.ui.kit
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -37,9 +35,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
@@ -52,6 +47,7 @@ import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.catalog.components.LiquidButton
+import com.kyant.backdrop.catalog.components.LiquidSlider
 import com.kyant.backdrop.catalog.components.LiquidToggle
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -60,9 +56,8 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
@@ -231,16 +226,19 @@ fun GlassSwitch(
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（1.0.30 重写）
+// 滑块（1.0.31 恢复 Kyant0 原版，用户明确要求「直接抄原仓库的技术」）
 //
-// 早期版本主窗口走 Kyant0 catalog 的 LiquidSlider：滑块视觉位置由内部
-// DampedDragAnimation 弹簧物理驱动，手指拖动只更新底层 value，二者之间存在
-// 阻尼延迟 —— 表现就是「完全不跟手」，snapshotFlow 回灌又造成拖动时停顿。
+// 视觉与手感完全交给 vendored 的 Kyant0/AndroidLiquidGlass LiquidSlider：
+// DampedDragAnimation 弹簧物理 + 按压放大/速度形变 + InteractiveHighlight +
+// 玻璃嵌玻璃（滑块 backdrop 内叠轨道录制），与官方 demo 参数一字不改。
 //
-// 1.0.30 改为与 Material3 Slider 完全一致的「受控手势模型」（值即真相、拖动直接
-// 回写）：滑块位置 = 当前 value，x 像素 → value 直接线性映射，无任何阻尼/插值，
-// 1:1 跟手；点按即定位、拖动即跟随。玻璃外观保留（胶囊轨道 + 白色胶囊滑块）。
-// 悬浮窗 / 无玻璃 / 禁用态仍回落 MD3 标准 Slider。
+// 跟手的关键不在组件而在接线：视觉值绝不能直接用 ViewModel 的 DataStore 异步
+// 往返驱动（拖动 → 持久化 → StateFlow 回流 → 重组，链路几十毫秒且被 conflate，
+// 表现就是「滑动停顿、不跟手」——1.0.29 与 1.0.30 两版都栽在这）。这里持有
+// 本地即时 mutableFloatStateOf：手势先写本地（同帧生效、下一帧上屏），持久化
+// 异步外发；外部值回流时再同步本地（StateFlow conflate 去重，快拖不回卷）。
+// steps 量化在回调里完成：值被吸附到档位，内部弹簧追赶档位，档位手感自然。
+// 悬浮窗 / 无玻璃 / 禁用态仍回落 MD3 标准 Slider（本身即 1:1 跟手）。
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -255,7 +253,7 @@ fun GlassSlider(
     val colors = LocalTokenColors.current
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
 
-    // 悬浮窗 / 无玻璃（backdrop 为 null）/ 禁用态：MD3 标准件（本身即 1:1 跟手）
+    // 悬浮窗 / 无玻璃（backdrop 为 null）/ 禁用态：MD3 标准件
     if (backdrop == null || !enabled) {
         Slider(
             value = value,
@@ -273,7 +271,7 @@ fun GlassSlider(
         return
     }
 
-    // 主窗口：玻璃胶囊滑块，受控手势模型（参考 Material3 Slider 的「值即真相」）。
+    // 主窗口：Kyant0/AndroidLiquidGlass 原版 LiquidSlider（vendor 源码未改参数）。
     val span = valueRange.endInclusive - valueRange.start
     val stepSize = if (steps > 0) span / (steps + 1) else 0f
     fun snap(v: Float): Float =
@@ -283,74 +281,25 @@ fun GlassSlider(
         } else {
             v.coerceIn(valueRange)
         }
-    // 用 State 引用包裹，确保手势 lambda（pointerInput 不因重组重建）始终读到最新值/回调
-    val currentValue by rememberUpdatedState(value)
+
+    // 本地即时视觉值：手势先写它（同帧生效），持久化异步外发
+    var localValue by remember { mutableFloatStateOf(value) }
+    // 外部值变化（首帧 / 外部重置 / 异步回流）时同步本地
+    LaunchedEffect(value) { localValue = value }
     val currentOnValueChange by rememberUpdatedState(onValueChange)
-    val haptics = rememberHaptics()
 
-    BoxWithConstraints(
-        modifier = modifier.fillMaxWidth().height(40.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        val w = maxWidth
-        val pct = ((currentValue - valueRange.start) / span).coerceIn(0f, 1f)
-
-        // 整条轨道（inactive）
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(Capsule())
-                .background(colors.surfaceElevated)
-                .align(Alignment.CenterStart),
-        )
-        // 已选段（active）：宽度 = 进度比例，1:1 跟手
-        Box(
-            Modifier
-                .width(w * pct)
-                .height(6.dp)
-                .clip(Capsule())
-                .background(colors.accent)
-                .align(Alignment.CenterStart),
-        )
-        // 白色胶囊滑块（与液态主题一致；位置 = 当前值，无阻尼）
-        Box(
-            Modifier
-                .offset {
-                    IntOffset(
-                        ((constraints.maxWidth * pct) - 20.dp.roundToPx()).roundToInt(),
-                        0,
-                    )
-                }
-                .size(40.dp, 24.dp)
-                .clip(Capsule())
-                .background(Color.White.copy(alpha = 0.92f))
-                .border(1.dp, colors.outline.copy(alpha = 0.2f), Capsule())
-                .align(Alignment.CenterStart),
-        )
-        // 手势层：点按定位 + 拖动，x → value 直接映射（跟手，无插值）
-        Box(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            haptics.select()
-                            val width = size.width.toFloat()
-                            val v = valueRange.start + span * (offset.x / width).coerceIn(0f, 1f)
-                            val s = snap(v)
-                            if (s != currentValue) currentOnValueChange(s)
-                        },
-                        onDrag = { _, dragAmount ->
-                            val width = size.width.toFloat()
-                            val v = (currentValue + span * (dragAmount.x / width)).coerceIn(valueRange)
-                            val s = snap(v)
-                            if (s != currentValue) currentOnValueChange(s)
-                        },
-                    )
-                },
-        )
-    }
+    LiquidSlider(
+        value = { localValue },
+        onValueChange = { raw ->
+            val snapped = snap(raw)
+            localValue = snapped
+            currentOnValueChange(snapped)
+        },
+        valueRange = valueRange,
+        visibilityThreshold = span / 2000f,
+        backdrop = backdrop,
+        modifier = modifier,
+    )
 }
 
 // ---------------------------------------------------------------------------

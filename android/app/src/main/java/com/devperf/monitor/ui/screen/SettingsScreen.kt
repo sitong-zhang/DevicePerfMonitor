@@ -92,7 +92,6 @@ import android.net.Uri
 fun SettingsScreen(
     viewModel: MonitorViewModel,
     onRequestOverlayPermission: () -> Unit,
-    onNavigateFeedback: () -> Unit,
 ) {
     val colors = LocalTokenColors.current
     val context = LocalContext.current
@@ -488,12 +487,18 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= 意见反馈（1.0.27 起独立页面） =================
-            // 不再内联在设置页：点这行跳到意见反馈页（提交链路见 FeedbackRepository）。
+            // ================= 意见反馈（1.0.31 改回邮箱直达） =================
+            // 用户拍板：反馈只走邮箱，不要独立反馈页/提交表单/GitHub 通道。
+            // 点这行直接拉起邮件 App：收件人=官方邮箱，主题=版本+机型，
+            // 正文=待填模板+设备信息，用户在邮件里补两句话点发送即达
+            //（发件人是用户自己的邮箱，开发者可直接回复）。
             GlassInfoRow(
                 label = "意见反馈",
-                value = "去填写 →",
-                onClick = onNavigateFeedback,
+                value = "去邮件 →",
+                onClick = {
+                    haptics.tick()
+                    openMail(context, viewModel.feedbackMailto())
+                },
             )
 
             // ================= 关于 =================
@@ -558,7 +563,7 @@ fun SettingsScreen(
                     GlassInfoRow(
                         label = "联系我们",
                         value = "wpqptwy@qq.com",
-                        onClick = { openMail(context, "wpqptwy@qq.com") },
+                        onClick = { openMail(context, "mailto:wpqptwy@qq.com") },
                     )
                     GlassInfoRow(
                         label = "隐私政策",
@@ -596,10 +601,10 @@ private fun openUrl(context: Context, url: String) {
     }
 }
 
-/** 打开邮件 App 起草邮件（联系我们）。 */
-private fun openMail(context: Context, email: String) {
+/** 打开邮件 App（[mailto] 为完整 mailto: 链接，收件人/主题/正文可预填）。 */
+private fun openMail(context: Context, mailto: String) {
     runCatching {
-        context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email")))
+        context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse(mailto)))
     }
 }
 

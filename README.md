@@ -19,7 +19,7 @@
 
 ## 下载与版本
 
-安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，只发 Android 一个 APK（液态玻璃版，文件名 `DevicePerfMonitor-<版本>-release.apk`）。iOS 安装包自 1.0.14 起已下架，源码保留。
+安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，只发 Android 一个 APK（液态玻璃版，文件名 `DevicePerfMonitor-<版本>-release.apk`）。iOS 版已停止维护并从仓库移除（1.0.30 起），不再构建。
 
 ## 构建
 
@@ -38,8 +38,6 @@ cd android
 - **keystore 和密码务必备份**。私钥丢了无法补签，只能换签名让用户卸载重装。备份建议放密码管理器 + 离线副本。
 - GitHub 仓库 secrets 已配置：`DEVPERF_KEYSTORE_BASE64` / `DEVPERF_KEYSTORE_PASSWORD` / `DEVPERF_KEY_ALIAS` / `DEVPERF_KEY_PASSWORD`，CI 构建时自动还原签名配置，并在产物里核对证书是 `CN=DevicePerfMonitor`。
 
-**iOS**：用 Xcode 26+ 打开 `ios/DevicePerfMonitor.xcodeproj`。本仓库在 Linux 上构建，打不出 IPA，改用 GitHub Actions 的 macOS runner 自动构建（产物未签名，装机需重签名）。
-
 ## 权限（Android）
 
 - `SYSTEM_ALERT_WINDOW`：全局悬浮窗，必需，拒绝就引导去系统设置授权。
@@ -50,7 +48,6 @@ cd android
 
 ## 已知限制
 
-- iOS 没有第三方全局悬浮窗，所以 iOS 版只有应用内窗口；机身温度没有公开 API，iOS 上不显示温度。
 - Android 的真实背景模糊在 Android 12 以下拿不到，会自动退化。
 - 崩了会弹全屏报告（异常、调用栈、机型），Android 侧还会把报告写进文件，下次启动一定补弹。
 

@@ -78,7 +78,6 @@ import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
 import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
-import com.devperf.monitor.ui.screen.FeedbackScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
@@ -100,7 +99,6 @@ object Routes {
     const val OVERVIEW = "overview"
     const val SETTINGS = "settings"
     const val DETAIL = "detail/{metricId}"
-    const val FEEDBACK = "feedback"
 
     fun detail(metricId: String) = "detail/$metricId"
 }
@@ -195,7 +193,7 @@ fun AppNav(
                 // 过渡策略（1.0.30 重写）：
                 // - 顶层 tab 互切：瞬时切换，不重叠合成新旧两页——既消除卡顿，
                 //   也避免玻璃 backdrop 同时重录两页的开销；旧页直接移除，消失干净。
-                // - 压入详情/反馈：新页从右横滑进入，旧页直接消失（不退出动画），
+                // - 压入详情：新页从右横滑进入，旧页直接消失（不退出动画），
                 //   同一时刻只合成一页，开销最小、不卡。
                 // - 返回：当前页右滑出，下层页瞬时出现。
                 enterTransition = {
@@ -224,13 +222,6 @@ fun AppNav(
                     SettingsScreen(
                         viewModel = viewModel,
                         onRequestOverlayPermission = onRequestOverlayPermission,
-                        onNavigateFeedback = { navController.navigate(Routes.FEEDBACK) },
-                    )
-                }
-                composable(Routes.FEEDBACK) {
-                    FeedbackScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(Routes.DETAIL) { entry ->

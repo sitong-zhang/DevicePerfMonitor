@@ -287,38 +287,20 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ---------------------------------------------------------------------
-    // 意见反馈（1.0.28 起为邮箱通道）：拼预填 mailto 链接，反馈页拉起
-    // 邮件 App 发到官方邮箱。纯本地拼装，无网络请求。
+    // 意见反馈（1.0.31 改回邮箱直达）：用户拍板不要独立反馈页/提交表单，
+    // 设置页「意见反馈」行点击后直接拉起邮件 App——收件人、主题（版本+机型）、
+    // 正文（待填模板+设备信息）全部预填，用户补两句话点发送即达。
+    // 纯本地拼装，无网络请求。
     // ---------------------------------------------------------------------
 
     private val feedbackRepo = FeedbackRepository()
 
-    private val _feedbackState = MutableStateFlow<FeedbackUiState>(FeedbackUiState.Idle)
-    val feedbackState = _feedbackState.asStateFlow()
-
-    /** 反馈收件邮箱（反馈页展示用）。 */
+    /** 反馈收件邮箱（构建注入，缺省内置）。 */
     val feedbackEmail: String get() = feedbackRepo.targetEmail
 
-    /** 拼预填邮件正文（反馈页「复制内容」兜底用）。 */
-    fun buildFeedbackMailBody(content: String, contact: String): String =
-        feedbackRepo.buildMailBody(content, contact)
-
-    /**
-     * 提交反馈：立即拼出预填 mailto 链接放进状态，反馈页收到后拉起邮件 App。
-     * [content] 反馈正文（非空白由反馈页按钮禁用态保证），[contact] 可选联系方式。
-     */
-    fun submitFeedback(content: String, contact: String) {
-        _feedbackState.value = try {
-            FeedbackUiState.EmailReady(feedbackRepo.buildMailto(content, contact))
-        } catch (e: Exception) {
-            FeedbackUiState.Failed(e.message ?: "拼装邮件失败，请重试")
-        }
-    }
-
-    /** 用户改过反馈内容时，把上次的终态清掉（避免「已就绪」和草稿并存）。 */
-    fun resetFeedbackState() {
-        _feedbackState.value = FeedbackUiState.Idle
-    }
+    /** 拼一条正文预填好的 mailto 链接（设置页意见反馈入口用）。 */
+    fun feedbackMailto(): String =
+        feedbackRepo.buildMailto(FEEDBACK_CONTENT_PROMPT, "")
 
     /** 当前采集间隔（数值动画打断策略用）。 */
     fun tickMs(): Long = settings.value.refreshMode.tickMs
@@ -459,5 +441,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     companion object {
         /** Shizuku 授权请求码（onRequestPermissionsResult 回调用）。 */
         const val REQUEST_CODE_SHIZUKU = 0x5A1
+
+        /** 意见反馈正文的待填提示（mailto 预填，用户在邮件里补写）。 */
+        const val FEEDBACK_CONTENT_PROMPT = "（请在这里描述你遇到的问题或建议）"
     }
 }

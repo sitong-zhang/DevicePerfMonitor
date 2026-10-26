@@ -79,6 +79,11 @@ android {
 dependencies {
     implementation(project(":security"))
 
+    // 液态玻璃：Kyant0/AndroidLiquidGlass 的 shapes 配套库（Capsule 等形状）；
+    // backdrop 库本体（2.0.1）原样 vendor 进 src/main/java/com/kyant/backdrop/，
+    // 与用户端 app 模块同一份源码，效果参数与官方 demo 一致。
+    implementation(libs.kyant.shapes)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
