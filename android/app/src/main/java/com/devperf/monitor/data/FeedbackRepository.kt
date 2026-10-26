@@ -28,26 +28,32 @@ class FeedbackRepository {
     fun buildMailSubject(): String =
         "【用户反馈】DevicePerfMonitor v${BuildConfig.VERSION_NAME} · ${Build.BRAND} ${Build.MODEL}"
 
-    /** 反馈正文：反馈内容 + 联系方式 + 设备信息 + 品牌落款。 */
+    /** 反馈正文：分节清晰排版，开发者一眼能定位问题与设备。 */
     @VisibleForTesting
     internal fun buildMailBody(content: String, contact: String): String = buildString {
-        append("反馈内容：\n")
-        append(content.ifBlank { "（用户没写内容）" })
-        append("\n\n联系方式：\n")
-        append(contact.ifBlank { "（未留）" })
-        append("\n\n——————\n")
+        appendLine("【反馈内容】")
+        appendLine(content.ifBlank { "（用户未填写）" })
+        appendLine()
+        appendLine("【联系方式】")
+        appendLine(contact.ifBlank { "（未留）" })
+        appendLine()
+        appendLine("————————————")
         append(deviceInfo())
-        append("\n本邮件由 设备性能监控 App 反馈通道发送 · 分子智能科技 Molecule Technology")
+        appendLine()
+        append("（本邮件由「设备性能监控」App 自动生成 · 分子智能科技）")
     }
 
-    /** 设备信息块：帮定位「只有我这台机器这样」类问题。 */
+    /** 设备信息块：帮定位「只有我这台机器这样」类问题，分四行对齐展示。 */
     fun deviceInfo(): String = buildString {
-        append("设备：").append(Build.BRAND).append(' ').append(Build.MODEL)
-        append(" / Android ").append(Build.VERSION.RELEASE)
-        append(" (API ").append(Build.VERSION.SDK_INT).append(')')
-        append(" / App ").append(BuildConfig.VERSION_NAME)
-        append(" (").append(BuildConfig.VERSION_CODE).append(')')
-        append(" / ").append(Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown abi")
+        append("机型：").append(Build.BRAND).append(' ').append(Build.MODEL)
+        appendLine()
+        append("系统：Android ").append(Build.VERSION.RELEASE)
+            .append("（API ").append(Build.VERSION.SDK_INT).append(')')
+        appendLine()
+        append("App：v").append(BuildConfig.VERSION_NAME)
+            .append("（").append(BuildConfig.VERSION_CODE).append(')')
+        appendLine()
+        append("处理器：").append(Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown abi")
     }
 
     /**

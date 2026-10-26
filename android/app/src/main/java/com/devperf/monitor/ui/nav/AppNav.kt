@@ -33,10 +33,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -279,22 +282,18 @@ internal fun BottomNavBar(
     val haptics = rememberHaptics()
     val cs = MaterialTheme.colorScheme
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
-    val selectedIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    val routeIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
-    // 1.0.26 修复「底栏 pill 拖回失效」：LiquidBottomTabs 的 selectedTabIndex 是
-    // () -> Int 读取器，组件内部用它做 remember 的 key。若每次重组都传新 lambda
-    // 实例，key 就每次都变——路由异步更新（navigate 后 currentRoute 下一帧才变）
-    // 的窗口内只要发生一次重组，currentIndex 就被重置回路由旧值：pill 弹回原
-    // tab、onTabSelected 被重复回调、页面被导航回原页面，用户感知「拖回去卡死，
-    // 必须点第 1 个 tab」。按 selectedIndex 的值 remember，保证值不变时实例稳定。
-    val selectedTabIndexProvider = remember(selectedIndex) { { selectedIndex } }
+    // 选中态单一真相源：selectedTab 直接持有「绝对索引」，照搬 Kyant0 catalog demo
+    // 的写法（GlassComponentsRenderTest 里的官方用法）。点击 / 拖动都先把它同步写成
+    // 目标索引——这一步是同步、即时的，pill 立刻跟过去，不再依赖导航把路由带过来
+    // 的那一帧延迟。导航交给 onSelect；路由因其它原因变化（如从详情页返回总览）时，
+    // 下方 LaunchedEffect(routeIndex) 再把 selectedTab 拉回当前页面，保证
+    // 「pill 停留位置 == 当前页面」永远成立（点击能切页、滑动也能切页，且两者都会
+    // 把滑块带过去）。
+    var selectedTab by remember { mutableIntStateOf(routeIndex) }
+    LaunchedEffect(routeIndex) { selectedTab = routeIndex }
 
-    // LiquidBottomTabs 内部把回调捕获在 LaunchedEffect(dampedDragAnimation) 里
-    // （effect 的 key 恒不变，回调因此永远是第一次组合那一版）。若回调里读取
-    // currentRoute / onSelect 这些 Compose 参数或外部 lambda，读到的就是陈旧值：
-    // 拖动 pill 回到第 1 个 tab 时会因为「当前页 == 目标页」而吞掉导航。
-    // rememberUpdatedState 让回调每次都读到最新实例——语义对齐上游 demo 的
-    // 纯 setter（{ selectedTabIndex = it }），配合 AppNav 里的幂等 navigate。
     val currentOnSelect by rememberUpdatedState(onSelect)
 
     // 主窗口（backdrop 非 null）走 catalog LiquidBottomTabs（见下方 glassOn 分支）；
@@ -316,7 +315,7 @@ internal fun BottomNavBar(
                 val itemWidth = maxWidth / topLevelTabs.size
                 // 滑动指示器：位置由弹簧驱动，切换 tab 时滑过去而不是瞬移
                 val indicatorOffset by animateFloatAsState(
-                    targetValue = selectedIndex.toFloat(),
+                    targetValue = selectedTab.toFloat(),
                     animationSpec = spring(
                         dampingRatio = DesignTokens.Motion.Spring.FAST_SPATIAL_DAMPING,
                         stiffness = DesignTokens.Motion.Spring.FAST_SPATIAL_STIFFNESS,
@@ -335,14 +334,15 @@ internal fun BottomNavBar(
                         ),
                 )
                 Row(modifier = Modifier.fillMaxSize()) {
-                    topLevelTabs.forEach { tab ->
-                        val selected = tab.route == currentRoute
+                    topLevelTabs.forEachIndexed { i, tab ->
+                        val selected = i == selectedTab
                         NavBarItem(
                             tab = tab,
                             selected = selected,
                             onSelect = {
                                 if (!selected) {
                                     haptics.select()
+                                    selectedTab = i
                                     onSelect(tab.route)
                                 }
                             },
@@ -360,21 +360,24 @@ internal fun BottomNavBar(
             // DampedDragAnimation 弹簧物理 + 按压放大/速度形变 + InteractiveHighlight 高光，
             // 且支持左右拖动切换 tab；tab 图标/文字染色后录进 tabsBackdrop，pill 玻璃透出
             // 选中项内容（官方 demo 同款结构）。高度由组件内部的 64dp 行驱动。
+            // selectedTabIndex 直接用 { selectedTab }（点击/拖动都已先写它），pill 跟随。
             LiquidBottomTabs(
-                selectedTabIndex = selectedTabIndexProvider,
+                selectedTabIndex = { selectedTab },
                 onTabSelected = { index ->
-                    // 拖动 pill 切换：与点击 tab 走同一条幂等导航链路
+                    // 拖动 pill 落定：写 selectedTab + 走同一条幂等导航链路
                     haptics.select()
+                    selectedTab = index
                     currentOnSelect(topLevelTabs[index].route)
                 },
                 backdrop = backdrop,
                 tabsCount = topLevelTabs.size,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                topLevelTabs.forEach { tab ->
+                topLevelTabs.forEachIndexed { i, tab ->
                     LiquidBottomTab(
                         onClick = {
                             haptics.select()
+                            selectedTab = i
                             currentOnSelect(tab.route)
                         },
                     ) {

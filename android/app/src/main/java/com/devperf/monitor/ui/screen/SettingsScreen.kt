@@ -513,7 +513,7 @@ fun SettingsScreen(
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     )
                     Text(
-                        text = "用心感知设备的每一次跳动",
+                        text = "实时性能监测 · 数据全程本地处理，不上传",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
