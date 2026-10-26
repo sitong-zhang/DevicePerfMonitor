@@ -74,7 +74,7 @@ class FeedbackRepositoryTest {
         // （若哪天 CI 注入了 token，这条会失败——那是故意的，提醒补直连测试）
         assertTrue(
             "测试构建不应注入反馈 token（否则本断言失效，需补 token 通道测试）",
-            BuildConfig.GITHUB_FEEDBACK_TOKEN.isEmpty(),
+            BuildConfig.GITHUB_FEEDBACK_TOKEN_B64.isEmpty(),
         )
         when (val result = repo.submit("界面挺好看的，提个建议", "")) {
             is FeedbackRepository.SubmitResult.BrowserFallback -> {

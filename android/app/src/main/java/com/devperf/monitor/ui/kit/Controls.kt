@@ -57,19 +57,11 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.semantics.Role
 import kotlin.math.roundToInt
 
@@ -236,7 +228,27 @@ fun GlassSwitch(
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（1.0.26：主窗口统一走 catalog LiquidSlider + 全区域拖拽覆盖层）
+// 滑块（1.0.27：照搬 Kyant0 catalog destinations/SliderContent 的调用方式）
+//
+// 上游用法就这三件事：
+//   LiquidSlider(
+//       value = { value }, onValueChange = { value = it },
+//       valueRange = 0f..100f, visibilityThreshold = 0.01f, backdrop = backdrop,
+//       modifier = Modifier.padding(horizontal = 32f.dp)
+//   )
+// 组件是受控的：拖动由内部 DampedDragAnimation 产出增量 -> 回调 onValueChange
+// -> 上层回写 -> value 变化 -> 组件内的 LaunchedEffect 把动画推向新值。
+//
+// 之前版本在它上面叠了一层自研的「全区域拖拽」pointerInput，与组件自带的
+// inspectDragGestures 抢同一个 pointer：两边分别 awaitFirstDown 再互相 consume，
+// 真机上两条手势都会被判 cancel，表现就是「看着是滑块，完全拖不动、点也没反应」。
+// 按上游写法去掉自研层，手势链只剩组件自己那条，行为与 demo 一致。
+//
+// 两点必须注意（也是上游 demo 里隐含的约定）：
+//   1. value 必须读「状态」而不是 Float 形参——组件内的 LaunchedEffect key 恒不变，
+//      捕获的是第一次组合的 lambda；读形参会捕获到不变的浮点快照，滑块彻底不跟手。
+//      所以这里用 rememberUpdatedState 包一层，lambda 捕获 State 引用，读数永远是新的。
+//   2. 回调同样会被捕获，用 rememberUpdatedState 保证调用到最新的 onValueChange。
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -250,7 +262,7 @@ fun GlassSlider(
 ) {
     val colors = LocalTokenColors.current
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
-    if (backdrop != null) {
+    if (backdrop != null && enabled) {
         val span = valueRange.endInclusive - valueRange.start
         val stepSize = if (steps > 0) span / (steps + 1) else 0f
         fun snap(v: Float): Float =
@@ -258,82 +270,26 @@ fun GlassSlider(
                 val idx = ((v - valueRange.start) / stepSize).roundToInt()
                 (valueRange.start + idx * stepSize).coerceIn(valueRange)
             } else {
-                v
+                v.coerceIn(valueRange)
             }
-        // 连续值喂给 LiquidSlider 让 thumb 跟手；离散步进只在跨档时上报上层，
-        // 松手时吸附回档位（1.0.26 起温度阈值也走官方组件，不再用自绘滑块）。
-        var raw by remember { mutableStateOf(value) }
-        LaunchedEffect(value) {
-            if (kotlin.math.abs(value - snap(raw)) > 0.0001f) raw = value
-        }
+        // 状态引用：避免组件捕获到过期的浮点快照
         val currentValue by rememberUpdatedState(value)
         val currentOnValueChange by rememberUpdatedState(onValueChange)
-        Box(modifier = modifier.alpha(if (enabled) 1f else 0.45f)) {
-            LiquidSlider(
-                value = { raw },
-                onValueChange = { v ->
-                    raw = v
-                    val s = snap(v)
-                    if (steps == 0 || kotlin.math.abs(s - currentValue) > 0.0001f) {
-                        currentOnValueChange(s)
-                    }
-                },
-                valueRange = valueRange,
-                visibilityThreshold = span * 0.001f,
-                backdrop = backdrop,
-            )
-            if (enabled) {
-                // 官方拖动手势只挂在 40×24dp 的 thumb 上：按住轨道拖动没有响应
-                // （用户反馈「有移动效果但拖不动」就是按住轨道时只有 tap 跳转）。
-                // 这里补一层全区域水平拖拽：thumb 命中区放行给官方手势（保留按压
-                // 玻璃反馈），垂直意图放行给外层 LazyColumn 滚动。
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .pointerInput(valueRange, steps) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(
-                                    requireUnconsumed = false,
-                                    pass = PointerEventPass.Initial,
-                                )
-                                val fraction =
-                                    ((currentValue - valueRange.start) / span)
-                                        .coerceIn(0f, 1f)
-                                val thumbCenterX = size.width * fraction
-                                val hit = 28.dp.toPx()
-                                if (down.position.x in
-                                    (thumbCenterX - hit)..(thumbCenterX + hit)
-                                ) {
-                                    return@awaitEachGesture
-                                }
-                                drag(down.id) { change ->
-                                    val pc = change.positionChange()
-                                    if (kotlin.math.abs(pc.x) >= kotlin.math.abs(pc.y)) {
-                                        change.consume()
-                                        val f = (change.position.x / size.width.toFloat())
-                                            .coerceIn(0f, 1f)
-                                        val v = valueRange.start + f * span
-                                        raw = v
-                                        val s = snap(v)
-                                        if (steps == 0 ||
-                                            kotlin.math.abs(s - currentValue) > 0.0001f
-                                        ) {
-                                            currentOnValueChange(s)
-                                        }
-                                    }
-                                }
-                                // 松手吸附到步进档
-                                val s = snap(raw)
-                                raw = s
-                                if (steps > 0) currentOnValueChange(s)
-                            }
-                        },
-                )
-            }
-        }
+        LiquidSlider(
+            value = { currentValue },
+            onValueChange = { v ->
+                // 只做「业务档位量化」，手势与动画完全交给组件
+                val s = snap(v)
+                if (s != currentValue) currentOnValueChange(s)
+            },
+            valueRange = valueRange,
+            visibilityThreshold = span * 0.0001f,
+            backdrop = backdrop,
+            modifier = modifier,
+        )
         return
     }
-    // 悬浮窗 / 无玻璃（backdrop 为 null）：MD3 标准件
+    // 悬浮窗 / 无玻璃（backdrop 为 null）/ 禁用态：MD3 标准件
     Slider(
         value = value,
         onValueChange = onValueChange,

@@ -1,6 +1,7 @@
 package com.devperf.monitor.data
 
 import android.os.Build
+import android.util.Base64
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.devperf.monitor.BuildConfig
@@ -11,6 +12,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 /**
  * 用户反馈仓库（1.0.26 新增）。
@@ -47,7 +49,7 @@ class FeedbackRepository {
      */
     suspend fun submit(content: String, contact: String): SubmitResult =
         withContext(Dispatchers.IO) {
-            val token = BuildConfig.GITHUB_FEEDBACK_TOKEN.trim()
+            val token = decodeToken().trim()
             if (token.isEmpty()) {
                 return@withContext SubmitResult.BrowserFallback(
                     buildBrowserFallbackUrl(buildIssueTitle(), buildIssueBody(content, contact)),
@@ -102,6 +104,19 @@ class FeedbackRepository {
     // ------------------------------------------------------------------
     // 内部：GitHub REST
     // ------------------------------------------------------------------
+
+    /**
+     * 取出并解码反馈 token：构建时做了 base64（见 build.gradle.kts 的
+     * buildConfigField GITHUB_FEEDBACK_TOKEN_B64），这里解码回明文。
+     * 字段为空或解码失败都回落为空串，触发网页降级通道。
+     */
+    private fun decodeToken(): String {
+        val b64 = BuildConfig.GITHUB_FEEDBACK_TOKEN_B64
+        if (b64.isEmpty()) return ""
+        return runCatching {
+            String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8)
+        }.getOrDefault("")
+    }
 
     private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
 

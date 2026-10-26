@@ -31,3 +31,7 @@
 
 # 我们的数据类不混淆（仅本项目包名，便于日志阅读）
 -keep class com.devperf.monitor.core.** { *; }
+
+# BuildConfig：保留反馈 token 字段（值是 base64，配合 R8 混淆；不混淆字段名
+# 以便运行时稳定读取，字符串内容本身已是 base64 不直接可读）
+-keep class com.devperf.monitor.BuildConfig { *; }

@@ -1,7 +1,5 @@
 package com.devperf.monitor.ui.screen
 
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -46,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
@@ -61,7 +57,6 @@ import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.data.WallpaperId
 import com.devperf.monitor.data.collectors.PrivilegedShell
 import com.devperf.monitor.overlay.OverlayPermissions
-import com.devperf.monitor.ui.FeedbackUiState
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.EnterStagger
 import com.devperf.monitor.ui.kit.GlassButton
@@ -93,6 +88,7 @@ import java.io.File
 fun SettingsScreen(
     viewModel: MonitorViewModel,
     onRequestOverlayPermission: () -> Unit,
+    onNavigateFeedback: () -> Unit,
 ) {
     val colors = LocalTokenColors.current
     val context = LocalContext.current
@@ -488,106 +484,13 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= 意见反馈（1.0.26） =================
-            GlassSectionHeader(text = "意见反馈")
-            GlassPanel {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
-                ) {
-                    Text(
-                        text = "遇到问题、想要新功能，或者任何想说的话，写在这里就能送到开发者手里。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.textSecondary,
-                    )
-                    val feedbackState by viewModel.feedbackState.collectAsState()
-                    var feedbackContent by remember { mutableStateOf("") }
-                    var feedbackContact by remember { mutableStateOf("") }
-                    val submitting = feedbackState is FeedbackUiState.Submitting
-
-                    // 降级通道（没配直连 token）：提交结果是一条预填好的 GitHub
-                    // 网页 issue 链接，直接拉起系统浏览器让用户发出去。
-                    LaunchedEffect(feedbackState) {
-                        val fs = feedbackState
-                        if (fs is FeedbackUiState.BrowserFallback) {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse(fs.url)),
-                                )
-                            }
-                        }
-                    }
-
-                    GlassTextField(
-                        value = feedbackContent,
-                        onValueChange = {
-                            feedbackContent = it
-                            viewModel.resetFeedbackState()
-                        },
-                        placeholder = "说点什么……（必填）",
-                        minLines = 4,
-                    )
-                    GlassTextField(
-                        value = feedbackContact,
-                        onValueChange = {
-                            feedbackContact = it
-                            viewModel.resetFeedbackState()
-                        },
-                        placeholder = "联系方式（选填：邮箱 / 微信 / QQ 均可）",
-                    )
-                    GlassButton(
-                        text = if (submitting) "提交中……" else "提交反馈",
-                        onClick = {
-                            haptics.select()
-                            viewModel.submitFeedback(
-                                feedbackContent.trim(),
-                                feedbackContact.trim(),
-                            )
-                        },
-                        enabled = feedbackContent.isNotBlank() && !submitting,
-                    )
-                    // 状态行：每种终态一句话说清楚，失败给原因
-                    val fs = feedbackState
-                    when (fs) {
-                        is FeedbackUiState.Submitted -> {
-                            // 成功后清空草稿，准备下一条
-                            LaunchedEffect(fs) {
-                                feedbackContent = ""
-                                feedbackContact = ""
-                            }
-                            val url = fs.issueUrl
-                            Text(
-                                text = if (url != null) "已提交，感谢！点此查看你提交的反馈 →" else "已提交，感谢！开发者很快会看到。",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.textPrimary,
-                                modifier = if (url != null) {
-                                    Modifier.clickable {
-                                        runCatching {
-                                            context.startActivity(
-                                                Intent(Intent.ACTION_VIEW, Uri.parse(url)),
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    Modifier
-                                },
-                            )
-                        }
-                        is FeedbackUiState.BrowserFallback ->
-                            Text(
-                                text = "已打开 GitHub 反馈页，点「Submit new issue」即可发出。",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.textPrimary,
-                            )
-                        is FeedbackUiState.Failed ->
-                            Text(
-                                text = "提交失败：${fs.reason}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        else -> Unit
-                    }
-                }
-            }
+            // ================= 意见反馈（1.0.27 起独立页面） =================
+            // 不再内联在设置页：点这行跳到意见反馈页（提交链路见 FeedbackRepository）。
+            GlassInfoRow(
+                label = "意见反馈",
+                value = "去填写 →",
+                onClick = onNavigateFeedback,
+            )
 
             // ================= 关于 =================
             GlassSectionHeader(text = "关于")
@@ -608,20 +511,6 @@ fun SettingsScreen(
                             color = colors.textSecondary,
                         )
                     }
-                    // 1.0.13：Backdrop 只在 glass flavor 进包（plain 经 R8 全裁），
-                    // 许可行按 flavor 展示，不列用不到的库
-                    val licenses = buildString {
-                        append("Vico（Apache-2.0）、Shizuku（Apache-2.0）")
-                        if (BuildConfig.LIQUID_GLASS) {
-                            append("、Backdrop（Apache-2.0）")
-                        }
-                        append("、字体 Inter / JetBrains Mono（OFL-1.1）")
-                    }
-                    Text(
-                        text = "开源许可：$licenses。",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
                 }
             }
         }
@@ -793,52 +682,6 @@ private fun GalleryTile(onClick: () -> Unit) {
             text = "自定义",
             style = MaterialTheme.typography.labelSmall,
             color = cs.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * 玻璃风文本输入框（1.0.26 意见反馈用）。
- *
- * 项目此前没有任何输入场景，没有 M3 TextField 的封装；反馈卡片是第一个，
- * 先做一个够用的：BasicTextField + 与 GlassPanel 同款的描边/底色/圆角，
- * 空态显示 placeholder。只有这一个调用方，不强行抽进 kit。
- */
-@Composable
-private fun GlassTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    minLines: Int = 1,
-) {
-    val cs = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(12.dp)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(cs.surfaceContainer)
-            .border(
-                width = DesignTokens.Surface.BORDER_WIDTH.dp,
-                color = cs.outline.copy(alpha = DesignTokens.Surface.BORDER_ALPHA),
-                shape = shape,
-            )
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        if (value.isEmpty()) {
-            Text(
-                text = placeholder,
-                style = MaterialTheme.typography.bodyLarge,
-                color = cs.onSurfaceVariant,
-            )
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface),
-            cursorBrush = SolidColor(cs.primary),
-            minLines = minLines,
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

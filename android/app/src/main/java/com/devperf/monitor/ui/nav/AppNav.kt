@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -70,6 +71,7 @@ import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
 import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
+import com.devperf.monitor.ui.screen.FeedbackScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
@@ -91,6 +93,7 @@ object Routes {
     const val OVERVIEW = "overview"
     const val SETTINGS = "settings"
     const val DETAIL = "detail/{metricId}"
+    const val FEEDBACK = "feedback"
 
     fun detail(metricId: String) = "detail/$metricId"
 }
@@ -192,6 +195,13 @@ fun AppNav(
                     SettingsScreen(
                         viewModel = viewModel,
                         onRequestOverlayPermission = onRequestOverlayPermission,
+                        onNavigateFeedback = { navController.navigate(Routes.FEEDBACK) },
+                    )
+                }
+                composable(Routes.FEEDBACK) {
+                    FeedbackScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(Routes.DETAIL) { entry ->
@@ -218,15 +228,19 @@ fun AppNav(
             ) {
                 BottomNavBar(
                     currentRoute = currentRoute,
+                    // 幂等导航：重复 navigate 到当前页不会堆实例（launchSingleTop +
+                    // popUpTo 起始目的地）。Kyant0 catalog 的 demo 里 onTabSelected
+                    // 写的是 `{ selectedTabIndex = it }` 这种纯 setter；我们必须把
+                    // 「先判断再跳」的逻辑留在 Stack 外——组件内部的 LaunchedEffect
+                    // 只捕获第一次组合的 lambda，里面读到的 currentRoute 永远是陈旧的，
+                    // 于是拖动 pill 回第一个 tab 时它自己把调用吞掉了（表观：拖回去没反应）。
                     onSelect = { route ->
-                        if (route != currentRoute) {
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
                             }
+                            launchSingleTop = true
+                            restoreState = true
                         }
                     },
                 )
@@ -257,7 +271,7 @@ fun AppNav(
  * 与 iOS 的 FloatingCapsuleBar 用同一组数字。
  */
 @Composable
-private fun BottomNavBar(
+internal fun BottomNavBar(
     currentRoute: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -274,6 +288,14 @@ private fun BottomNavBar(
     // tab、onTabSelected 被重复回调、页面被导航回原页面，用户感知「拖回去卡死，
     // 必须点第 1 个 tab」。按 selectedIndex 的值 remember，保证值不变时实例稳定。
     val selectedTabIndexProvider = remember(selectedIndex) { { selectedIndex } }
+
+    // LiquidBottomTabs 内部把回调捕获在 LaunchedEffect(dampedDragAnimation) 里
+    // （effect 的 key 恒不变，回调因此永远是第一次组合那一版）。若回调里读取
+    // currentRoute / onSelect 这些 Compose 参数或外部 lambda，读到的就是陈旧值：
+    // 拖动 pill 回到第 1 个 tab 时会因为「当前页 == 目标页」而吞掉导航。
+    // rememberUpdatedState 让回调每次都读到最新实例——语义对齐上游 demo 的
+    // 纯 setter（{ selectedTabIndex = it }），配合 AppNav 里的幂等 navigate。
+    val currentOnSelect by rememberUpdatedState(onSelect)
 
     // 主窗口（backdrop 非 null）走 catalog LiquidBottomTabs（见下方 glassOn 分支）；
     // 悬浮窗 / 无玻璃保留自绘路径：Surface + 投影 + 描边 + 弹簧滑动指示器。
@@ -341,12 +363,9 @@ private fun BottomNavBar(
             LiquidBottomTabs(
                 selectedTabIndex = selectedTabIndexProvider,
                 onTabSelected = { index ->
-                    // 拖动 pill 切换：与点击 tab 走同一条导航链路
-                    val route = topLevelTabs[index].route
-                    if (route != currentRoute) {
-                        haptics.select()
-                        onSelect(route)
-                    }
+                    // 拖动 pill 切换：与点击 tab 走同一条幂等导航链路
+                    haptics.select()
+                    currentOnSelect(topLevelTabs[index].route)
                 },
                 backdrop = backdrop,
                 tabsCount = topLevelTabs.size,
@@ -355,10 +374,8 @@ private fun BottomNavBar(
                 topLevelTabs.forEach { tab ->
                     LiquidBottomTab(
                         onClick = {
-                            if (tab.route != currentRoute) {
-                                haptics.select()
-                                onSelect(tab.route)
-                            }
+                            haptics.select()
+                            currentOnSelect(tab.route)
                         },
                     ) {
                         // 图标/文字用统一内容色：选中感由滑动玻璃 pill 提供（官方 demo 同款），
