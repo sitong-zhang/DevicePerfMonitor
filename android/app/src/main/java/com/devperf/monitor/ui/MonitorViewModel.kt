@@ -18,7 +18,6 @@ import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.AppRelease
 import com.devperf.monitor.data.FeedbackRepository
-import com.devperf.monitor.data.FeedbackRepository.SubmitResult
 import com.devperf.monitor.data.SettingsRepository
 import com.devperf.monitor.data.AnnouncementRepository
 import com.devperf.monitor.data.UpdateRepository
@@ -288,8 +287,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ---------------------------------------------------------------------
-    // 意见反馈（1.0.26 新增）：反馈 → GitHub Issue（label=feedback），
-    // 管理端「反馈收件箱」按 label 拉取。无 token 时降级网页通道。
+    // 意见反馈（1.0.28 起为邮箱通道）：拼预填 mailto 链接，反馈页拉起
+    // 邮件 App 发到官方邮箱。纯本地拼装，无网络请求。
     // ---------------------------------------------------------------------
 
     private val feedbackRepo = FeedbackRepository()
@@ -297,27 +296,28 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private val _feedbackState = MutableStateFlow<FeedbackUiState>(FeedbackUiState.Idle)
     val feedbackState = _feedbackState.asStateFlow()
 
+    /** 反馈收件邮箱（反馈页展示用）。 */
+    val feedbackEmail: String get() = feedbackRepo.targetEmail
+
+    /** 拼预填邮件正文（反馈页「复制内容」兜底用）。 */
+    fun buildFeedbackMailBody(content: String, contact: String): String =
+        feedbackRepo.buildMailBody(content, contact)
+
     /**
-     * 提交反馈。[content] 反馈正文（非空白由设置页按钮禁用态保证），
-     * [contact] 可选联系方式。重复提交直接复用同一入口，状态机自然覆盖。
+     * 提交反馈：立即拼出预填 mailto 链接放进状态，反馈页收到后拉起邮件 App。
+     * [content] 反馈正文（非空白由反馈页按钮禁用态保证），[contact] 可选联系方式。
      */
     fun submitFeedback(content: String, contact: String) {
-        if (_feedbackState.value == FeedbackUiState.Submitting) return
-        _feedbackState.value = FeedbackUiState.Submitting
-        viewModelScope.launch {
-            _feedbackState.value = when (val result = feedbackRepo.submit(content, contact)) {
-                is SubmitResult.Submitted -> FeedbackUiState.Submitted(result.issueUrl)
-                is SubmitResult.BrowserFallback -> FeedbackUiState.BrowserFallback(result.url)
-                is SubmitResult.Failed -> FeedbackUiState.Failed(result.reason)
-            }
+        _feedbackState.value = try {
+            FeedbackUiState.EmailReady(feedbackRepo.buildMailto(content, contact))
+        } catch (e: Exception) {
+            FeedbackUiState.Failed(e.message ?: "拼装邮件失败，请重试")
         }
     }
 
-    /** 用户改过反馈内容时，把上次的终态清掉（避免「已提交」和草稿并存）。 */
+    /** 用户改过反馈内容时，把上次的终态清掉（避免「已就绪」和草稿并存）。 */
     fun resetFeedbackState() {
-        if (_feedbackState.value !is FeedbackUiState.Submitting) {
-            _feedbackState.value = FeedbackUiState.Idle
-        }
+        _feedbackState.value = FeedbackUiState.Idle
     }
 
     /** 当前采集间隔（数值动画打断策略用）。 */

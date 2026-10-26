@@ -496,6 +496,36 @@ fun SettingsScreen(
             GlassSectionHeader(text = "关于")
             GlassPanel {
                 Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // 品牌卡（1.0.28）：出品方「分子智能科技」logo 与落款。
+                    // logo 白底，垫在白色圆角块上避免深色主题下出现突兀白边。
+                    Image(
+                        painter = painterResource(R.drawable.brand_logo),
+                        contentDescription = "分子智能科技 Molecule Technology",
+                        contentScale = ContentScale.FillWidth,
+                        modifier = Modifier
+                            .fillMaxWidth(0.66f)
+                            .clip(RoundedCornerShape(DesignTokens.Radius.SMALL.dp))
+                            .background(androidx.compose.ui.graphics.Color.White)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    )
+                    Text(
+                        text = "用心感知设备的每一次跳动",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                    Text(
+                        text = "© 2026 分子智能科技 Molecule Technology",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
+            GlassPanel {
+                Column(
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                 ) {
                     // 版本号读 BuildConfig：与 versionName 永远一致，发版只改一处

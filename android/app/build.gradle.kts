@@ -1,6 +1,4 @@
 import com.devperf.monitor.buildlogic.GenerateDesignTokensTask
-import java.nio.charset.StandardCharsets
-import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -40,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 28
-        versionName = "1.0.27"
+        versionCode = 29
+        versionName = "1.0.28"
         vectorDrawables.useSupportLibrary = true
 
         // 液态玻璃开关。1.0.13~1.0.15 曾用 productFlavors 出「玻璃 / 无玻璃」双包，
@@ -49,25 +47,13 @@ android {
         // 保留常量是为了不动各 UI 组件里已有的 BuildConfig.LIQUID_GLASS 分支判定。
         buildConfigField("boolean", "LIQUID_GLASS", "true")
 
-        // 反馈通道 token（1.0.27）：GitHub fine-grained PAT（issues:write，仅本仓库）。
-        // 本地/CI 用 -PdevperfFeedbackToken=... 或环境变量 DEVPERF_FEEDBACK_TOKEN
-        // 注入；为空串时 App 自动降级为「打开 GitHub 网页预填 issue」，反馈路径不断
-        // （见 data/FeedbackRepository）。
-        //
-        // 进包前做 base64：避免明文 token 直接出现在 DEX 字符串常量表（配合 release
-        // 的 R8 混淆，进一步增加逆向提取难度）。这不是加密，只是不裸奔；真正的安全
-        // 靠「最小权限 PAT」——只授本仓库 issues:write，泄露了最多让人刷几个 issue。
-        val feedbackToken = (project.findProperty("devperfFeedbackToken") as String?)
-            ?: System.getenv("DEVPERF_FEEDBACK_TOKEN")
+        // 反馈收件邮箱（1.0.28 起反馈走邮箱通道）：构建可用 -PdevperfFeedbackEmail=...
+        // 或环境变量 DEVPERF_FEEDBACK_EMAIL 覆盖；没配就用内置默认值（见
+        // data/FeedbackRepository.DEFAULT_EMAIL）。
+        val feedbackEmail = (project.findProperty("devperfFeedbackEmail") as String?)
+            ?: System.getenv("DEVPERF_FEEDBACK_EMAIL")
             ?: ""
-        val feedbackTokenB64 = if (feedbackToken.isEmpty()) {
-            ""
-        } else {
-            Base64.getEncoder().encodeToString(
-                feedbackToken.toByteArray(StandardCharsets.UTF_8),
-            )
-        }
-        buildConfigField("String", "GITHUB_FEEDBACK_TOKEN_B64", "\"$feedbackTokenB64\"")
+        buildConfigField("String", "FEEDBACK_EMAIL", "\"$feedbackEmail\"")
     }
 
     // 说明：1.0.16 起不再有 productFlavors（原 glass / plain 双包已合并为单包），

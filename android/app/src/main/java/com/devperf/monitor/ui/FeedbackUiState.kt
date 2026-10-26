@@ -1,19 +1,15 @@
 package com.devperf.monitor.ui
 
 /**
- * 意见反馈的提交状态机（1.0.26 新增）。
+ * 意见反馈的提交状态（1.0.28 起为邮箱通道，纯本地拼装、无网络请求）。
  *
  * - [Idle]：没提交过；
- * - [Submitting]：正在创建 issue；
- * - [Submitted]：token 通道成功，[issueUrl] 可空（解析失败时至少告诉用户成功了）；
- * - [BrowserFallback]：没配 token，设置页拿到 [url] 后直接拉起系统浏览器
- *   （GitHub new-issue 页，标题/正文/label 已预填）；
- * - [Failed]：网络或服务端失败，[reason] 直接展示给用户。
+ * - [EmailReady]：预填邮件已就绪（[mailtoUrl]），反馈页拉起邮件 App 发送；
+ *   打不开邮件 App 时反馈页降级为复制到剪贴板；
+ * - [Failed]：异常兜底（正常流程不会走到）。
  */
 sealed interface FeedbackUiState {
     data object Idle : FeedbackUiState
-    data object Submitting : FeedbackUiState
-    data class Submitted(val issueUrl: String?) : FeedbackUiState
-    data class BrowserFallback(val url: String) : FeedbackUiState
+    data class EmailReady(val mailtoUrl: String) : FeedbackUiState
     data class Failed(val reason: String) : FeedbackUiState
 }
