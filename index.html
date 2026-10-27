@@ -151,7 +151,6 @@ footer a:hover{color:#fff}
       <nav class="links">
         <a href="#products">产品</a>
         <a href="#download">下载</a>
-        <a href="#tools">工具</a>
         <a href="#trust">数据承诺</a>
         <a href="#about">关于我们</a>
         <a href="#contact">联系我们</a>
@@ -189,7 +188,7 @@ footer a:hover{color:#fff}
       <div class="card"><div class="ic" style="background:#FFF6E0;color:#B8860B"><svg class="ic-svg"><use href="#i-bell"/></svg></div><h3>智能告警</h3><p>过热、高负载、低存储等异常自动提醒，问题发生的当下就知道。</p></div>
       <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-shield"/></svg></div><h3>隐私优先</h3><p>监测数据全部保存在本机，不注册、不登录、不上传，用得安心。</p></div>
     </div>
-    <p class="prod-note">「见微 性能监测」Android 版已发布，可在 <a href="https://github.com/sitong-zhang/DevicePerfMonitor/releases" target="_blank" rel="noopener">官方发布页</a> 下载；苹果端见下方下载区的开源自签安装工具。</p>
+    <p class="prod-note">「见微 · 安卓版」已发布，可在 <a href="https://github.com/sitong-zhang/DevicePerfMonitor/releases" target="_blank" rel="noopener">官方发布页</a> 下载；「见微 · 苹果版」为 iOS 源码，需经 Apple ID 签名安装，见下方下载区。</p>
   </div>
 </section>
 
@@ -228,14 +227,14 @@ footer a:hover{color:#fff}
 
 <section id="download" class="download">
   <div class="wrap">
-    <h2 class="sec-title">立即下载</h2>
-    <p class="sec-sub">见微 提供 Android 与 Apple 双平台：Android 端性能监测 App，苹果端开源自签安装工具。</p>
+    <h2 class="sec-title">下载</h2>
+    <p class="sec-sub">见微 提供两个版本：安卓版直接安装，苹果版用你自己的 Apple ID 签名后装进 iPhone。</p>
     <div class="dl-card">
       <div class="dl-info">
         <div class="dl-ic"><svg class="ic-svg"><use href="#i-download"/></svg></div>
         <div>
-          <h3>见微 性能监测 · Android</h3>
-          <p>最新正式版 v1.0.31 · 约 4 MB · 无需注册登录 · 离线隐私优先</p>
+          <h3>见微 · 安卓版</h3>
+          <p>性能监测 App · 最新正式版 v1.0.31 · 约 4 MB · 无需注册登录 · 离线隐私优先</p>
         </div>
       </div>
       <div class="dl-actions">
@@ -247,31 +246,16 @@ footer a:hover{color:#fff}
       <div class="dl-info">
         <div class="dl-ic" style="background:#FFF6E0;color:#B8860B"><svg class="ic-svg"><use href="#i-wrench"/></svg></div>
         <div>
-          <h3>见微 自签安装 · Apple / iPhone</h3>
-          <p>开源自签安装工具 · 用你自己的 Apple ID 把应用装进 iPhone · 无需越狱、无需企业证书</p>
+          <h3>见微 · 苹果版</h3>
+          <p>同款性能监测 App（iOS 源码）· 用你自己的 Apple ID 签名安装到 iPhone · 无需越狱、无需企业证书</p>
         </div>
       </div>
       <div class="dl-actions">
-        <a class="btn btn-primary" href="https://github.com/sitong-zhang/DevicePerfMonitor/tree/main/sign-tool" target="_blank" rel="noopener"><svg class="ic-svg"><use href="#i-wrench"/></svg>查看源码</a>
-        <a class="btn btn-ghost" href="https://github.com/sitong-zhang/DevicePerfMonitor" target="_blank" rel="noopener">项目主页</a>
+        <a class="btn btn-primary" href="https://github.com/sitong-zhang/DevicePerfMonitor/tree/main/ios" target="_blank" rel="noopener"><svg class="ic-svg"><use href="#i-wrench"/></svg>获取苹果版</a>
+        <a class="btn btn-ghost" href="https://github.com/sitong-zhang/DevicePerfMonitor/tree/main/sign-tool" target="_blank" rel="noopener">签名工具</a>
       </div>
     </div>
-    <p class="prod-note">Android 安装包下载后允许「未知来源」即可使用；苹果端为开源工程，需在 Mac 上用 Xcode 自行构建。</p>
-  </div>
-</section>
-
-<section id="tools" class="tools">
-  <div class="wrap">
-    <h2 class="sec-title">开源与源码</h2>
-    <p class="sec-sub">本项目完整源码已在 GitHub 开源，可自由查看、自行构建。</p>
-    <div class="features">
-      <div class="card">
-        <div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-wrench"/></svg></div>
-        <h3>全部源码已开源</h3>
-        <p>性能监测 App 与苹果端自签安装工具均托管在同一仓库，从下载、证书申请到签名的全流程代码公开透明。</p>
-        <a class="tool-link" href="https://github.com/sitong-zhang/DevicePerfMonitor" target="_blank" rel="noopener">查看仓库 →</a>
-      </div>
-    </div>
+    <p class="prod-note">安卓版下载后允许「未知来源」即可安装。苹果版为 iOS 工程源码，需在 Mac 上用 Xcode 编译导出未签名安装包，再用仓库内的签名工具填入你的 Apple ID 完成签名与安装；证书 7 天有效，到期续签即可。所有源码已在 GitHub 开源，可自由查看。</p>
   </div>
 </section>
 
