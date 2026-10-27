@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>分子智能科技 Molecule Technology - 用心感知设备的每一次跳动</title>
-<meta name="description" content="分子智能科技（Molecule Technology）专注移动设备智能监测与效率工具，旗下产品「设备性能监控」为用户提供专业的实时性能监测服务。">
+<title>观序 GuanXu · 分子智能科技 Molecule Technology</title>
+<meta name="description" content="观序（GuanXu）由分子智能科技出品，是一款跨安卓与苹果平台的设备性能监测工具，内置本地账号体系，数据全程本地处理、不上传任何服务器。">
 <style>
 :root{
   --blue:#1B6BFF; --blue-deep:#0B3FA8; --yellow:#FFC53D;
@@ -33,7 +33,7 @@ header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.86);backdro
 /* Hero */
 .hero{position:relative;overflow:hidden;background:linear-gradient(160deg,#0E2A66 0%,#0B3FA8 55%,#1B6BFF 100%);color:#fff;padding:96px 0 110px}
 .hero h1{font-size:44px;line-height:1.3;font-weight:800;letter-spacing:1px}
-.hero p.sub{margin-top:18px;font-size:18px;color:#D9E6FF;max-width:640px}
+.hero p.sub{margin-top:18px;font-size:18px;color:#D9E6FF;max-width:680px}
 .hero .cta{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:9px;padding:12px 26px;border-radius:999px;font-size:15px;font-weight:600;transition:.2s}
 .btn .ic-svg{width:18px;height:18px}
@@ -48,14 +48,25 @@ section{padding:76px 0}
 .sec-title{font-size:28px;font-weight:800;text-align:center}
 .sec-sub{margin-top:10px;text-align:center;color:var(--ink-2);font-size:15px}
 
-/* 产品 */
-.features{margin-top:44px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+/* 平台双版本 */
+.platforms{margin-top:44px;display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
+.plat{background:#fff;border:1px solid var(--line);border-radius:18px;padding:30px 26px;box-shadow:0 8px 22px rgba(11,31,51,.06);display:flex;flex-direction:column}
+.plat .badge{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;font-size:13px;font-weight:600;padding:6px 14px;border-radius:999px;margin-bottom:16px}
+.plat .badge.android{background:#E7F6EC;color:#1E8E3E}
+.plat .badge.ios{background:#EAF1FF;color:var(--blue)}
+.plat h3{font-size:20px;margin-bottom:10px}
+.plat p{font-size:14px;color:var(--ink-2);flex:1}
+.plat .dl{margin-top:18px;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:12px 22px;border-radius:12px;font-weight:600;font-size:15px;background:var(--blue);color:#fff;transition:.2s}
+.plat .dl:hover{filter:brightness(1.06)}
+.plat .dl .ic-svg{width:18px;height:18px}
+.plat .hint{margin-top:10px;font-size:12.5px;color:#8A97AD}
+
+/* 功能特性 */
+.features{margin-top:30px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px 22px;box-shadow:0 6px 18px rgba(11,31,51,.05)}
 .card .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
 .card h3{font-size:17px;margin-bottom:8px}
 .card p{font-size:14px;color:var(--ink-2)}
-.prod-note{margin-top:34px;text-align:center;font-size:14px;color:var(--ink-2)}
-.prod-note a{color:var(--blue);font-weight:600}
 
 /* 数据承诺 */
 .trust{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
@@ -88,7 +99,7 @@ footer a:hover{color:#fff}
 
 @media(max-width:860px){
   .hero h1{font-size:32px}
-  .features,.trust .row{grid-template-columns:1fr}
+  .platforms,.features,.trust .row{grid-template-columns:1fr}
   .about{grid-template-columns:1fr}
   .nav .links{display:none}
 }
@@ -125,18 +136,20 @@ footer a:hover{color:#fff}
     <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" x2="12" y1="15" y2="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-handshake" viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m21 3 1 11h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 4h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-apple" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.56-1.702z" fill="currentColor"/></symbol>
+    <symbol id="i-android" viewBox="0 0 24 24"><path d="M6 8.5 3 5.5V11h3zM18 8.5 21 5.5V11h-3zM12 2 9 5h6l-3-3zM5 11h14a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
 
 <header>
   <div class="wrap nav">
-    <a class="brand" href="./"><svg class="mark"><use href="#logo-mark"/></svg>分子智能科技</a>
+    <a class="brand" href="./"><svg class="mark"><use href="#logo-mark"/></svg>观序 GuanXu</a>
     <div class="nav-right">
       <nav class="links">
-        <a href="#products">产品</a>
+        <a href="#products">下载</a>
+        <a href="#features">功能</a>
         <a href="#trust">数据承诺</a>
         <a href="#about">关于我们</a>
-        <a href="#contact">联系我们</a>
         <a href="./privacy.html">隐私政策</a>
       </nav>
       <!-- 右上角公司 logo -->
@@ -149,29 +162,53 @@ footer a:hover{color:#fff}
 
 <section class="hero">
   <div class="wrap">
-    <h1>用心感知设备的每一次跳动</h1>
-    <p class="sub">分子智能科技（Molecule Technology）专注移动设备智能监测与效率工具，让每一位用户都能轻松读懂自己的设备。</p>
+    <h1>观序 GuanXu · 用心看清设备的每一次跳动</h1>
+    <p class="sub">观序 由分子智能科技（Molecule Technology）出品，是一款覆盖安卓与苹果双平台的设备性能监测工具。内置本地账号体系，数据全程在本机处理，安心看得见。</p>
     <div class="cta">
-      <a class="btn btn-primary" href="#products"><svg class="ic-svg"><use href="#i-download"/></svg>了解「设备性能监控」</a>
+      <a class="btn btn-primary" href="#products"><svg class="ic-svg"><use href="#i-download"/></svg>下载观序</a>
       <a class="btn btn-ghost" href="#contact"><svg class="ic-svg"><use href="#i-handshake"/></svg>商务合作</a>
     </div>
-    <div class="meta">实时性能监测 · 数据全程本地处理 · 不上传任何服务器</div>
+    <div class="meta">实时性能监测 · 安卓 / 苹果双平台 · 本地账号 · 数据不上传服务器</div>
   </div>
 </section>
 
 <section id="products">
   <div class="wrap">
-    <h2 class="sec-title">旗下产品</h2>
+    <h2 class="sec-title">双平台下载</h2>
+    <p class="sec-sub">一份对设备的专注，安卓与苹果同样用心。</p>
+
+    <div class="platforms">
+      <div class="plat">
+        <span class="badge android"><svg class="ic-svg"><use href="#i-android"/></svg>安卓版</span>
+        <h3>观序 安卓版</h3>
+        <p>实时性能监测、悬浮窗速览、历史曲线一应俱全。首次打开需注册 / 登录本地账号后即可使用。</p>
+        <a class="dl" href="https://github.com/sitong-zhang/DevicePerfMonitor/releases" target="_blank" rel="noopener"><svg class="ic-svg"><use href="#i-download"/></svg>下载 APK</a>
+        <div class="hint">在 GitHub Releases 获取最新 Android 安装包。</div>
+      </div>
+
+      <div class="plat">
+        <span class="badge ios"><svg class="ic-svg"><use href="#i-apple"/></svg>苹果版</span>
+        <h3>观序 苹果版（含自签工具）</h3>
+        <p>苹果版内置签名工具，每次签名都会自动从仓库拉取最新的「观序 未签名安装包」，用你自己的 Apple ID 免费签名后安装到 iPhone。</p>
+        <a class="dl" href="https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/ios-unsigned" target="_blank" rel="noopener"><svg class="ic-svg"><use href="#i-download"/></svg>下载未签名包 / 签名工具</a>
+        <div class="hint">免费 Apple ID 证书 7 天有效，到期重新签名安装即可。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2 class="sec-title">核心功能</h2>
     <p class="sec-sub">从一颗芯片的温度，到一次卡顿的根源，帮你看清设备的每一面。</p>
     <div class="features">
       <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-activity"/></svg></div><h3>实时性能监测</h3><p>CPU、内存、电池、网络、帧率全维度实时采集，三大核心指标一屏尽览。</p></div>
       <div class="card"><div class="ic" style="background:#FFF6E0;color:#B8860B"><svg class="ic-svg"><use href="#i-pip"/></svg></div><h3>悬浮窗速览</h3><p>游戏、视频、导航时悬浮窗常驻显示关键指标，无需切换应用。</p></div>
       <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-chart"/></svg></div><h3>历史与图表</h3><p>指标历史曲线与逐时统计，性能变化趋势一眼看懂，支持详情回溯。</p></div>
-      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-droplets"/></svg></div><h3>液态玻璃设计</h3><p>自研液态玻璃视觉体系，通透质感与流畅动效，界面好看更好用。</p></div>
+      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-droplets"/></svg></div><h3>本地账号体系</h3><p>内置注册 / 登录 / 登出，账号与性能数据均仅保存在本机，不上传任何服务器。</p></div>
       <div class="card"><div class="ic" style="background:#FFF6E0;color:#B8860B"><svg class="ic-svg"><use href="#i-bell"/></svg></div><h3>智能告警</h3><p>过热、高负载、低存储等异常自动提醒，问题发生的当下就知道。</p></div>
-      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-shield"/></svg></div><h3>隐私优先</h3><p>监测数据全部保存在本机，不注册、不登录、不上传，用得安心。</p></div>
+      <div class="card"><div class="ic" style="background:#EAF1FF;color:var(--blue)"><svg class="ic-svg"><use href="#i-shield"/></svg></div><h3>隐私优先</h3><p>监测数据全部保存在本机，本地账号不上传，用得安心。</p></div>
     </div>
-    <p class="prod-note">「设备性能监控」Android 版已发布，可在 <a href="https://github.com/sitong-zhang/DevicePerfMonitor/releases" target="_blank" rel="noopener">官方发布页</a> 下载最新版本。</p>
   </div>
 </section>
 
@@ -181,7 +218,7 @@ footer a:hover{color:#fff}
     <p class="sec-sub">我们对用户数据的处理原则，简单直接。</p>
     <div class="row">
       <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-shield"/></svg></div><div class="big">0 上传</div><p>性能监测数据仅存储在你的设备本地，不会上传到任何服务器。</p></div>
-      <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-activity"/></svg></div><div class="big">0 账号</div><p>无需注册登录，不收集手机号、身份信息等个人资料。</p></div>
+      <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-activity"/></svg></div><div class="big">本地账号</div><p>账号体系仅存在于本机，不收集手机号、身份信息等个人资料，不上传云端。</p></div>
       <div class="item"><div class="ic"><svg class="ic-svg"><use href="#i-chart"/></svg></div><div class="big">100% 透明</div><p>权限用途逐条说明，隐私政策写得明白，随时可查阅。</p></div>
     </div>
   </div>
@@ -192,11 +229,11 @@ footer a:hover{color:#fff}
     <div>
       <h2 class="sec-title" style="text-align:left">关于我们</h2>
       <p>分子智能科技（Molecule Technology）是一家专注于移动设备智能监测与效率工具的科技公司，总部位于中国武汉。我们相信，好的工具应该像分子一样——安静、精确、无处不在地发挥作用。</p>
-      <p>团队由资深移动端工程师与设计师组成，坚持小步快跑、持续打磨。旗下首款产品「设备性能监控」面向 Android 平台，以专业、克制、注重隐私的产品理念，帮助普通用户也能专业地理解自己的设备。</p>
+      <p>团队由资深移动端工程师与设计师组成，坚持小步快跑、持续打磨。旗下产品「观序」面向安卓与苹果双平台，以专业、克制、注重隐私的产品理念，帮助普通用户也能专业地理解自己的设备。</p>
       <div class="facts">
         <div class="fact"><b>2024</b><span>公司成立</span></div>
         <div class="fact"><b>武汉 · 中国</b><span>总部所在地</span></div>
-        <div class="fact"><b>Android</b><span>产品平台方向</span></div>
+        <div class="fact"><b>Android / iOS</b><span>产品平台方向</span></div>
         <div class="fact"><b>隐私优先</b><span>产品设计底线</span></div>
       </div>
     </div>
@@ -218,7 +255,7 @@ footer a:hover{color:#fff}
 
 <footer>
   <div class="wrap cols">
-    <div>© 2026 分子智能科技 Molecule Technology. 保留所有权利。</div>
+    <div>© 2026 分子智能科技 Molecule Technology · 观序 GuanXu. 保留所有权利。</div>
     <div>
       <a href="./privacy.html">隐私政策</a> · <a href="./terms.html">用户协议</a> · <a href="mailto:wpqptwy@qq.com">联系我们</a>
     </div>
