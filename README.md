@@ -1,4 +1,6 @@
-# DevicePerfMonitor
+# 见微 · DevicePerfMonitor
+
+一套专注移动设备性能与自由安装的轻量工具：Android 端实时性能监测，苹果端开源自签安装，两端都尊重你的隐私。
 
 一个看设备实时状态的 App。打开就能看内存占用、温度、屏幕刷新率和帧率，还有一个综合评分；还能开一个全局悬浮窗，退到后台自动隐藏、回到前台自动出现。
 
@@ -19,7 +21,7 @@
 
 ## 下载与版本
 
-安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，只发 Android 一个 APK（液态玻璃版，文件名 `DevicePerfMonitor-<版本>-release.apk`）。iOS 版已停止维护并从仓库移除（1.0.30 起），不再构建。
+安装包在 [Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面，Android 端只发一个 APK（液态玻璃版，文件名 `DevicePerfMonitor-<版本>-release.apk`）。
 
 ## 构建
 
@@ -38,6 +40,16 @@ cd android
 - **keystore 和密码务必备份**。私钥丢了无法补签，只能换签名让用户卸载重装。备份建议放密码管理器 + 离线副本。
 - GitHub 仓库 secrets 已配置：`DEVPERF_KEYSTORE_BASE64` / `DEVPERF_KEYSTORE_PASSWORD` / `DEVPERF_KEY_ALIAS` / `DEVPERF_KEY_PASSWORD`，CI 构建时自动还原签名配置，并在产物里核对证书是 `CN=DevicePerfMonitor`。
 
+## 苹果端：自签安装工具（sign-tool/）
+
+仓库内的 `sign-tool/` 是一套开源自签安装工具，用于在 iPhone 上用你自己的 Apple ID 把应用安装到本机，无需越狱、无需企业证书。它包含从下载指定 IPA、申请临时开发证书、签名到无线安装的全流程。
+
+**构建（需要 macOS + Xcode 16+）**
+
+直接用 Xcode 打开 `sign-tool/Feather.xcworkspace` 编译，再借助 AltStore / SideStore 之类把 App 自身装进手机即可。`sign-tool/` 已内联 `Zsign`、`IDeviceKitten` 等依赖，无需再初始化子模块。详见 `sign-tool/README.md`。
+
+> 注意：免费 Apple ID 申请的开发证书有效期为 7 天，到期需重新签名安装。
+
 ## 权限（Android）
 
 - `SYSTEM_ALERT_WINDOW`：全局悬浮窗，必需，拒绝就引导去系统设置授权。
@@ -53,4 +65,5 @@ cd android
 
 ## License
 
-Apache-2.0，见 `LICENSE`。第三方库协议见仓库依赖声明。
+- Android 端应用（仓库根目录及 `android/`）采用 **Apache-2.0**，见根目录 `LICENSE`。
+- `sign-tool/`（含内联的 `Zsign`、`IDeviceKitten` 等）整体沿用上游 **GPL-3.0**，见 `sign-tool/LICENSE`。署名与版权信息保留在对应源码文件头中。
