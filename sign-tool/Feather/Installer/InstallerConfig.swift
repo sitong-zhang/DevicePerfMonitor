@@ -9,8 +9,9 @@ enum InstallerConfig {
 	// MARK: - 要安装的 IPA（GitHub Release）
 	static let repoOwner = "sitong-zhang"
 	static let repoName = "DevicePerfMonitor"
-	/// 资产筛选：取第一个以它结尾的资源。写死 .ipa，别的格式不会被拿去签名
+	/// 资产筛选：优先取文件名含此关键字的 .ipa（苹果版未签名安装包），没有再退回任意 .ipa
 	static let ipaSuffix = ".ipa"
+	static let ipaNameHint = "JianWei"
 	
 	// MARK: - Apple 登录
 	/// anisette 服务器。需要一个 Mac 身份的（现在 Android 身份的会被拒）。

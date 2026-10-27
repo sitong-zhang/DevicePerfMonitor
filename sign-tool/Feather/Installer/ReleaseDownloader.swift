@@ -37,7 +37,9 @@ final class ReleaseDownloader {
 		}
 		
 		let release = try JSONDecoder().decode(ReleaseInfo.self, from: data)
-		guard let asset = release.assets.first(where: { $0.name.hasSuffix(InstallerConfig.ipaSuffix) }) else {
+		let ipas = release.assets.filter { $0.name.hasSuffix(InstallerConfig.ipaSuffix) }
+		// 优先取文件名含 ipaNameHint 的资产（苹果版未签名安装包），否则退回任意一个 .ipa
+		guard let asset = ipas.first(where: { $0.name.contains(InstallerConfig.ipaNameHint) }) ?? ipas.first else {
 			throw InstallerError.noIPAInRelease
 		}
 		Logger.misc.info("Release \(release.tagName) → 资产 \(asset.name)")
