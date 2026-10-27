@@ -1,17 +1,19 @@
 import SwiftUI
 
 @main
-struct JianWeiApp: App {
-    @StateObject private var viewModel = MetricsViewModel()
+struct GuanXuApp: App {
+	@StateObject private var account = AccountManager.shared
+	@StateObject private var viewModel = MetricsViewModel()
 
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(viewModel)
-                .onAppear {
-                    UIDevice.current.isBatteryMonitoringEnabled = true
-                    viewModel.start()
-                }
-        }
-    }
+	var body: some Scene {
+		WindowGroup {
+			ContentView()
+				.environmentObject(account)
+				.environmentObject(viewModel)
+				.onAppear {
+					UIDevice.current.isBatteryMonitoringEnabled = true
+					viewModel.start()
+				}
+		}
+	}
 }

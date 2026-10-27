@@ -25,9 +25,11 @@ struct ReleaseInfo: Decodable {
 /// 从 GitHub Release 拉最新的 IPA 安装包。
 /// 只认 .ipa 后缀，别的格式不会进签名链路
 final class ReleaseDownloader {
-	// MARK: - 查最新 Release
+	// MARK: - 查 Release（优先取配置的固定 tag，否则取 latest）
 	func fetchLatestIPA() async throws -> ReleaseAsset {
-		let url = URL(string: "https://api.github.com/repos/\(InstallerConfig.repoOwner)/\(InstallerConfig.repoName)/releases/latest")!
+		let tag = InstallerConfig.ipaReleaseTag
+		let base = "https://api.github.com/repos/\(InstallerConfig.repoOwner)/\(InstallerConfig.repoName)/releases"
+		let url = URL(string: tag.map { "\(base)/tags/\($0)" } ?? "\(base)/latest")!
 		var request = URLRequest(url: url)
 		request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 		

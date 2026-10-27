@@ -50,7 +50,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.BuildConfig
+import com.devperf.monitor.MonitorApp
 import com.devperf.monitor.R
+import com.devperf.monitor.account.AccountManager
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.data.ThemeMode
@@ -100,6 +102,10 @@ fun SettingsScreen(
     // 这里借它让下面的特权通道三态重新读一次（backend 本身不是 State）
     val snapshot by viewModel.snapshot.collectAsState()
     val haptics = rememberHaptics()
+
+    // 账号：仅保存在本机，用于登录态持久化
+    val accountManager = (context.applicationContext as MonitorApp).accountManager
+    val account by accountManager.session.collectAsState()
 
     // 权限状态跟着系统走：从系统设置页授权后返回，这里要立刻变成"已授权"
     val overlayGranted by viewModel.overlayGranted.collectAsState()
@@ -154,6 +160,37 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.textPrimary,
             )
+
+            // ================= 账号 =================
+            GlassSectionHeader(text = "账号")
+            GlassPanel {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+                ) {
+                    if (account != null) {
+                        GlassInfoRow(label = "当前账号", value = account?.username ?: "—")
+                        GlassButton(
+                            text = "退出登录",
+                            onClick = {
+                                haptics.tick()
+                                accountManager.logout()
+                            },
+                            variant = GlassButtonVariant.SECONDARY,
+                        )
+                    } else {
+                        Text(
+                            text = "未登录",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.textSecondary,
+                        )
+                    }
+                    Text(
+                        text = "账号仅保存在本机，用于登录态持久化，不上传任何服务器。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
 
             // ================= 悬浮窗 =================
             GlassSectionHeader(text = "全局悬浮窗")
@@ -541,10 +578,10 @@ fun SettingsScreen(
             }
             // 应用简介：客观描述产品定位与数据处理方式，非营销话术。
             GlassPanel {
-                Text(
-                    text = "设备性能监控 由分子智能科技出品，提供 CPU、内存、电池、" +
-                        "网络等设备的实时性能监测与历史记录，帮助你了解设备的运行状态。" +
-                        "所有监测数据均在本地设备上处理，不会上传到任何服务器。",
+                    Text(
+                        text = "观序 由分子智能科技出品，提供 CPU、内存、电池、" +
+                            "网络等设备的实时性能监测与历史记录，帮助你了解设备的运行状态。" +
+                            "所有监测数据均在本地设备上处理，不会上传到任何服务器。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.textSecondary,
                 )

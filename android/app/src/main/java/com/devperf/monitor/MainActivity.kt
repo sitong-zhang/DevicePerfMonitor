@@ -15,6 +15,7 @@ import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.nav.AppNav
+import com.devperf.monitor.ui.screen.LoginScreen
 import com.devperf.monitor.ui.theme.DevicePerfTheme
 import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnRequestPermissionResultListener
@@ -66,15 +67,21 @@ class MainActivity : ComponentActivity() {
         BootTrace.mark("setContent 开始")
         setContent {
             val settings by viewModel.settings.collectAsState()
+            val accountManager = (application as MonitorApp).accountManager
+            val session by accountManager.session.collectAsState()
             DevicePerfTheme(settings.themeMode) {
-                AppNav(
-                    viewModel = viewModel,
-                    onRequestOverlayPermission = {
-                        // 多级降级：本应用 overlay 设置页 → 应用详情页；全部失败返回 false，
-                        // 由 UI 给出文字指引（见设置页说明）
-                        OverlayPermissions.requestOverlayPermission(this)
-                    },
-                )
+                if (session == null) {
+                    LoginScreen(accountManager = accountManager)
+                } else {
+                    AppNav(
+                        viewModel = viewModel,
+                        onRequestOverlayPermission = {
+                            // 多级降级：本应用 overlay 设置页 → 应用详情页；全部失败返回 false，
+                            // 由 UI 给出文字指引（见设置页说明）
+                            OverlayPermissions.requestOverlayPermission(this)
+                        },
+                    )
+                }
             }
         }
     }

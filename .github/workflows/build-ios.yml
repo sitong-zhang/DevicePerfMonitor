@@ -1,0 +1,67 @@
+name: Build iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'ios-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build unsigned app
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild -project GuanXu.xcodeproj -scheme GuanXu \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            BUILD_DIR=$PWD/build build 2>&1 | tee build.log
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          APP=$(find build -name 'GuanXu.app' -type d | head -1)
+          if [ -z "$APP" ]; then echo "未找到 GuanXu.app"; exit 1; fi
+          rm -rf Payload
+          mkdir -p Payload
+          cp -r "$APP" Payload/
+          zip -r GuanXu-unsigned.ipa Payload
+          ls -lh GuanXu-unsigned.ipa
+
+      - name: Remove previous rolling release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ios-unsigned -y || true
+          git push origin :refs/tags/ios-unsigned || true
+
+      - name: Upload to ios-unsigned release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-unsigned
+          name: 观序 iOS 未签名安装包
+          body: |
+            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）。
+            需用仓库内 sign-tool 通过你自己的 Apple ID 签名后安装到 iPhone。
+            免费 Apple ID 证书 7 天有效，到期重新签名安装即可。
+          files: ios/GuanXu-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">设备性能监控</string>
+    <string name="app_name">观序</string>
 
     <!-- 通知渠道 -->
     <string name="channel_collector_name">性能采集服务</string>

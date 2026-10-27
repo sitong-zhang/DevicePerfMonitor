@@ -1,8 +1,8 @@
-# 见微 · DevicePerfMonitor
+# 观序 · DevicePerfMonitor
 
 一套专注移动设备性能与自由安装的轻量工具：Android 端实时性能监测，苹果端同款 App 经自签安装落地到 iPhone，两端都尊重你的隐私。
 
-一个看设备实时状态的 App。打开就能看内存占用、温度、屏幕刷新率和帧率，还有一个综合评分；还能开一个全局悬浮窗（安卓）/ 应用内悬浮 HUD（苹果），退到后台自动隐藏、回到前台自动出现。
+一个看设备实时状态的 App。打开就能看内存占用、温度、屏幕刷新率和帧率，还有一个综合评分；还能开一个全局悬浮窗（安卓）/ 应用内悬浮 HUD（苹果），退到后台自动隐藏、回到前台自动出现。App 首次打开需注册或登录账号（账号仅保存在本机，用于登录态持久化）。
 
 数据全程在本地采集和存储，不联网、不上传、不接任何统计 SDK。App 唯一会主动联网的地方是：检查更新、拉取公告——这两样都只是读取 GitHub 上公开的内容，不会向任何服务器发任何数据。
 
@@ -10,11 +10,11 @@
 
 | 名称 | 路径 | 说明 |
 |---|---|---|
-| **安卓版** | Release 中的 `*.apk`（源码在 `android/`） | 性能监测 App，直接安装 |
-| **苹果版** | `ios/`（源码） | 与安卓版同功能的 iOS 性能监测 App；需经签名工具用你的 Apple ID 签名后安装 |
+| **安卓版** | Release 中的 `*.apk`（源码在 `android/`） | 观序 性能监测 App，直接安装 |
+| **苹果版** | `ios/`（源码） | 与安卓版同功能的 iOS 性能监测 App；未签名 IPA 由仓库 CI 自动构建，需经签名工具用你的 Apple ID 签名后安装 |
 | **签名文件** | `sign-tool/`（源码） | 开源自签安装工具：拉取苹果版未签名 IPA、申请临时证书、签名并无线安装到 iPhone |
 
-> 苹果版没有编译好的 IPA——iOS App 必须在 macOS + Xcode 编译，本仓库的 Linux 环境编不出来。详见 `ios/README.md`。
+> 苹果版未签名 IPA 由本仓库的 GitHub Actions（macOS runner）自动构建并发布到 `ios-unsigned` Release，无需本地 macOS 即可拿到安装包。详见 `ios/README.md`。
 
 ## 主要功能
 
@@ -31,8 +31,8 @@
 
 ## 下载与版本
 
-- **安卓版**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面的 APK（液态玻璃版，文件名 `DevicePerfMonitor-<版本>-release.apk`），允许「未知来源」即可安装。
-- **苹果版**：源码在 `ios/`，需在 Mac + Xcode 编译并导出未签名 IPA，再经下方签名工具用 Apple ID 签名安装。
+- **安卓版**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases) 页面的 APK（液态玻璃版，文件名 `DevicePerfMonitor-<版本>-release.apk`），允许「未知来源」即可安装，首次打开需注册/登录。
+- **苹果版**：未签名 IPA 由仓库 CI 自动构建，发布在 [`ios-unsigned` Release](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/ios-unsigned)；需在 Mac + Xcode 编译签名工具，用你的 Apple ID 签名安装。
 
 ## 构建
 
@@ -51,17 +51,20 @@ cd android
 - **keystore 和密码务必备份**。私钥丢了无法补签，只能换签名让用户卸载重装。备份建议放密码管理器 + 离线副本。
 - GitHub 仓库 secrets 已配置：`DEVPERF_KEYSTORE_BASE64` / `DEVPERF_KEYSTORE_PASSWORD` / `DEVPERF_KEY_ALIAS` / `DEVPERF_KEY_PASSWORD`，CI 构建时自动还原签名配置，并在产物里核对证书是 `CN=DevicePerfMonitor`。
 
-## 苹果版：见微 iOS App（ios/）+ 签名工具（sign-tool/）
+## 苹果版：观序 iOS App（ios/）+ 签名工具（sign-tool/）
 
-`ios/` 是与安卓版同功能的 iOS 性能监测 App 源码（SwiftUI）。由于 iOS 不暴露设备温度、也不允许全局悬浮窗，苹果版的评分维度改为「流畅度 / 内存 / 电量」，并以「应用内悬浮 HUD + 可选小组件」替代全局悬浮窗。具体构建与平台差异见 `ios/README.md`。
+`ios/` 是与安卓版同功能的 iOS 性能监测 App 源码（SwiftUI），应用名为「观序」。由于 iOS 不暴露设备温度、也不允许全局悬浮窗，苹果版的评分维度改为「流畅度 / 内存 / 电量」，并以「应用内悬浮 HUD」替代全局悬浮窗；并内置本地账号（注册 / 登录 / 登出）。具体构建与平台差异见 `ios/README.md`。
 
-`sign-tool/` 是一套开源自签安装工具，用于在 iPhone 上**用你自己的 Apple ID** 把苹果版（未签名 IPA）签名并安装到本机，无需越狱、无需企业证书。它包含从仓库最新 Release 拉取 `JianWei-*.ipa`、申请临时开发证书、签名到无线安装的全流程。
+`sign-tool/` 是一套开源自签安装工具，用于在 iPhone 上**用你自己的 Apple ID** 把苹果版（未签名 IPA）签名并安装到本机，无需越狱、无需企业证书。它包含从仓库 `ios-unsigned` Release 拉取 `GuanXu-unsigned.ipa`、申请临时开发证书、签名到无线安装的全流程。
 
-**构建（需要 macOS + Xcode 16+）**
+**未签名 IPA（自动构建）**
 
-1. 用 Xcode 打开 `ios/` 编译 见微 iOS App，导出未签名 IPA（命名为 `JianWei-<版本>.ipa`）上传到本仓库 Release。
-2. 用 Xcode 打开 `sign-tool/Feather.xcworkspace` 编译签名工具，再借助 AltStore / SideStore 把它自身装进手机。
-3. 打开签名工具，填入你的 **Apple ID 账号和密码**，点「开始安装」——工具会自动拉取仓库里的 `JianWei-*.ipa` 并签名安装到这台 iPhone。
+本仓库 `.github/workflows/build-ios.yml` 已在 macOS runner 上完成：XcodeGen 生成工程 → `xcodebuild` 免签名编译 → 打包 `GuanXu-unsigned.ipa` → 发布到 [`ios-unsigned` Release](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/ios-unsigned)。你本地无需 macOS 即可拿到安装包。
+
+**签名安装（需要 macOS + Xcode 16+ 仅用于编译签名工具本体）**
+
+1. 用 Xcode 打开 `sign-tool/Feather.xcworkspace` 编译签名工具，再借助 AltStore / SideStore 把它自身装进手机。
+2. 打开签名工具，填入你的 **Apple ID 账号和密码**，点「开始安装」——工具会自动从 `ios-unsigned` Release 拉取 `GuanXu-unsigned.ipa` 并签名安装到这台 iPhone。
 
 `sign-tool/` 已内联 `Zsign`、`IDeviceKitten` 等依赖，无需再初始化子模块。详见 `sign-tool/README.md`。
 
