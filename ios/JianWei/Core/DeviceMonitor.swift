@@ -82,7 +82,7 @@ final class DeviceMonitor {
 
     // MARK: - 电池
     func battery() -> (level: Double, state: UIDevice.BatteryState) {
-        return (UIDevice.current.batteryLevel, UIDevice.current.batteryState)
+        return (Double(UIDevice.current.batteryLevel), UIDevice.current.batteryState)
     }
 
     // MARK: - 屏幕刷新率

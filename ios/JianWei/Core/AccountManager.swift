@@ -27,14 +27,15 @@ final class AccountManager: ObservableObject {
 	var isLoggedIn: Bool { current != nil }
 
 	// MARK: - 注册
-	func register(username: String, password: String) -> Result<Account, String> {
+	/// 注册并登录；返回 nil 表示成功，否则为错误提示。
+	func register(username: String, password: String) -> String? {
 		let u = username.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard u.count >= 3 else { return .failure("用户名至少 3 个字符") }
-		guard password.count >= 6 else { return .failure("密码至少 6 位") }
+		guard u.count >= 3 else { return "用户名至少 3 个字符" }
+		guard password.count >= 6 else { return "密码至少 6 位" }
 
 		var list = loadAccounts()
 		guard !list.contains(where: { $0.username == u }) else {
-			return .failure("该用户名已被注册")
+			return "该用户名已被注册"
 		}
 
 		let salt = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
@@ -44,7 +45,7 @@ final class AccountManager: ObservableObject {
 
 		let acc = Account(id: UUID(), username: u, createdAt: Date())
 		setSession(acc)
-		return .success(acc)
+		return nil
 	}
 
 	// MARK: - 登录

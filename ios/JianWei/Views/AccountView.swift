@@ -2,12 +2,12 @@ import SwiftUI
 
 /// 「我的」：展示当前账号、注册时间，提供退出登录。
 struct AccountView: View {
-	@EnvironmentObject private var account: AccountManager
+	@ObservedObject var accountManager: AccountManager
 
 	var body: some View {
 		NavigationView {
 			List {
-				if let u = account.current {
+				if let u = accountManager.current {
 					Section("当前账号") {
 						LabeledContent("用户名", value: u.username)
 						LabeledContent("注册时间", value: format(u.createdAt))
@@ -19,7 +19,7 @@ struct AccountView: View {
 					}
 					Section {
 						Button(role: .destructive) {
-							account.logout()
+							accountManager.logout()
 						} label: {
 							Text("退出登录")
 								.frame(maxWidth: .infinity, alignment: .center)

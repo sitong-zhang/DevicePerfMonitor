@@ -1,14 +1,14 @@
 import SwiftUI
 
 struct ContentView: View {
-	@EnvironmentObject private var account: AccountManager
 	@EnvironmentObject private var vm: MetricsViewModel
+	@ObservedObject var account: AccountManager
 	@State private var showHUD = false
 
 	var body: some View {
 		// 未登录先走登录 / 注册门禁
 		if !account.isLoggedIn {
-			LoginView()
+			LoginView(accountManager: account)
 		} else {
 			ZStack {
 				TabView {
@@ -16,7 +16,7 @@ struct ContentView: View {
 						.tabItem { Label("监测", systemImage: "gauge.medium") }
 					HistoryView()
 						.tabItem { Label("历史", systemImage: "chart.xyaxis.line") }
-					AccountView()
+					AccountView(accountManager: account)
 						.tabItem { Label("我的", systemImage: "person.circle") }
 					SettingsView()
 						.tabItem { Label("设置", systemImage: "gearshape") }

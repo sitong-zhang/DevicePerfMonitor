@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 登录 / 注册页。未登录时作为 App 入口门禁。
 struct LoginView: View {
-	@EnvironmentObject private var account: AccountManager
+	@ObservedObject var accountManager: AccountManager
 
 	@State private var isRegister = false
 	@State private var username = ""
@@ -40,14 +40,9 @@ struct LoginView: View {
 
 				Button {
 					if isRegister {
-						switch account.register(username: username, password: password) {
-						case .success:
-							message = ""
-						case .failure(let e):
-							message = e
-						}
+						message = accountManager.register(username: username, password: password) ?? ""
 					} else {
-						if account.login(username: username, password: password) {
+						if accountManager.login(username: username, password: password) {
 							message = ""
 						} else {
 							message = "用户名或密码错误"
