@@ -57,7 +57,6 @@ import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.data.WallpaperId
-import com.devperf.monitor.data.collectors.PrivilegedShell
 import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.EnterStagger
@@ -83,11 +82,10 @@ import android.content.Intent
 import android.net.Uri
 
 /**
- * 设置页：悬浮窗 / 采集 / 告警 / 提权 / 主题 / 权限状态 / 关于。
+ * 设置页：悬浮窗 / 采集 / 告警 / 主题 / 权限状态 / 关于。
  *
  * 权限处理规范：
  * - 悬浮窗开关打开时若无权限 → 先跳系统设置页引导（返回后 onResume 自动同步服务）；
- * - Shizuku 未安装/未授权 → 显示状态与引导（安装 Shizuku App 后重启本应用）；
  * - 每个影响功能的权限都在 UI 上明示当前状态，不做隐性失败。
  */
 @Composable
@@ -98,9 +96,6 @@ fun SettingsScreen(
     val colors = LocalTokenColors.current
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsState()
-    // 收集快照当"重组合触发器"：提权刷新后快照会在下一个 tick 更新，
-    // 这里借它让下面的特权通道三态重新读一次（backend 本身不是 State）
-    val snapshot by viewModel.snapshot.collectAsState()
     val haptics = rememberHaptics()
 
     // 账号：仅保存在本机，用于登录态持久化
@@ -110,7 +105,6 @@ fun SettingsScreen(
     // 权限状态跟着系统走：从系统设置页授权后返回，这里要立刻变成"已授权"
     val overlayGranted by viewModel.overlayGranted.collectAsState()
     val notificationsGranted = OverlayPermissions.canPostNotifications(context)
-    val shellBackend = snapshotBackend(viewModel)
 
     // 用户拨了开关但还没授权：等授权一到位就自动把服务拉起来，
     // 不用逼用户回到本页再拨一次
@@ -423,51 +417,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= 提权（Shizuku / root） =================
-            GlassSectionHeader(text = "特权指标")
-            GlassPanel {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
-                ) {
-                    Text(
-                        text = "悬浮窗与首页的实时帧率（前台应用/游戏真实帧率）、各核心频率、" +
-                            "后台应用内存需要 Shizuku（免 root）或 root 授权。" +
-                            "未授权时帧率会显示「需 Shizuku」引导，不影响其他指标。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.textSecondary,
-                    )
-                    GlassInfoRow(
-                        label = "当前特权通道",
-                        value = when (shellBackend) {
-                            PrivilegedShell.Backend.ROOT -> "root"
-                            PrivilegedShell.Backend.SHIZUKU -> "Shizuku"
-                            PrivilegedShell.Backend.NONE -> "无"
-                        },
-                        valueColor = if (shellBackend == PrivilegedShell.Backend.NONE) colors.warning else colors.success,
-                    )
-                    GlassButton(
-                        text = if (shellBackend == PrivilegedShell.Backend.NONE) "申请 Shizuku 授权" else "刷新状态",
-                        onClick = {
-                            haptics.tick()
-                            viewModel.requestPrivilege()
-                        },
-                        variant = GlassButtonVariant.SECONDARY,
-                    )
-                    Text(
-                        text = "使用方式：安装 Shizuku App 并启动服务后，点击上方按钮授权；" +
-                            "授权结果弹窗由系统/Shizuku 展示。",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                    Text(
-                        text = "温度说明：优先读机身温区；部分机型（如华为）系统限制普通应用读取，" +
-                            "自动回退电池温度，详情页会标注「当前为电池温度」。",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                }
-            }
-
             // ================= 主题 =================
             GlassSectionHeader(text = "外观")
             GlassPanel {
@@ -644,10 +593,6 @@ private fun openMail(context: Context, mailto: String) {
         context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse(mailto)))
     }
 }
-
-/** 读取当前特权通道（每次组合刷新；三态指标由采集器维护）。 */
-private fun snapshotBackend(viewModel: MonitorViewModel): PrivilegedShell.Backend =
-    viewModel.snapshotShellBackend()
 
 // ---------------------------------------------------------------------------
 // 1.0.26 壁纸选择（外观区）
