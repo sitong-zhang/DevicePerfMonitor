@@ -19,11 +19,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate Xcode project
+      # ---------- 观序（GuanXu）未签名 IPA ----------
+      - name: Generate GuanXu Xcode project
         working-directory: ios
         run: xcodegen generate
 
-      - name: Build unsigned app
+      - name: Build GuanXu unsigned app
         working-directory: ios
         run: |
           set -euo pipefail
@@ -33,7 +34,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             BUILD_DIR=$PWD/build build 2>&1 | tee build.log
 
-      - name: Package unsigned IPA
+      - name: Package GuanXu unsigned IPA
         working-directory: ios
         run: |
           set -euo pipefail
@@ -45,6 +46,26 @@ jobs:
           zip -r GuanXu-unsigned.ipa Payload
           ls -lh GuanXu-unsigned.ipa
 
+      # ---------- 签名工具（Feather 改造版）未签名 IPA ----------
+      # 该步骤尽力而为：签名工具编译失败不影响观序 IPA 正常发布。
+      - name: Build signer (Feather) unsigned IPA (best-effort)
+        continue-on-error: true
+        working-directory: sign-tool
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace Feather.xcworkspace -scheme Feather \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            -archivePath $PWD/build/Feather.xcarchive archive 2>&1 | tee feather.log
+          APP=$(find build/Feather.xcarchive/Products/Applications -name 'Feather.app' -type d | head -1)
+          if [ -z "$APP" ]; then echo "未找到 Feather.app"; exit 1; fi
+          rm -rf Payload
+          mkdir -p Payload
+          cp -r "$APP" Payload/
+          zip -r ../GuanXu-Signer-unsigned.ipa Payload
+          ls -lh ../GuanXu-Signer-unsigned.ipa
+
       - name: Remove previous rolling release
         continue-on-error: true
         env:
@@ -53,15 +74,25 @@ jobs:
           gh release delete ios-unsigned -y || true
           git push origin :refs/tags/ios-unsigned || true
 
-      - name: Upload to ios-unsigned release
+      - name: Upload GuanXu IPA to ios-unsigned release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ios-unsigned
-          name: 观序 iOS 未签名安装包
+          name: 观序 iOS 安装包（未签名）
           body: |
-            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）。
-            需用仓库内 sign-tool 通过你自己的 Apple ID 签名后安装到 iPhone。
+            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）+ 配套签名工具（GuanXu-Signer-unsigned.ipa）。
+            两者均需用你自己的 Apple ID 通过签名工具自签后安装到 iPhone。
             免费 Apple ID 证书 7 天有效，到期重新签名安装即可。
           files: ios/GuanXu-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload signer IPA (if built)
+        if: ${{ hashFiles('GuanXu-Signer-unsigned.ipa') != '' }}
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-unsigned
+          files: GuanXu-Signer-unsigned.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

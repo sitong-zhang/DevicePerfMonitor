@@ -11,6 +11,9 @@ on:
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -73,12 +76,16 @@ jobs:
             exit 1
           }
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Upload APK to Release (apk tag)
+        uses: softprops/action-gh-release@v2
         with:
-          name: DevicePerfMonitor-${{ github.sha }}
+          tag_name: apk
+          name: 观序 安卓版 APK
+          body: |
+            观序 安卓版正式签名安装包（app-release.apk）。
+            首次打开需注册 / 登录本地账号后即可使用。
           # 1.0.13~1.0.15 曾按 flavor 出双包（路径为 apk/<flavor>/release/）；
           # 1.0.16 起合并为单一发布包，产物固定在 apk/release/ 下
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+          files: android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
