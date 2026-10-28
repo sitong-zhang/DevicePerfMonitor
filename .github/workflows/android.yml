@@ -55,16 +55,25 @@ jobs:
         # DEVPERF_FEEDBACK_TOKEN：意见反馈直连 GitHub 的最小权限 PAT（仅本仓库
         # issues:write）。为空时 App 自动降级为「拉起浏览器打开预填 issue 页」，
         # 反馈路径不断。在仓库 Secrets 里加这个变量即可让每次发版自动注入。
-        # 说明：:manager 在 CI 上没有 local.properties（含发公告 token），
-        # 构建出的是「只读版管理端」（可看公告/签名记录，发公告不可用）——
-        # 这是刻意的安全设计：带写凭证的管理端只在你自己电脑上构建，绝不公开分发。
+        # MANAGER_GITHUB_TOKEN：管理端发公告的最小权限 fine-grained PAT（仅本仓库
+        # Contents:write + Issues 读写）。构建前写入 android/local.properties，
+        # :security 的 generateTokenShards 会将其拆成 DEX/SO 双分片注入——
+        # 未配置时管理端自动降级为只读版。
         env:
           DEVPERF_FEEDBACK_TOKEN: ${{ secrets.DEVPERF_FEEDBACK_TOKEN }}
+          MANAGER_GITHUB_TOKEN: ${{ secrets.MANAGER_GITHUB_TOKEN }}
         run: |
           # runner 镜像自带 Android SDK；没有时回退到 $ANDROID_SDK_ROOT
           if [ -z "$ANDROID_HOME" ] && [ -z "$ANDROID_SDK_ROOT" ]; then
             echo "ANDROID_HOME or ANDROID_SDK_ROOT must be set" >&2
             exit 1
+          fi
+          # 管理端发公告 token 注入（分片由 :security 构建期生成，明文不进仓库）
+          if [ -n "$MANAGER_GITHUB_TOKEN" ]; then
+            echo "MANAGER_GITHUB_TOKEN=$MANAGER_GITHUB_TOKEN" >> local.properties
+            echo "::notice::已注入管理端发公告 token（完整版管理端）"
+          else
+            echo "::notice::MANAGER_GITHUB_TOKEN 未配置，管理端为只读版"
           fi
           ./gradlew :app:assembleRelease :manager:assembleRelease --no-daemon
 
@@ -94,16 +103,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 管理端 APK：固定上架到 manager tag 的 Release（用户拍板「先上架，说下架再下架」）。
-      # CI 构建为只读版（不含发公告 token），带写凭证的版本仅本地构建。
+      # 1.0.1 起注入 MANAGER_GITHUB_TOKEN 分片，公开分发版即可发公告（token 为
+      # 最小权限 fine-grained PAT：仅本仓库 Contents:write + Issues 读写）。
       - name: Upload Manager APK to Release (manager tag)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: manager
-          name: 分子智能科技 · 管理端（只读版）
+          name: 分子智能科技 · 管理端
           body: |
             管理端安卓安装包（manager-release.apk）。
-            功能：查看线上公告、查看 Brand 签名记录（Brand 每次签名完成后自动上报的回执）。
-            发布公告等写操作需要写权限 token，只在内部构建中启用，公开分发版为只读。
+            功能：公告管理（查看 + 发布）、Brand 签名记录、数据上传接收。
+            v1.0.1：公告发布已在公开版启用（token 分片注入）＋ 网络请求自动重试。
           files: android/manager/build/outputs/apk/release/manager-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
