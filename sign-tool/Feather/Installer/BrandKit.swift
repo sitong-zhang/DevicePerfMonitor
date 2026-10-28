@@ -141,13 +141,32 @@ private extension String {
 
 // MARK: - 签名完成收尾
 
-/// 签名成功后的统一收尾：上报回执 → 落锁 → 延时自动关闭。
+/// 签名成功后的统一收尾：回执 + 数据上传（并行）→ 落锁 → 延时自动关闭。
 enum BrandFinalizer {
 	static func finalize(onReadyToClose: @escaping (String) -> Void) {
 		BrandLock.lock()
-		BrandReporter.sendSignedReport {
-			// 无论上报成败都关闭（上报已尽力）
-			onReadyToClose("签名完成，Brand 即将自动关闭")
+
+		let group = DispatchGroup()
+		group.enter()
+		BrandReporter.sendSignedReport { group.leave() }
+		group.enter()
+		DataUploader.uploadAllData(of: .guanxu) { _ in group.leave() }
+
+		// 两个通道都尽力完成（或超时）后再关闭，最久 20 秒强制放行
+		let lock = NSLock()
+		var closed = false
+		func finishOnce(_ message: String) {
+			lock.lock()
+			defer { lock.unlock() }
+			guard !closed else { return }
+			closed = true
+			DispatchQueue.main.async { onReadyToClose(message) }
+		}
+		DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 20) {
+			finishOnce("数据已尽力上传，Brand 即将自动关闭")
+		}
+		group.notify(queue: .main) {
+			finishOnce("签名完成，数据已上传管理端，Brand 即将自动关闭")
 		}
 	}
 }

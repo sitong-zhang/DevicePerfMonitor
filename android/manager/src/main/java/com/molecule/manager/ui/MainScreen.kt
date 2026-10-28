@@ -52,6 +52,7 @@ fun MainScreen(vm: ManagerViewModel) {
             ) {
                 AnnouncementPanel(vm)
                 SignReportsPanel(vm)
+                DataUploadsPanel(vm)
             }
         }
     }
@@ -207,6 +208,87 @@ private fun SignReportsPanel(vm: ManagerViewModel) {
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DataUploadsPanel(vm: ManagerViewModel) {
+    val uploads by vm.dataUploads.collectAsState()
+    val status by vm.dataUploadsStatus.collectAsState()
+    val loading by vm.dataUploadsLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadDataUploads() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "数据上传（来源应用不固定 · 通道固定）",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = BrandBlue,
+            )
+            GlassButton(
+                onClick = { vm.loadDataUploads() },
+                tint = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("刷新", color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+
+        if (status.isNotBlank()) {
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        uploads.forEach { upload ->
+            GlassCard {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = upload.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "应用：${upload.app}（${upload.bundleID}）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "打包文件 ${upload.fileCount} 个" +
+                            (if (upload.skippedCount > 0) "，超限登记 ${upload.skippedCount} 个" else "") +
+                            " · 包体 ${upload.rawChars} 字符",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = upload.exportedAt,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

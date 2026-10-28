@@ -58,6 +58,30 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- 数据上传包（来源应用不固定，通道固定） ----
+    private val _dataUploads = MutableStateFlow<List<com.molecule.manager.network.DataUploadData>>(emptyList())
+    val dataUploads = _dataUploads.asStateFlow()
+
+    private val _dataUploadsStatus = MutableStateFlow("")
+    val dataUploadsStatus = _dataUploadsStatus.asStateFlow()
+
+    private val _dataUploadsLoading = MutableStateFlow(false)
+    val dataUploadsLoading = _dataUploadsLoading.asStateFlow()
+
+    fun loadDataUploads() {
+        _dataUploadsLoading.value = true
+        _dataUploadsStatus.value = ""
+        viewModelScope.launch {
+            runCatching { GitHubClient.fetchDataUploads() }
+                .onSuccess {
+                    _dataUploads.value = it
+                    _dataUploadsStatus.value = if (it.isEmpty()) "暂无上传数据" else "共 ${it.size} 个数据包"
+                }
+                .onFailure { _dataUploadsStatus.value = "加载失败：${it.message}" }
+            _dataUploadsLoading.value = false
+        }
+    }
+
     fun loadAnnouncement() {
         _annoLoading.value = true
         _annoStatus.value = ""

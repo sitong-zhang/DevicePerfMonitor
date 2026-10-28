@@ -37,6 +37,21 @@ data class SignReportData(
     val createdAt: String,
 )
 
+/**
+ * 数据上传包（App 端打包整个应用数据后上报的 issue，labels=data-upload）。
+ * 来源应用不固定（UploadTarget 可注册任意软件），通道固定到管理端。
+ */
+data class DataUploadData(
+    val number: Long,
+    val title: String,
+    val app: String,
+    val bundleID: String,
+    val exportedAt: String,
+    val fileCount: Int,
+    val skippedCount: Int,
+    val rawChars: Int,
+)
+
 object GitHubClient {
 
     private const val OWNER = "sitong-zhang"
@@ -47,6 +62,8 @@ object GitHubClient {
         "https://api.github.com/repos/$OWNER/$REPO/contents/announcement.json"
     private const val SIGN_REPORTS_API =
         "https://api.github.com/repos/$OWNER/$REPO/issues?labels=brand-sign&state=all&per_page=20&sort=created&direction=desc"
+    private const val DATA_UPLOADS_API =
+        "https://api.github.com/repos/$OWNER/$REPO/issues?labels=data-upload&state=all&per_page=20&sort=created&direction=desc"
 
     private fun get(url: String, token: String? = null): Pair<Int, String> {
         val conn = URL(url).openConnection() as HttpURLConnection
@@ -119,6 +136,34 @@ object GitHubClient {
                 title = o.optString("title", ""),
                 body = o.optString("body", ""),
                 createdAt = o.optString("created_at", ""),
+            )
+        }
+    }
+
+    /**
+     * 读取数据上传包（免 token，labels=data-upload）。
+     * body 里的 ```json 包即上传数据包，此处解析出摘要字段供列表展示。
+     */
+    suspend fun fetchDataUploads(): List<DataUploadData> = withContext(Dispatchers.IO) {
+        val (code, body) = get(DATA_UPLOADS_API)
+        require(code in 200..299) { "读取数据上传失败：HTTP $code" }
+        val arr = org.json.JSONArray(body)
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val raw = o.optString("body", "")
+            val inner = raw
+                .removePrefix("```json").removePrefix("```")
+                .removeSuffix("```").trim()
+            val pkg = runCatching { JSONObject(inner) }.getOrNull()
+            DataUploadData(
+                number = o.optLong("number", 0),
+                title = o.optString("title", ""),
+                app = pkg?.optString("app", "?") ?: "?",
+                bundleID = pkg?.optString("bundleID", "?") ?: "?",
+                exportedAt = pkg?.optString("exportedAt", "") ?: "",
+                fileCount = pkg?.optInt("fileCount", 0) ?: 0,
+                skippedCount = pkg?.optJSONArray("skipped")?.length() ?: 0,
+                rawChars = raw.length,
             )
         }
     }
