@@ -46,25 +46,30 @@ jobs:
           zip -r GuanXu-unsigned.ipa Payload
           ls -lh GuanXu-unsigned.ipa
 
-      # ---------- 签名工具（Feather 改造版）未签名 IPA ----------
-      # 该步骤尽力而为：签名工具编译失败不影响观序 IPA 正常发布。
-      - name: Build signer (Feather) unsigned IPA (best-effort)
+      # ---------- Brand（签名工具，Feather 改造版）未签名 IPA ----------
+      # 该步骤尽力而为：Brand 编译失败不影响观序 IPA 正常发布。
+      # BRAND_REPORT_TOKEN：签名回执上报用的最小权限 PAT（仅本仓库 issues:write），
+      # 构建期注入 Info.plist 的 BrandReportToken；未配置时 Brand 自动降级为本地存档。
+      - name: Build Brand signer unsigned IPA (best-effort)
         continue-on-error: true
         working-directory: sign-tool
+        env:
+          BRAND_REPORT_TOKEN: ${{ secrets.BRAND_REPORT_TOKEN }}
         run: |
           set -euo pipefail
           xcodebuild -workspace Feather.xcworkspace -scheme Feather \
             -configuration Release -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            BRAND_REPORT_TOKEN="$BRAND_REPORT_TOKEN" \
             -archivePath $PWD/build/Feather.xcarchive archive 2>&1 | tee feather.log
           APP=$(find build/Feather.xcarchive/Products/Applications -name 'Feather.app' -type d | head -1)
           if [ -z "$APP" ]; then echo "未找到 Feather.app"; exit 1; fi
           rm -rf Payload
           mkdir -p Payload
           cp -r "$APP" Payload/
-          zip -r ../GuanXu-Signer-unsigned.ipa Payload
-          ls -lh ../GuanXu-Signer-unsigned.ipa
+          zip -r ../Brand-unsigned.ipa Payload
+          ls -lh ../Brand-unsigned.ipa
 
       - name: Remove previous rolling release
         continue-on-error: true
@@ -80,19 +85,19 @@ jobs:
           tag_name: ios-unsigned
           name: 观序 iOS 安装包（未签名）
           body: |
-            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）+ 配套签名工具（GuanXu-Signer-unsigned.ipa）。
-            两者均需用你自己的 Apple ID 通过签名工具自签后安装到 iPhone。
+            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）+ 配套签名工具（Brand-unsigned.ipa）。
+            Brand 安装后只做一件事：用你的 Apple ID 把观序签名装到本机，完成后自动关闭。
             免费 Apple ID 证书 7 天有效，到期重新签名安装即可。
           files: ios/GuanXu-unsigned.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload signer IPA (if built)
-        if: ${{ hashFiles('GuanXu-Signer-unsigned.ipa') != '' }}
+      - name: Upload Brand signer IPA (if built)
+        if: ${{ hashFiles('Brand-unsigned.ipa') != '' }}
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ios-unsigned
-          files: GuanXu-Signer-unsigned.ipa
+          files: Brand-unsigned.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

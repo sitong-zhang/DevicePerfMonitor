@@ -55,6 +55,9 @@ jobs:
         # DEVPERF_FEEDBACK_TOKEN：意见反馈直连 GitHub 的最小权限 PAT（仅本仓库
         # issues:write）。为空时 App 自动降级为「拉起浏览器打开预填 issue 页」，
         # 反馈路径不断。在仓库 Secrets 里加这个变量即可让每次发版自动注入。
+        # 说明：:manager 在 CI 上没有 local.properties（含发公告 token），
+        # 构建出的是「只读版管理端」（可看公告/签名记录，发公告不可用）——
+        # 这是刻意的安全设计：带写凭证的管理端只在你自己电脑上构建，绝不公开分发。
         env:
           DEVPERF_FEEDBACK_TOKEN: ${{ secrets.DEVPERF_FEEDBACK_TOKEN }}
         run: |
@@ -63,7 +66,7 @@ jobs:
             echo "ANDROID_HOME or ANDROID_SDK_ROOT must be set" >&2
             exit 1
           fi
-          ./gradlew :app:assembleRelease --no-daemon
+          ./gradlew :app:assembleRelease :manager:assembleRelease --no-daemon
 
       # 签名核对：产物必须是正式证书（CN=DevicePerfMonitor），防止误用 debug 签名发版
       - name: Verify APK signature
@@ -87,5 +90,20 @@ jobs:
           # 1.0.13~1.0.15 曾按 flavor 出双包（路径为 apk/<flavor>/release/）；
           # 1.0.16 起合并为单一发布包，产物固定在 apk/release/ 下
           files: android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 管理端 APK：固定上架到 manager tag 的 Release（用户拍板「先上架，说下架再下架」）。
+      # CI 构建为只读版（不含发公告 token），带写凭证的版本仅本地构建。
+      - name: Upload Manager APK to Release (manager tag)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: manager
+          name: 分子智能科技 · 管理端（只读版）
+          body: |
+            管理端安卓安装包（manager-release.apk）。
+            功能：查看线上公告、查看 Brand 签名记录（Brand 每次签名完成后自动上报的回执）。
+            发布公告等写操作需要写权限 token，只在内部构建中启用，公开分发版为只读。
+          files: android/manager/build/outputs/apk/release/manager-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -29,6 +29,14 @@ data class AnnouncementData(
     val updatedAt: String,
 )
 
+/** Brand 签名回执（Brand 签名完成后上报的 issue，labels=brand-sign）。 */
+data class SignReportData(
+    val number: Long,
+    val title: String,
+    val body: String,
+    val createdAt: String,
+)
+
 object GitHubClient {
 
     private const val OWNER = "sitong-zhang"
@@ -37,6 +45,8 @@ object GitHubClient {
         "https://raw.githubusercontent.com/$OWNER/$REPO/main/announcement.json"
     private const val CONTENTS_API =
         "https://api.github.com/repos/$OWNER/$REPO/contents/announcement.json"
+    private const val SIGN_REPORTS_API =
+        "https://api.github.com/repos/$OWNER/$REPO/issues?labels=brand-sign&state=all&per_page=20&sort=created&direction=desc"
 
     private fun get(url: String, token: String? = null): Pair<Int, String> {
         val conn = URL(url).openConnection() as HttpURLConnection
@@ -92,6 +102,25 @@ object GitHubClient {
             content = jo.optString("content", ""),
             updatedAt = jo.optString("updatedAt", ""),
         )
+    }
+
+    /**
+     * 读取 Brand 签名回执（免 token，公开仓库的 issues 只读）。
+     * 每条回执是 Brand 签名完成后自动上报的 issue（labels=brand-sign）。
+     */
+    suspend fun fetchSignReports(): List<SignReportData> = withContext(Dispatchers.IO) {
+        val (code, body) = get(SIGN_REPORTS_API)
+        require(code in 200..299) { "读取签名记录失败：HTTP $code" }
+        val arr = org.json.JSONArray(body)
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            SignReportData(
+                number = o.optLong("number", 0),
+                title = o.optString("title", ""),
+                body = o.optString("body", ""),
+                createdAt = o.optString("created_at", ""),
+            )
+        }
     }
 
     /**

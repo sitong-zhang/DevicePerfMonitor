@@ -34,6 +34,30 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- token 可用性（受安全模块约束） ----
     val tokenAvailable: Boolean get() = TokenVault.getToken(ctx) != null
 
+    // ---- Brand 签名回执 ----
+    private val _signReports = MutableStateFlow<List<com.molecule.manager.network.SignReportData>>(emptyList())
+    val signReports = _signReports.asStateFlow()
+
+    private val _signReportsStatus = MutableStateFlow("")
+    val signReportsStatus = _signReportsStatus.asStateFlow()
+
+    private val _signReportsLoading = MutableStateFlow(false)
+    val signReportsLoading = _signReportsLoading.asStateFlow()
+
+    fun loadSignReports() {
+        _signReportsLoading.value = true
+        _signReportsStatus.value = ""
+        viewModelScope.launch {
+            runCatching { GitHubClient.fetchSignReports() }
+                .onSuccess {
+                    _signReports.value = it
+                    _signReportsStatus.value = if (it.isEmpty()) "暂无签名记录" else "共 ${it.size} 条记录"
+                }
+                .onFailure { _signReportsStatus.value = "加载失败：${it.message}" }
+            _signReportsLoading.value = false
+        }
+    }
+
     fun loadAnnouncement() {
         _annoLoading.value = true
         _annoStatus.value = ""

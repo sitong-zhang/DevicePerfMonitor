@@ -121,6 +121,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>BrandReportToken</key>
+	<string>$(BRAND_REPORT_TOKEN)</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>localdevvpn</string>

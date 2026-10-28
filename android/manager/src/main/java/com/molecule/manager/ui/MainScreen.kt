@@ -45,7 +45,14 @@ fun MainScreen(vm: ManagerViewModel) {
         )
         // 内容与玻璃元素都是背景层的兄弟
         CompositionLocalProvider(LocalBackdrop provides backdrop) {
-            AnnouncementPanel(vm)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                AnnouncementPanel(vm)
+                SignReportsPanel(vm)
+            }
         }
     }
 }
@@ -61,8 +68,7 @@ private fun AnnouncementPanel(vm: ManagerViewModel) {
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .fillMaxWidth()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -126,6 +132,84 @@ private fun AnnouncementPanel(vm: ManagerViewModel) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignReportsPanel(vm: ManagerViewModel) {
+    val reports by vm.signReports.collectAsState()
+    val status by vm.signReportsStatus.collectAsState()
+    val loading by vm.signReportsLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadSignReports() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Brand 签名记录",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = BrandBlue,
+            )
+            GlassButton(
+                onClick = { vm.loadSignReports() },
+                tint = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("刷新", color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+
+        if (status.isNotBlank()) {
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        reports.forEach { report ->
+            GlassCard {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = report.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = report.createdAt,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // body 是 ```json 包裹的回执，直接展示原文
+                    val detail = report.body
+                        .removePrefix("```json").removePrefix("```")
+                        .removeSuffix("```").trim()
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
