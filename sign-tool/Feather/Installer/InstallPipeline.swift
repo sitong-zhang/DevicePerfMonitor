@@ -257,7 +257,7 @@ final class InstallPipeline: ObservableObject {
 		installer.packageUrl = package
 		viewModel.status = .ready
 		if let url = URL(string: installer.iTunesLink) {
-			UIApplication.shared.open(url)
+			await UIApplication.shared.open(url)
 		}
 		
 		await pollInstallProgress(bundleID: app.identifier ?? "", viewModel: viewModel)
