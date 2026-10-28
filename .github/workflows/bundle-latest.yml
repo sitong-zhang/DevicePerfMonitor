@@ -1,0 +1,43 @@
+name: Bundle Latest Release
+
+# 把三个独立发布（apk / manager / ios-unsigned）汇总到同一个 latest 发布，
+# 四件套同框。运行在 GitHub 原生带宽上，不经本地慢节点。
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: '发布说明（可选）'
+        required: false
+        default: '四件套同框：GuanXu-unsigned.ipa、Brand-unsigned.ipa、观序 APK、管理端 APK。'
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取三个源发布的资产（GitHub 原生带宽）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: sitong-zhang/DevicePerfMonitor
+        run: |
+          mkdir -p ./bundle
+          gh release download apk -R "$REPO" -D ./bundle
+          gh release download manager -R "$REPO" -D ./bundle
+          gh release download ios-unsigned -R "$REPO" -D ./bundle
+          echo "== 汇总文件 =="
+          ls -la ./bundle
+
+      - name: 创建/更新 latest 发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: sitong-zhang/DevicePerfMonitor
+        run: |
+          gh release delete latest -R "$REPO" --yes 2>/dev/null || true
+          gh release create latest -R "$REPO" \
+            --title "最新版（观序 + Brand 签名工具 + 管理端）" \
+            --notes "${{ github.event.inputs.note }}" \
+            ./bundle/*
+          echo "== latest 资产 =="
+          gh release view latest -R "$REPO" --json assets --jq '.assets[].name'
