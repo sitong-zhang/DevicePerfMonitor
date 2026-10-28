@@ -46,10 +46,21 @@ extension Storage {
 struct AnyApp: Identifiable {
 	let base: AppInfoPresentable
 	var archive: Bool = false
-	
+
 	var id: String {
 		base.uuid ?? UUID().uuidString
 	}
+}
+
+extension AnyApp: AppInfoPresentable {
+	var name: String? { base.name }
+	var version: String? { base.version }
+	var identifier: String? { base.identifier }
+	var date: Date? { base.date }
+	var icon: String? { base.icon }
+	var uuid: String? { base.uuid }
+	var source: URL? { base.source }
+	var isSigned: Bool { base.isSigned }
 }
 
 protocol AppInfoPresentable {

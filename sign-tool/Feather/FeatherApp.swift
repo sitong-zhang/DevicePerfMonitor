@@ -25,7 +25,6 @@ struct FeatherApp: App {
 			InstallView()
 				.environment(\.managedObjectContext, storage.context)
 				.transition(.move(edge: .top).combined(with: .opacity))
-		}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
 				DispatchQueue.main.async {
@@ -44,7 +43,8 @@ struct FeatherApp: App {
 				UIApplication.topViewController()?.view.window?.tintColor = UIColor(Color(hex: UserDefaults.standard.string(forKey: "Feather.userTintColor") ?? "#848ef9"))
 			}
 		}
-	
+	}
+
 	private func _handleURL(_ url: URL) {
 		if url.scheme == "feather" {
 			/// feather://import-certificate?p12=<base64>&mobileprovision=<base64>&password=<base64>

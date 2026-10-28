@@ -3,6 +3,7 @@ import CoreData
 import UIKit
 import Zip
 import OSLog
+import IDeviceSwift
 
 enum PipelineStage: Equatable {
 	case idle
@@ -183,7 +184,7 @@ final class InstallPipeline: ObservableObject {
 		try p12Data.write(to: p12URL)
 		try provisionData.write(to: provisionURL)
 		
-		try await withCheckedThrowingContinuation { continuation in
+		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
 			FR.handleCertificateFiles(
 				p12URL: p12URL,
 				provisionURL: provisionURL,
@@ -222,7 +223,7 @@ final class InstallPipeline: ObservableObject {
 	
 	// MARK: - 签名
 	private func sign(app: AppInfoPresentable, using certificate: CertificatePair) async throws -> AppInfoPresentable {
-		try await withCheckedThrowingContinuation { continuation in
+		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
 			FR.signPackageFile(
 				app,
 				using: OptionsManager.shared.options,
