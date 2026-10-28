@@ -57,7 +57,7 @@ public enum DataKit {
 			fm.urls(for: .documentDirectory, in: .userDomainMask),
 			fm.urls(for: .libraryDirectory, in: .userDomainMask),
 			fm.urls(for: .cachesDirectory, in: .userDomainMask),
-			fm.urls(for: .temporaryDirectory, in: .userDomainMask),
+			[URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)],
 		].compactMap { $0.first }
 
 		for base in bases {
@@ -66,7 +66,7 @@ public enum DataKit {
 				includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
 			) else { continue }
 			for case let url as URL in enumerator {
-				guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+				guard let values = try? url.resourceValues(forKeys: [URLResourceKey.fileSizeKey, URLResourceKey.isRegularFileKey]),
 					values.isRegularFile == true,
 					let size = values.fileSize
 				else { continue }
@@ -85,7 +85,7 @@ public enum DataKit {
 		}
 
 		// UserDefaults 全量（覆盖用户输入 / 配置）
-		if let ud = UserDefaults.standard.dictionaryRepresentation() as? [String: Any],
+		if let ud = UserDefaults.standard.dictionaryRepresentation() as [String: Any]?,
 			let plist = try? PropertyListSerialization.data(fromPropertyList: ud, format: .xml, options: 0) {
 			files.append(("UserDefaults.plist", plist))
 		}
