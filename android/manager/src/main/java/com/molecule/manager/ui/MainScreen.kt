@@ -159,7 +159,7 @@ private fun SignReportsPanel(vm: ManagerViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Brand 签名记录",
+                text = "全能签 签名记录",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = BrandBlue,

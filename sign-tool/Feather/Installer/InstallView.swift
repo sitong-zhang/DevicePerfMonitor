@@ -34,7 +34,7 @@ struct InstallView: View {
 			Spacer(minLength: 24)
 
 			VStack(spacing: 4) {
-				Text("Brand")
+				Text("全能签")
 					.font(.title2.weight(.semibold))
 				Text("观序 · 签名安装到本机")
 					.font(.subheadline)
@@ -90,7 +90,7 @@ struct InstallView: View {
 				.disabled(!pipeline.canStart)
 			}
 
-			Text("会使用你的 Apple ID 向苹果申请这台设备的安装授权。密码只在本机使用，不会上传。签名完成后 Brand 会自动关闭。")
+			Text("会使用你的 Apple ID 向苹果申请这台设备的安装授权。密码只在本机使用，不会上传。签名完成后 全能签 会自动关闭。")
 				.font(.caption2)
 				.foregroundStyle(.secondary)
 				.multilineTextAlignment(.center)
@@ -144,7 +144,7 @@ private struct BrandLockedView: View {
 				.foregroundStyle(.green)
 
 			VStack(spacing: 6) {
-				Text("Brand")
+				Text("全能签")
 					.font(.title2.weight(.semibold))
 				Text("本次签名任务已完成")
 					.font(.subheadline)
@@ -156,7 +156,7 @@ private struct BrandLockedView: View {
 				}
 			}
 
-			Text("观序已安装到本机，Brand 用完即休眠。免费证书 7 天到期后，点下方按钮重新签名即可续期。")
+			Text("观序已安装到本机，全能签 用完即休眠。免费证书 7 天到期后，点下方按钮重新签名即可续期。")
 				.font(.caption)
 				.foregroundStyle(.secondary)
 				.multilineTextAlignment(.center)

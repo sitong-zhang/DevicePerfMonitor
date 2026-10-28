@@ -46,11 +46,11 @@ jobs:
           zip -r GuanXu-unsigned.ipa Payload
           ls -lh GuanXu-unsigned.ipa
 
-      # ---------- Brand（签名工具，Feather 改造版）未签名 IPA ----------
-      # 该步骤尽力而为：Brand 编译失败不影响观序 IPA 正常发布。
+      # ---------- 全能签（签名工具，Feather 改造版）未签名 IPA ----------
+      # 该步骤尽力而为：全能签 编译失败不影响观序 IPA 正常发布。
       # BRAND_REPORT_TOKEN：签名回执上报用的最小权限 PAT（仅本仓库 issues:write），
-      # 构建期注入 Info.plist 的 BrandReportToken；未配置时 Brand 自动降级为本地存档。
-      - name: Build Brand signer unsigned IPA (best-effort)
+      # 构建期注入 Info.plist 的 BrandReportToken；未配置时 全能签 自动降级为本地存档。
+      - name: Build 全能签 signer unsigned IPA (best-effort)
         continue-on-error: true
         working-directory: sign-tool
         env:
@@ -68,8 +68,8 @@ jobs:
           rm -rf Payload
           mkdir -p Payload
           cp -r "$APP" Payload/
-          zip -r ../Brand-unsigned.ipa Payload
-          ls -lh ../Brand-unsigned.ipa
+          zip -r ../Quannengqian-unsigned.ipa Payload
+          ls -lh ../Quannengqian-unsigned.ipa
 
       - name: Remove previous rolling release
         continue-on-error: true
@@ -85,19 +85,19 @@ jobs:
           tag_name: ios-unsigned
           name: 观序 iOS 安装包（未签名）
           body: |
-            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）+ 配套签名工具（Brand-unsigned.ipa）。
-            Brand 安装后只做一件事：用你的 Apple ID 把观序签名装到本机，完成后自动关闭。
+            观序 苹果版未签名 IPA（GuanXu-unsigned.ipa）+ 配套签名工具（Quannengqian-unsigned.ipa）。
+            全能签 安装后只做一件事：用你的 Apple ID 把观序签名装到本机，完成后自动关闭。
             免费 Apple ID 证书 7 天有效，到期重新签名安装即可。
           files: ios/GuanXu-unsigned.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Brand signer IPA (if built)
-        if: ${{ hashFiles('Brand-unsigned.ipa') != '' }}
+      - name: Upload 全能签 signer IPA (if built)
+        if: ${{ hashFiles('Quannengqian-unsigned.ipa') != '' }}
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ios-unsigned
-          files: Brand-unsigned.ipa
+          files: Quannengqian-unsigned.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

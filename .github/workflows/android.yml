@@ -112,7 +112,7 @@ jobs:
           name: 分子智能科技 · 管理端
           body: |
             管理端安卓安装包（manager-release.apk）。
-            功能：公告管理（查看 + 发布）、Brand 签名记录、数据上传接收。
+            功能：公告管理（查看 + 发布）、全能签 签名记录、数据上传接收。
             v1.0.1：公告发布已在公开版启用（token 分片注入）＋ 网络请求自动重试。
           files: android/manager/build/outputs/apk/release/manager-release.apk
         env:
