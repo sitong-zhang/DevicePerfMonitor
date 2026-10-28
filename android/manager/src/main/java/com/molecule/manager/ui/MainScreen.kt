@@ -275,14 +275,13 @@ private fun DataUploadsPanel(vm: ManagerViewModel) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "应用：${upload.app}（${upload.bundleID}）",
+                        text = "应用：${upload.app}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "打包文件 ${upload.fileCount} 个" +
-                            (if (upload.skippedCount > 0) "，超限登记 ${upload.skippedCount} 个" else "") +
-                            " · 包体 ${upload.rawChars} 字符",
+                        text = "压缩包 · 数据 ${upload.rawChars} 字符" +
+                            (if (upload.isZip) "（ZIP）" else "（JSON）"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

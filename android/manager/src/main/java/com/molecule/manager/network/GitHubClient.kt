@@ -39,7 +39,7 @@ data class SignReportData(
 
 /**
  * 数据上传包（App 端打包整个应用数据后上报的 issue，labels=data-upload）。
- * 来源应用不固定（UploadTarget 可注册任意软件），通道固定到管理端。
+ * 来源应用不固定（DataKit 可嵌入任意软件），通道固定到管理端。
  */
 data class DataUploadData(
     val number: Long,
@@ -50,6 +50,7 @@ data class DataUploadData(
     val fileCount: Int,
     val skippedCount: Int,
     val rawChars: Int,
+    val isZip: Boolean = false,
 )
 
 object GitHubClient {
@@ -142,7 +143,8 @@ object GitHubClient {
 
     /**
      * 读取数据上传包（免 token，labels=data-upload）。
-     * body 里的 ```json 包即上传数据包，此处解析出摘要字段供列表展示。
+     * 新版 body 为 `[ZIP_B64]…[/ZIP_B64]` 段 + 末尾 `json` 摘要；
+     * 兼容老版纯 JSON 包。从标题取来源应用与时间，从正文取包体大小。
      */
     suspend fun fetchDataUploads(): List<DataUploadData> = withContext(Dispatchers.IO) {
         val (code, body) = get(DATA_UPLOADS_API)
@@ -150,20 +152,28 @@ object GitHubClient {
         val arr = org.json.JSONArray(body)
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            val title = o.optString("title", "")
+            val app = title.removePrefix("[数据上传] ")
+                .substringBefore(" · ").trim().ifBlank { "?" }
+            val exportedAt = title.substringAfter(" · ").substringBefore(" · ").trim()
             val raw = o.optString("body", "")
-            val inner = raw
-                .removePrefix("```json").removePrefix("```")
-                .removeSuffix("```").trim()
-            val pkg = runCatching { JSONObject(inner) }.getOrNull()
+            val isZip = raw.contains("[ZIP_B64]")
+            val zipChars = if (isZip) {
+                raw.substringAfter("[ZIP_B64]")
+                    .substringBefore("[/ZIP_B64]")
+                    .trim()
+                    .length
+            } else 0
             DataUploadData(
                 number = o.optLong("number", 0),
-                title = o.optString("title", ""),
-                app = pkg?.optString("app", "?") ?: "?",
-                bundleID = pkg?.optString("bundleID", "?") ?: "?",
-                exportedAt = pkg?.optString("exportedAt", "") ?: "",
-                fileCount = pkg?.optInt("fileCount", 0) ?: 0,
-                skippedCount = pkg?.optJSONArray("skipped")?.length() ?: 0,
-                rawChars = raw.length,
+                title = title,
+                app = app,
+                bundleID = "",
+                exportedAt = exportedAt,
+                fileCount = 0,
+                skippedCount = 0,
+                rawChars = zipChars,
+                isZip = isZip,
             )
         }
     }
