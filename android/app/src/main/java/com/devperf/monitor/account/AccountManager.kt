@@ -31,7 +31,9 @@ class AccountManager(context: Context) {
         if (u.length < 3) return "用户名至少 3 个字符"
         if (password.length < 6) return "密码至少 6 位"
         val list = accounts()
-        if (list.any { it.optString("username") == u }) return "该用户名已被注册"
+        for (i in 0 until list.length()) {
+            if (list.optJSONObject(i)?.optString("username") == u) return "该用户名已被注册"
+        }
 
         val salt = UUID.randomUUID().toString().toByteArray(Charsets.UTF_8)
         val obj = JSONObject().apply {
