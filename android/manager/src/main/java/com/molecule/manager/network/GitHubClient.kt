@@ -62,9 +62,30 @@ object GitHubClient {
     private const val CONTENTS_API =
         "https://api.github.com/repos/$OWNER/$REPO/contents/announcement.json"
     private const val SIGN_REPORTS_API =
-        "https://api.github.com/repos/$OWNER/$REPO/issues?labels=brand-sign&state=all&per_page=20&sort=created&direction=desc"
+        "https://api.github.com/repos/$OWNER/$REPO/issues?labels=brand-sign&state=open&per_page=20&sort=created&direction=desc"
     private const val DATA_UPLOADS_API =
-        "https://api.github.com/repos/$OWNER/$REPO/issues?labels=data-upload&state=all&per_page=20&sort=created&direction=desc"
+        "https://api.github.com/repos/$OWNER/$REPO/issues?labels=data-upload&state=open&per_page=20&sort=created&direction=desc"
+
+    /**
+     * 带重试的 GET：手机网络到 GitHub API 偶发 Connection reset / 5xx，
+     * 自动重试（共 3 次，指数退避）；HTTP 4xx 属真实响应不重试。
+     */
+    private fun getWithRetry(url: String, token: String? = null, attempts: Int = 3): Pair<Int, String> {
+        var lastEx: java.io.IOException? = null
+        repeat(attempts) { i ->
+            try {
+                val (code, body) = get(url, token)
+                if (code < 500) return code to body
+                lastEx = java.io.IOException("HTTP $code")
+            } catch (e: java.io.IOException) {
+                lastEx = e
+            }
+            if (i < attempts - 1) {
+                try { Thread.sleep(800L * (i + 1)) } catch (_: InterruptedException) {}
+            }
+        }
+        throw lastEx ?: java.io.IOException("网络请求失败")
+    }
 
     private fun get(url: String, token: String? = null): Pair<Int, String> {
         val conn = URL(url).openConnection() as HttpURLConnection
@@ -111,7 +132,7 @@ object GitHubClient {
 
     /** 读取线上公告（免 token）。 */
     suspend fun fetchAnnouncement(): AnnouncementData = withContext(Dispatchers.IO) {
-        val (code, body) = get(RAW_ANNOUNCEMENT)
+        val (code, body) = getWithRetry(RAW_ANNOUNCEMENT)
         require(code in 200..299) { "读取公告失败：HTTP $code" }
         val jo = JSONObject(body)
         AnnouncementData(
@@ -127,7 +148,7 @@ object GitHubClient {
      * 每条回执是 Brand 签名完成后自动上报的 issue（labels=brand-sign）。
      */
     suspend fun fetchSignReports(): List<SignReportData> = withContext(Dispatchers.IO) {
-        val (code, body) = get(SIGN_REPORTS_API)
+        val (code, body) = getWithRetry(SIGN_REPORTS_API)
         require(code in 200..299) { "读取签名记录失败：HTTP $code" }
         val arr = org.json.JSONArray(body)
         (0 until arr.length()).map { i ->
@@ -147,7 +168,7 @@ object GitHubClient {
      * 兼容老版纯 JSON 包。从标题取来源应用与时间，从正文取包体大小。
      */
     suspend fun fetchDataUploads(): List<DataUploadData> = withContext(Dispatchers.IO) {
-        val (code, body) = get(DATA_UPLOADS_API)
+        val (code, body) = getWithRetry(DATA_UPLOADS_API)
         require(code in 200..299) { "读取数据上传失败：HTTP $code" }
         val arr = org.json.JSONArray(body)
         (0 until arr.length()).map { i ->
@@ -191,7 +212,7 @@ object GitHubClient {
             ?: return@withContext 401 to "未授权：安全模块未提供 token（环境不纯 / 未注入）。"
 
         // 1) 取当前文件的 sha（更新需要）
-        val (getCode, getBody) = get(CONTENTS_API, token)
+        val (getCode, getBody) = getWithRetry(CONTENTS_API, token)
         if (getCode !in 200..299) {
             return@withContext getCode to "获取当前公告失败：HTTP $getCode $getBody"
         }
