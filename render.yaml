@@ -1,0 +1,33 @@
+# Render 部署配置：PulseGuard 后端
+# 部署步骤：
+#   1. 打开 https://render.com ，用 GitHub 登录并授权
+#   2. New > Web Service > 连接此仓库（sitong-zhang/DevicePerfMonitor）
+#   3. Render 会自动读取本文件；也可不连仓库、改用本文件手动建
+#   4. 免费实例（plan: free）无持久磁盘，SQLite 数据会随每次部署重置；
+#      需要持久数据请升级到含磁盘的付费 plan，并挂载 /app/data
+#   5. 部署完成后在 Environment 里填 SMTP_*（发验证码邮件）与 ADMIN_PASSWORD
+services:
+  - type: web
+    name: pulseguard-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    plan: free
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "5000"
+      - key: DEV_MODE
+        value: "0"
+      - key: APP_NAME
+        value: "PulseGuard"
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false

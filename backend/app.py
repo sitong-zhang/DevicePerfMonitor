@@ -325,6 +325,12 @@ def user_public(u) -> dict:
 # ---------------------------------------------------------------------------
 # 公开接口：验证码 / 注册 / 登录
 # ---------------------------------------------------------------------------
+@app.route("/health", methods=["GET"])
+def health():
+    # 供平台健康检查（Render / 容器编排）探测存活
+    return jsonify(ok=True), 200
+
+
 @app.route("/api/send_code", methods=["POST", "OPTIONS"])
 def send_code():
     if request.method == "OPTIONS":
