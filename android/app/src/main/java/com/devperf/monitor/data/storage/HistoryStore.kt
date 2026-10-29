@@ -19,7 +19,7 @@ data class HistoryPoint(val timestampMs: Long, val value: Float)
  * - 纯内存环形缓冲 + 可选本地落盘（org.json，无第三方依赖）；
  * - 落盘文件：filesDir/history/history.json，进程重启后自动恢复，可回看；
  * - 极简模式（低端机）下由调用方停止调用 [persist]，停历史落盘；
- * - 全程本地存储，不联网、不上传。
+ * - 全程本地存储，用于历史回看。
  *
  * 保留 2 小时而不是 30 分钟：既然采了就留得住，用户要能往回翻看刚才发生了什么。
  * 7200 点 × 4 个指标对 JSON 落盘来说是几百 KB 量级，本地读写可接受。

@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">观序</string>
+    <string name="app_name">PulseGuard</string>
 
     <!-- 通知渠道 -->
     <string name="channel_collector_name">性能采集服务</string>
-    <string name="channel_collector_desc">后台持续采集设备性能数据（本地存储，不联网）</string>
+    <string name="channel_collector_desc">后台持续采集设备性能数据</string>
     <string name="channel_alert_name">高温与异常告警</string>
     <string name="channel_alert_desc">温度超阈值、严重卡顿等异常告警</string>
     <string name="channel_overlay_name">悬浮窗服务</string>
-    <string name="channel_overlay_desc">保持全局悬浮窗显示（本地数据，不联网）</string>
+    <string name="channel_overlay_desc">保持全局悬浮窗显示</string>
 
     <!-- 悬浮窗 -->
     <string name="overlay_notification_title">性能监控运行中</string>

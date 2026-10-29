@@ -9,11 +9,14 @@ plugins {
 // ---------------------------------------------------------------------------
 // 管理端 App（:manager）com.molecule.manager
 //
-// 功能：① 公告管理（读线上 announcement.json + 编辑发布，唯一写路径）；
-//       ② 反馈收件箱（GET issues?labels=feedback，纯读）。
+// 功能（2.0 重写）：账号管控 + 全局/单独公告，数据全部来自自建后端
+//       （backend/ Flask + SQLite，账号/验证码/同步/管控 API）。
+//       - 密码锁：管理密码 421083，输入一次本地永久记住（除非卸载）；
+//       - 用户列表 / 详情：注册用户及其设备数据、操作记录、单独公告；
+//       - 管控：禁用功能、限制账号（正常/受限/禁用）、单独发公告、全局公告。
 // 安全：集成 :security 全套加固（token 分片 + SO 虚拟化 + 反调试/防篡改），
 //       并启用最强 R8 混淆（fullMode + repackageclasses + 混淆字典 + 删日志）。
-// 分发：仅本地交付，不挂公开 Release（写权限 token 不外泄）。
+// 分发：仅限管理人员下载（发布说明标注「仅限管理人员下载」）。
 // ---------------------------------------------------------------------------
 android {
     namespace = "com.molecule.manager"
@@ -23,9 +26,16 @@ android {
         applicationId = "com.molecule.manager"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "2.0.0"
         vectorDrawables.useSupportLibrary = true
+
+        // 后端服务地址（账号 / 管控 / 公告）：构建可用 -PdevperfServerUrl=... 或
+        // 环境变量 DEVPERF_SERVER_URL 覆盖；默认指向本机联调地址。
+        val serverUrl = (project.findProperty("devperfServerUrl") as String?)
+            ?: System.getenv("DEVPERF_SERVER_URL")
+            ?: "http://10.0.2.2:5000"
+        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
     }
 
     signingConfigs {

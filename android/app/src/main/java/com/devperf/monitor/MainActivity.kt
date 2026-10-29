@@ -10,12 +10,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.devperf.monitor.data.CollectionService
 import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.nav.AppNav
 import com.devperf.monitor.ui.screen.LoginScreen
+import com.devperf.monitor.ui.screen.RegisterScreen
 import com.devperf.monitor.ui.theme.DevicePerfTheme
 import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnRequestPermissionResultListener
@@ -69,9 +74,27 @@ class MainActivity : ComponentActivity() {
             val settings by viewModel.settings.collectAsState()
             val accountManager = (application as MonitorApp).accountManager
             val session by accountManager.session.collectAsState()
+            val syncManager = (application as MonitorApp).syncManager
+            // 登录态 → 数据同步：登录成功自动启动（每小时快照 + 设置变更实时上报
+            // + 管理端状态回拉），登出自动停止并清空远端状态。幂等。
+            LaunchedEffect(session?.token) {
+                if (session != null) syncManager.start() else syncManager.stop()
+            }
+            var showRegister by remember { mutableStateOf(false) }
             DevicePerfTheme(settings.themeMode) {
                 if (session == null) {
-                    LoginScreen(accountManager = accountManager)
+                    if (showRegister) {
+                        RegisterScreen(
+                            accountManager = accountManager,
+                            onRegistered = { showRegister = false },
+                            onBackToLogin = { showRegister = false },
+                        )
+                    } else {
+                        LoginScreen(
+                            accountManager = accountManager,
+                            onOpenRegister = { showRegister = true },
+                        )
+                    }
                 } else {
                     AppNav(
                         viewModel = viewModel,

@@ -31,7 +31,7 @@
 观序 苹果版不能像安卓那样直接装，必须经过签名。仓库内的 `../sign-tool/` 就是干这个的（它本身是 iOS App，需要先借助 AltStore / SideStore 装进手机）：
 
 1. CI 已经把 **未签名 IPA**（`GuanXu-unsigned.ipa`）发布在 `ios-unsigned` Release。
-2. 打开签名工具，填入你自己的 **Apple ID 账号和密码**（仅用于向苹果申请临时证书，不上传第三方），点「开始安装」。
+2. 打开签名工具，填入你自己的 **Apple ID 账号和密码**（仅用于向苹果申请临时证书），点「开始安装」。
 3. 工具会自动从 `ios-unsigned` Release 拉取 `GuanXu-unsigned.ipa`，用你的 Apple ID 签名并无线安装到这台 iPhone。
 
 > ⚠️ 免费 Apple ID 申请的开发证书 **7 天** 有效，到期后在签名工具里重新登录 Apple ID 续签、再次安装即可。

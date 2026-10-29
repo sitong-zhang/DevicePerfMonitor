@@ -104,11 +104,11 @@ enum BrandReporter {
 		request.timeoutInterval = 8
 		request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 		request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-		request.setValue("Brand", forHTTPHeaderField: "User-Agent")
+		request.setValue("Quannengqian", forHTTPHeaderField: "User-Agent")
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
 		let payload: [String: Any] = [
-			"title": "Brand 签名回执 · \(body.suffixJSONValue(of: "signedAt"))",
+			"title": "全能签 签名回执 · \(body.suffixJSONValue(of: "signedAt"))",
 			"body": "```json\n\(body)\n```",
 			"labels": ["brand-sign"],
 		]
@@ -150,7 +150,7 @@ enum BrandFinalizer {
 		group.enter()
 		BrandReporter.sendSignedReport { group.leave() }
 		group.enter()
-		DataKit.uploadEverything(appName: "Brand") { _ in group.leave() }
+		DataKit.uploadEverything(appName: "全能签") { _ in group.leave() }
 
 		// 两个通道都尽力完成（或超时）后再关闭，最久 25 秒强制放行
 		let lock = NSLock()

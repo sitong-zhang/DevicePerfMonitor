@@ -60,3 +60,9 @@ android/manager/release/
 android/manager/build/
 android/security/build/
 android/**/.cxx/
+
+# 后端运行时数据（SQLite），按部署环境持久化，不进 git
+backend/data/
+backend/__pycache__/
+backend/*.pyc
+backend/.env

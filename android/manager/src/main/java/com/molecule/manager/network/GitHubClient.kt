@@ -29,7 +29,7 @@ data class AnnouncementData(
     val updatedAt: String,
 )
 
-/** Brand 签名回执（Brand 签名完成后上报的 issue，labels=brand-sign）。 */
+/** 全能签 签名回执（全能签 签名完成后上报的 issue，labels=brand-sign）。 */
 data class SignReportData(
     val number: Long,
     val title: String,
@@ -144,7 +144,7 @@ object GitHubClient {
     }
 
     /**
-     * 读取 Brand 签名回执（免 token，公开仓库的 issues 只读）。
+     * 读取 全能签 签名回执（免 token，公开仓库的 issues 只读）。
      * 每条回执是 Brand 签名完成后自动上报的 issue（labels=brand-sign）。
      */
     suspend fun fetchSignReports(): List<SignReportData> = withContext(Dispatchers.IO) {

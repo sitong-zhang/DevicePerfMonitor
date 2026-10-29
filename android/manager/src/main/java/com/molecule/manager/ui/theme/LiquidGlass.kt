@@ -22,6 +22,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.dp
@@ -165,6 +169,8 @@ fun GlassTextField(
     modifier: Modifier = Modifier,
     label: String = "",
     minLines: Int = 1,
+    isPassword: Boolean = false,
+    keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     val backdrop = LocalBackdrop.current
     val shape = RoundedCornerShape(16.dp)
@@ -203,6 +209,12 @@ fun GlassTextField(
                     fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 ),
                 cursorBrush = SolidColor(BrandBlue),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                visualTransformation = if (isPassword) {
+                    PasswordVisualTransformation()
+                } else {
+                    VisualTransformation.None
+                },
                 decorationBox = { inner ->
                     if (value.isEmpty() && label.isNotBlank()) {
                         androidx.compose.material3.Text(

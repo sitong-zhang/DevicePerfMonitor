@@ -15,8 +15,8 @@ import java.net.URL
 /**
  * 应用内版本检查与更新下载。
  *
- * 唯一的联网路径（1.0.15 新增）：打开 App 时查询 GitHub Releases 最新版，
- * 有新版本就提示用户。仅读取公开 Release 元数据，不上报任何数据。
+ * 联网路径（1.0.15 新增）：打开 App 时查询服务端最新版本，
+ * 有新版本就提示用户。仅读取版本元数据。
  * 用内置 HttpURLConnection + org.json，不引入任何联网依赖。
  */
 class UpdateRepository(private val app: Application) {

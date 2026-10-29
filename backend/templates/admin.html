@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理端 · {{ app_name }}</title>
+<style>
+  :root{--blue:#1B6BFF;--ink:#0B1B33;--line:#E6ECF5;--bg:#F5F8FF;--red:#E5484D;--green:#2E9E5B;--amber:#B8860B}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC",sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:14px 22px;display:flex;justify-content:space-between;align-items:center}
+  header b{font-size:18px}
+  .wrap{max-width:1100px;margin:22px auto;padding:0 18px}
+  .cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 20px;min-width:150px;flex:1}
+  .card .n{font-size:26px;font-weight:700}
+  .card .l{color:#6b7a90;font-size:13px;margin-top:4px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:#6b7a90;font-weight:600}
+  .tag{padding:2px 8px;border-radius:999px;font-size:12px}
+  .tag.normal{background:#E7F6EC;color:var(--green)}
+  .tag.restricted{background:#FFF3D6;color:var(--amber)}
+  .tag.disabled{background:#FDE7E7;color:var(--red)}
+  button{cursor:pointer;border:none;border-radius:10px;padding:8px 14px;font-size:14px;background:var(--blue);color:#fff}
+  button.ghost{background:#eef3ff;color:var(--blue)}
+  button.danger{background:#FDE7E7;color:var(--red)}
+  input,textarea,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin:4px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .login{max-width:360px;margin:80px auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px}
+  .login h2{margin:0 0 14px}
+  .err{color:var(--red);font-size:13px;margin:6px 0}
+  .muted{color:#6b7a90;font-size:13px}
+  .modal{position:fixed;inset:0;background:rgba(10,20,40,.4);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:30px}
+  .modal.show{display:flex}
+  .sheet{background:#fff;border-radius:16px;padding:22px;max-width:720px;width:100%}
+  .log{font-size:13px;background:#f7f9fc;border-radius:10px;padding:10px;max-height:240px;overflow:auto}
+  .log div{padding:3px 0;border-bottom:1px dashed #eef}
+  .close{float:right}
+  a{color:var(--blue)}
+</style>
+</head>
+<body>
+<header>
+  <b>管理端 · {{ app_name }}</b>
+  {% if authed %}<a href="/admin/logout">退出登录</a>{% endif %}
+</header>
+
+{% if not authed %}
+  <form class="login" method="POST" action="/admin">
+    <h2>管理端登录</h2>
+    <p class="muted">请输入管理密码</p>
+    <input type="password" name="password" placeholder="管理密码" autofocus required>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <button style="width:100%;margin-top:10px">进入</button>
+  </form>
+{% else %}
+  <div class="wrap">
+    <div class="cards" id="stats"></div>
+
+    <div class="panel">
+      <h3>全局公告</h3>
+      <input id="g_title" placeholder="标题">
+      <textarea id="g_content" rows="2" placeholder="内容"></textarea>
+      <button onclick="globalAnnounce()">发布全局公告</button>
+      <span id="g_msg" class="muted"></span>
+    </div>
+
+    <div class="panel">
+      <h3>注册用户（<span id="ucount">0</span>）</h3>
+      <table>
+        <thead><tr><th>账号</th><th>昵称</th><th>邮箱</th><th>手机号</th><th>状态</th><th>最近同步</th><th>操作数</th><th></th></tr></thead>
+        <tbody id="users"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="sheet">
+      <button class="ghost close" onclick="closeModal()">关闭</button>
+      <h3 id="m_title"></h3>
+      <div id="m_body"></div>
+    </div>
+  </div>
+
+<script>
+const fmt = t => t ? new Date(t).toLocaleString('zh-CN') : '—';
+async function api(u, opt={}){ const r = await fetch(u, opt); return r.json(); }
+
+async function load(){
+  const s = await api('/api/admin/stats');
+  document.getElementById('stats').innerHTML =
+    [['总用户',s.total],['近1小时同步',s.synced_1h],['受限/禁用',s.restricted]]
+    .map(([l,n])=>`<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+  const d = await api('/admin/api/users');
+  document.getElementById('ucount').textContent = d.users.length;
+  document.getElementById('users').innerHTML = d.users.map(u=>`
+    <tr>
+      <td>${u.account}</td><td>${u.nickname}</td><td>${u.email}</td><td>${u.phone}</td>
+      <td><span class="tag ${u.status}">${u.status}</span></td>
+      <td class="muted">${fmt(u.last_sync_at)}</td><td>${u.op_count}</td>
+      <td><button class="ghost" onclick="openUser(${u.id})">查看/管控</button></td>
+    </tr>`).join('');
+}
+async function openUser(id){
+  const d = await api('/api/admin/users/'+id);
+  const u = d.user;
+  const feats = ['overlay','history','alert','update','feedback'];
+  document.getElementById('m_title').textContent = u.nickname+'（'+u.account+'）';
+  document.getElementById('m_body').innerHTML = `
+    <p class="muted">邮箱 ${u.email} · 手机 ${u.phone} · 注册 ${fmt(u.created_at)} · 状态 <b>${u.status}</b></p>
+    <h4>实时数据快照</h4>
+    <pre class="log">${JSON.stringify(d.snapshot,null,2)||'暂无同步数据'}</pre>
+    <h4>操作记录</h4>
+    <div class="log">${d.operations.map(o=>`<div>[${fmt(o.created_at)}] ${o.type} — ${o.detail}</div>`).join('')||'暂无'}</div>
+    <h4>功能开关</h4>
+    <div class="row">${feats.map(f=>`<button class="ghost" onclick="toggleFeat(${id},'${f}')">${f}</button>`).join('')}</div>
+    <p class="muted">已禁用：${(d.disabled_features||[]).join(', ')||'无'}</p>
+    <h4>账户状态</h4>
+    <div class="row">
+      <select id="st_${id}"><option value="normal">正常</option><option value="restricted">限制</option><option value="disabled">禁用</option></select>
+      <input id="note_${id}" placeholder="限制说明（可选）" value="${(d.restriction_note||'').replace(/"/g,'')}">
+      <button onclick="setStatus(${id})">应用</button>
+    </div>
+    <h4>单独公告</h4>
+    <input id="t_${id}" placeholder="标题">
+    <textarea id="c_${id}" rows="2" placeholder="内容"></textarea>
+    <button onclick="announce(${id})">发送给该用户</button>
+    <span id="msg_${id}" class="muted"></span>
+  `;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal(){document.getElementById('modal').classList.remove('show');}
+async function toggleFeat(id,f){ const d=await api('/api/admin/users/'+id+'/disable_feature',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feature:f,disabled:true})}); document.getElementById('msg_'+id).textContent='已禁用 '+f; load(); }
+async function setStatus(id){ const st=document.getElementById('st_'+id).value; const note=document.getElementById('note_'+id).value; await api('/api/admin/users/'+id+'/set_status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st,note})}); closeModal(); load(); }
+async function announce(id){ const t=document.getElementById('t_'+id).value; const c=document.getElementById('c_'+id).value; const d=await api('/api/admin/users/'+id+'/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,content:c})}); document.getElementById('msg_'+id).textContent=d.msg; }
+async function globalAnnounce(){ const t=document.getElementById('g_title').value; const c=document.getElementById('g_content').value; const d=await api('/api/admin/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,content:c})}); document.getElementById('g_msg').textContent=d.msg; }
+load();
+</script>
+{% endif %}
+</body>
+</html>

@@ -55,25 +55,22 @@ jobs:
         # DEVPERF_FEEDBACK_TOKEN：意见反馈直连 GitHub 的最小权限 PAT（仅本仓库
         # issues:write）。为空时 App 自动降级为「拉起浏览器打开预填 issue 页」，
         # 反馈路径不断。在仓库 Secrets 里加这个变量即可让每次发版自动注入。
-        # MANAGER_GITHUB_TOKEN：管理端发公告的最小权限 fine-grained PAT（仅本仓库
-        # Contents:write + Issues 读写）。构建前写入 android/local.properties，
-        # :security 的 generateTokenShards 会将其拆成 DEX/SO 双分片注入——
-        # 未配置时管理端自动降级为只读版。
+        # DEVPERF_SERVER_URL：自建后端地址（账号 / 验证码 / 同步 / 管控 / 公告）。
+        # 默认本机联调地址（10.0.2.2:5000），发版时通过此变量指向已部署的后端。
         env:
           DEVPERF_FEEDBACK_TOKEN: ${{ secrets.DEVPERF_FEEDBACK_TOKEN }}
-          MANAGER_GITHUB_TOKEN: ${{ secrets.MANAGER_GITHUB_TOKEN }}
+          DEVPERF_SERVER_URL: ${{ secrets.DEVPERF_SERVER_URL }}
         run: |
           # runner 镜像自带 Android SDK；没有时回退到 $ANDROID_SDK_ROOT
           if [ -z "$ANDROID_HOME" ] && [ -z "$ANDROID_SDK_ROOT" ]; then
             echo "ANDROID_HOME or ANDROID_SDK_ROOT must be set" >&2
             exit 1
           fi
-          # 管理端发公告 token 注入（分片由 :security 构建期生成，明文不进仓库）
-          if [ -n "$MANAGER_GITHUB_TOKEN" ]; then
-            echo "MANAGER_GITHUB_TOKEN=$MANAGER_GITHUB_TOKEN" >> local.properties
-            echo "::notice::已注入管理端发公告 token（完整版管理端）"
-          else
-            echo "::notice::MANAGER_GITHUB_TOKEN 未配置，管理端为只读版"
+          # 后端地址注入（用户端 + 管理端共用）：默认本机联调地址，发版时通过
+          # DEVPERF_SERVER_URL 指向已部署的后端服务；未配置则用默认值。
+          if [ -n "$DEVPERF_SERVER_URL" ]; then
+            echo "DEVPERF_SERVER_URL=$DEVPERF_SERVER_URL" >> local.properties
+            echo "::notice::已注入后端地址：$DEVPERF_SERVER_URL"
           fi
           ./gradlew :app:assembleRelease :manager:assembleRelease --no-daemon
 
@@ -92,9 +89,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk
-          name: 观序 安卓版 APK
+          name: PulseGuard 安卓版 APK
           body: |
-            观序 安卓版正式签名安装包（app-release.apk）。
+            PulseGuard 安卓版正式签名安装包（app-release.apk）。
             首次打开需注册 / 登录本地账号后即可使用。
           # 1.0.13~1.0.15 曾按 flavor 出双包（路径为 apk/<flavor>/release/）；
           # 1.0.16 起合并为单一发布包，产物固定在 apk/release/ 下
@@ -102,18 +99,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 管理端 APK：固定上架到 manager tag 的 Release（用户拍板「先上架，说下架再下架」）。
-      # 1.0.1 起注入 MANAGER_GITHUB_TOKEN 分片，公开分发版即可发公告（token 为
-      # 最小权限 fine-grained PAT：仅本仓库 Contents:write + Issues 读写）。
+      # 管理端 APK：固定上架到 manager tag 的 Release。
+      # ⚠️ 仅限管理人员下载：包内集成管理密码（421083）与账号管控能力，
+      #    请勿向非管理人员分发。
       - name: Upload Manager APK to Release (manager tag)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: manager
-          name: 分子智能科技 · 管理端
+          name: 分子智能科技 · 管理端（仅限管理人员下载）
           body: |
             管理端安卓安装包（manager-release.apk）。
-            功能：公告管理（查看 + 发布）、Brand 签名记录、数据上传接收。
-            v1.0.1：公告发布已在公开版启用（token 分片注入）＋ 网络请求自动重试。
+
+            ⚠️ 仅限管理人员下载：内含管理密码与账号管控能力，请勿外传。
+
+            功能（v2.0.0）：
+            · 密码锁：管理密码 421083，输入一次本地永久记住（除非卸载）；
+            · 用户管控：注册用户列表与详情、操作记录、单独公告；
+            · 账号限制：禁用功能、正常 / 受限 / 禁用三态切换；
+            · 全局公告：发布后所有用户端实时可见。
+            数据全部来自自建后端（backend/），不再依赖 GitHub。
           files: android/manager/build/outputs/apk/release/manager-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

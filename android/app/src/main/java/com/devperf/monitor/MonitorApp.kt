@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.devperf.monitor.account.AccountManager
+import com.devperf.monitor.account.SyncManager
 import com.devperf.monitor.data.CollectionService
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.SettingsRepository
@@ -38,6 +39,9 @@ class MonitorApp : Application() {
     lateinit var accountManager: AccountManager
         private set
 
+    lateinit var syncManager: SyncManager
+        private set
+
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base)
         // 这里比 ContentProvider.onCreate 和 Application.onCreate 都早，
@@ -63,7 +67,8 @@ class MonitorApp : Application() {
             metricsRepository = MetricsRepository(this, settingsRepository)
             BootTrace.mark("MetricsRepository 就绪")
             accountManager = AccountManager(this)
-            BootTrace.mark("AccountManager 就绪")
+            syncManager = SyncManager(this, settingsRepository, accountManager)
+            BootTrace.mark("AccountManager / SyncManager 就绪")
         }.onFailure {
             BootTrace.mark("业务初始化失败: ${it.javaClass.simpleName}: ${it.message}")
             throw it

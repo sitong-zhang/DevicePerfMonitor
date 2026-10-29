@@ -10,7 +10,7 @@ on:
       note:
         description: '发布说明（可选）'
         required: false
-        default: '三件套同框：GuanXu-unsigned.ipa、Brand-unsigned.ipa、观序 APK。'
+        default: '三件套同框：GuanXu-unsigned.ipa、Quannengqian-unsigned.ipa、观序 APK。'
 
 permissions:
   contents: write
@@ -37,7 +37,7 @@ jobs:
         run: |
           gh release delete latest -R "$REPO" --yes 2>/dev/null || true
           gh release create latest -R "$REPO" \
-            --title "最新版（观序 + Brand 签名工具）" \
+            --title "最新版（观序 + 全能签 签名工具）" \
             --notes "${{ github.event.inputs.note }}" \
             ./bundle/*
           echo "== latest 资产 =="

@@ -12,7 +12,7 @@ import java.net.URLDecoder
 /**
  * 1.0.28 反馈仓库（邮箱通道）纯逻辑测试。
  *
- * 不联网：邮箱通道是纯本地 mailto 拼装，正好全覆盖。只测格式化与
+ * 邮箱通道是纯本地 mailto 拼装，正好全覆盖。只测格式化与
  * mailto 编码这些纯函数。
  */
 @RunWith(RobolectricTestRunner::class)

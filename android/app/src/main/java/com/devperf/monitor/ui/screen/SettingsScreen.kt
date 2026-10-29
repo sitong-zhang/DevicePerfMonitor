@@ -98,7 +98,7 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val haptics = rememberHaptics()
 
-    // 账号：仅保存在本机，用于登录态持久化
+    // 账号：登录态持久化于本机，并同步到服务端
     val accountManager = (context.applicationContext as MonitorApp).accountManager
     val account by accountManager.session.collectAsState()
 
@@ -162,7 +162,10 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
                 ) {
                     if (account != null) {
-                        GlassInfoRow(label = "当前账号", value = account?.username ?: "—")
+                        GlassInfoRow(
+                            label = "当前账号",
+                            value = account?.nickname?.ifBlank { account?.account } ?: "—",
+                        )
                         GlassButton(
                             text = "退出登录",
                             onClick = {
@@ -179,7 +182,7 @@ fun SettingsScreen(
                         )
                     }
                     Text(
-                        text = "账号仅保存在本机，用于登录态持久化，不上传任何服务器。",
+                        text = "账号资料用于登录与数据同步。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
@@ -337,8 +340,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        text = "历史数据仅保存在本机（内存环形缓冲 + 本地文件），" +
-                            "本应用不申请 INTERNET 权限，无任何联网行为。",
+                        text = "历史数据保存在本机（内存环形缓冲 + 本地文件），用于回看。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
@@ -466,7 +468,7 @@ fun SettingsScreen(
                     )
                     Text(
                         text = "壁纸同时作为全局悬浮窗的背景。自定义图片只在本机处理，" +
-                            "不上传、不进相册，随时可以换回内置的。",
+                            "不进相册，随时可以换回内置的。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
@@ -528,9 +530,9 @@ fun SettingsScreen(
             // 应用简介：客观描述产品定位与数据处理方式，非营销话术。
             GlassPanel {
                     Text(
-                        text = "观序 由分子智能科技出品，提供 CPU、内存、电池、" +
+                        text = "PulseGuard 由分子智能科技出品，提供 CPU、内存、电池、" +
                             "网络等设备的实时性能监测与历史记录，帮助你了解设备的运行状态。" +
-                            "所有监测数据均在本地设备上处理，不会上传到任何服务器。",
+                            "监测数据在本机采集，并按小时自动、在关键操作时实时同步到管理端。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.textSecondary,
                 )

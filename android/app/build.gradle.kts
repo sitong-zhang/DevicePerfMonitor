@@ -54,6 +54,14 @@ android {
             ?: System.getenv("DEVPERF_FEEDBACK_EMAIL")
             ?: ""
         buildConfigField("String", "FEEDBACK_EMAIL", "\"$feedbackEmail\"")
+
+        // 后端服务地址（账号 / 验证码 / 数据同步 / 管理端）：
+        // 构建可用 -PdevperfServerUrl=... 或环境变量 DEVPERF_SERVER_URL 覆盖；
+        // 默认指向本机联调地址（模拟器 10.0.2.2 = 宿主机 127.0.0.1）。
+        val serverUrl = (project.findProperty("devperfServerUrl") as String?)
+            ?: System.getenv("DEVPERF_SERVER_URL")
+            ?: "http://10.0.2.2:5000"
+        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
     }
 
     // 说明：1.0.16 起不再有 productFlavors（原 glass / plain 双包已合并为单包），

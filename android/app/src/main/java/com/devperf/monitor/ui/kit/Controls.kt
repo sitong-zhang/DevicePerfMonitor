@@ -644,7 +644,7 @@ private fun Modifier.elevatedCardChrome(
  * 与悬浮窗窗口由调用方回落 [elevatedCardChrome]。
  * 降版本由库内部处理：lens 需 Android 13+，更低版本自动跳过效果（只保留采样层），不崩。
  */
-private fun Modifier.glassSurface(
+internal fun Modifier.glassSurface(
     backdrop: LayerBackdrop,
     shape: Shape,
     tint: Color,
