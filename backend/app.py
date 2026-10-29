@@ -22,9 +22,12 @@ PulseGuard 后端服务
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import smtplib
 import ssl
+import subprocess
+import threading
 import hashlib
 import json
 import time
@@ -67,6 +70,18 @@ CODE_TTL = int(os.environ.get("CODE_TTL", "300"))
 # 验证码重发冷却（秒）
 CODE_COOLDOWN = int(os.environ.get("CODE_COOLDOWN", "60"))
 
+# ---------------------------------------------------------------------------
+# 账号数据持久化（私有 Git 仓库）
+# ---------------------------------------------------------------------------
+# 后端托管在没有持久磁盘的环境（GitHub Actions runner）上：进程一重启，
+# 本地 SQLite 就随虚拟机一起消失 —— 账号也就"查无此人"了。
+# 解决办法：把 app.db 同步到一个**私有**数据仓库（里面是用户邮箱等隐私，
+# 绝对不能放公开仓库）。启动时 pull 回来，运行中由托管流程定时 push。
+DATA_REPO = os.environ.get("DATA_REPO", "")                  # 形如 owner/repo
+DATA_TOKEN = os.environ.get("DATA_TOKEN", "")                # 具备 repo 权限的令牌
+DATA_SYNC_TOKEN = os.environ.get("DATA_SYNC_TOKEN", "")      # /internal/sync 调用令牌
+_DATA_DIR = "/tmp/devperf-data-repo"
+
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", secrets.token_hex(16))
 
@@ -87,6 +102,100 @@ def db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
+
+# ---------------------------------------------------------------------------
+# 数据持久化：启动时拉回 / 运行中推送
+# ---------------------------------------------------------------------------
+def _git(*args, cwd=None):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+
+
+def _data_enabled() -> bool:
+    """是否启用私有仓库持久化（本地路径模式不需要令牌）。"""
+    return bool(DATA_REPO) and (DATA_REPO.startswith("/") or bool(DATA_TOKEN))
+
+
+def _repo_url() -> str:
+    # DATA_REPO 以 "/" 开头时按本地路径处理（便于在沙箱里验证同步流程）
+    if DATA_REPO.startswith("/"):
+        return DATA_REPO
+    return f"https://x-access-token:{DATA_TOKEN}@github.com/{DATA_REPO}.git"
+
+
+_push_lock = threading.Lock()
+
+
+def push_async(reason: str = "") -> None:
+    """后台线程推送数据（低频关键写操作后调用，避免阻塞请求）。"""
+    if not _data_enabled():
+        return
+
+    def _run():
+        with _push_lock:
+            ok, msg = data_push()
+            print(f"[data] 异步推送（{reason}）：ok={ok} {msg}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def data_pull() -> bool:
+    """启动时从私有数据仓库取回 app.db。失败不阻塞启动（降级为本地空库）。"""
+    if not _data_enabled():
+        print("[data] 未配置 DATA_REPO/DATA_TOKEN，仅使用本地 SQLite（重启即丢）")
+        return False
+    try:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        if os.path.isdir(_DATA_DIR):
+            shutil.rmtree(_DATA_DIR, ignore_errors=True)
+        r = _git("clone", "--depth", "1", _repo_url(), _DATA_DIR)
+        if r.returncode != 0:
+            print(f"[data] 数据仓库 clone 失败：{r.stderr.strip()[:200]}")
+            return False
+        _git("config", "user.name", "pulseguard-data-bot", cwd=_DATA_DIR)
+        _git("config", "user.email", "pulseguard-data-bot@users.noreply.github.com", cwd=_DATA_DIR)
+        src = os.path.join(_DATA_DIR, "app.db")
+        if os.path.exists(src):
+            shutil.copyfile(src, DB_PATH)
+            print(f"[data] 已从私有仓库恢复 app.db（{os.path.getsize(src) / 1024:.1f} KB）")
+        else:
+            print("[data] 数据仓库中还没有 app.db，本次从空库启动")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[data] 数据恢复异常：{e}")
+        return False
+
+
+def data_push() -> tuple[bool, str]:
+    """把当前 app.db 提交并推送到私有数据仓库（无变化则不产生提交）。"""
+    if not _data_enabled():
+        return False, "未配置数据仓库"
+    if not os.path.isdir(_DATA_DIR):
+        return False, "数据仓库未初始化（启动拉取失败）"
+    try:
+        # 先把 WAL 落盘，保证推的是完整数据
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+        shutil.copyfile(DB_PATH, os.path.join(_DATA_DIR, "app.db"))
+        _git("add", "app.db", cwd=_DATA_DIR)
+        if not _git("status", "--porcelain", cwd=_DATA_DIR).stdout.strip():
+            return True, "无变化"
+        stamp = datetime.now().isoformat(timespec="seconds")
+        _git("commit", "-m", f"chore(data): 后端数据快照 {stamp}", cwd=_DATA_DIR)
+        r = _git("push", "origin", "HEAD", cwd=_DATA_DIR)
+        if r.returncode != 0:
+            # 远端已有新提交（多实例漂移）→ 拉回后以本地库为准再推一次
+            _git("pull", "--rebase", "-X", "ours", "origin", "HEAD", cwd=_DATA_DIR)
+            shutil.copyfile(DB_PATH, os.path.join(_DATA_DIR, "app.db"))
+            _git("add", "app.db", cwd=_DATA_DIR)
+            _git("commit", "-m", f"chore(data): 后端数据快照 {stamp}（重推）", cwd=_DATA_DIR)
+            r = _git("push", "origin", "HEAD", cwd=_DATA_DIR)
+        if r.returncode != 0:
+            return False, r.stderr.strip()[:200]
+        return True, f"已推送（{os.path.getsize(DB_PATH) / 1024:.1f} KB）"
+    except Exception as e:  # noqa: BLE001
+        return False, str(e)[:200]
 
 
 def init_db():
@@ -450,6 +559,8 @@ def register():
     )
     conn.commit()
     conn.close()
+    # 注册是低频但最关键的操作：立刻异步落仓，避免"刚注册完后端就重启"导致账号丢失
+    push_async("注册新账号")
     return json_ok(token=token, user=user_public(_reload_user(user_id)))
 
 
@@ -858,11 +969,47 @@ def healthz():
     return json_ok(status="up")
 
 
+@app.route("/internal/sync", methods=["POST", "GET"])
+def internal_sync():
+    """托管环境专用：把 SQLite 推送到私有数据仓库。
+
+    GitHub Actions 的 runner 没有持久磁盘，靠定时任务周期性调用本接口
+    把账号数据落仓；启动时的取回见 [data_pull]。
+    若配置了 DATA_SYNC_TOKEN，则必须在 Header `X-Sync-Token` 或 `?token=` 带上。
+    """
+    tok = request.headers.get("X-Sync-Token") or request.args.get("token") or ""
+    if DATA_SYNC_TOKEN and tok != DATA_SYNC_TOKEN:
+        return json_err("未授权", 401)
+    ok, msg = data_push()
+    return jsonify({"ok": ok, "msg": msg})
+
+
+@app.route("/internal/sync/status", methods=["GET"])
+def internal_sync_status():
+    """自检用：返回持久化配置与当前库大小，便于排查"账号丢失"。"""
+    size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+    try:
+        conn = db()
+        users = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
+        conn.close()
+    except Exception:  # noqa: BLE001
+        users = -1
+    return json_ok(
+        data_repo=DATA_REPO or None,
+        repo_ready=os.path.isdir(_DATA_DIR),
+        db_bytes=size,
+        users=users,
+    )
+
+
 # ---------------------------------------------------------------------------
 # 启动
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    # 顺序很重要：先取回上次的数据，再建表（否则空库会把旧库覆盖掉）
+    data_pull()
     init_db()
     print(f"[PulseGuard backend] ADMIN_PASSWORD={'*'*len(ADMIN_PASSWORD)} "
-          f"DEV_MODE={DEV_MODE} SMTP_USER={SMTP_USER}")
+          f"DEV_MODE={DEV_MODE} SMTP_USER={SMTP_USER} "
+          f"DATA_REPO={DATA_REPO or '未配置'}")
     app.run(host="0.0.0.0", port=PORT, debug=DEV_MODE)
