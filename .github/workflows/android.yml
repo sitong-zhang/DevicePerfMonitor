@@ -110,8 +110,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 管理端 APK：固定上架到 manager tag 的 Release。
-      # ⚠️ 仅限管理人员下载：包内集成管理密码（421083）与账号管控能力，
-      #    请勿向非管理人员分发。
+      # ⚠️ 仅限管理人员下载：包内集成管理密码与账号管控能力，
+      #    密码另行线下告知，请勿向非管理人员分发。
       - name: Upload Manager APK to Release (manager tag)
         uses: softprops/action-gh-release@v2
         with:
