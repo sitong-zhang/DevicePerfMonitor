@@ -2,10 +2,12 @@ package com.devperf.monitor.data
 
 import android.content.Context
 import android.util.Log
+import com.devperf.monitor.core.DeepSnapshot
 import com.devperf.monitor.core.Metric
 import com.devperf.monitor.core.MetricId
 import com.devperf.monitor.data.collectors.BatteryCollector
 import com.devperf.monitor.data.collectors.CpuCollector
+import com.devperf.monitor.data.collectors.DeepCollector
 import com.devperf.monitor.data.collectors.DeviceSnapshot
 import com.devperf.monitor.data.collectors.DisplayCollector
 import com.devperf.monitor.data.collectors.DisplayMetrics
@@ -58,6 +60,9 @@ class MetricsRepository(
     private val memoryCollector = MemoryCollector(context, shell)
     private val thermalCollector = ThermalCollector(context)
 
+    /** 深度监测采集器：CPU 调度器 / PMU / 中断 / 电源轨 / UFS / 网络细分 / 进程扩展等。 */
+    private val deepCollector = DeepCollector(context)
+
     private val collectors: List<MetricCollector> = listOf(
         displayCollector, globalFpsCollector, cpuCollector, gpuCollector,
         batteryCollector, memoryCollector, thermalCollector,
@@ -65,6 +70,10 @@ class MetricsRepository(
 
     private val _snapshot = MutableStateFlow(DeviceSnapshot.empty())
     val snapshot: StateFlow<DeviceSnapshot> = _snapshot.asStateFlow()
+
+    /** 深度监测快照：读取量较大，按 2 个 tick（约 2s）采集一次。 */
+    private val _deep = MutableStateFlow(DeepSnapshot.empty())
+    val deep: StateFlow<DeepSnapshot> = _deep.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val jobs = mutableListOf<Job>()
@@ -79,6 +88,8 @@ class MetricsRepository(
     @Volatile
     private var running = false
 
+    private var tickIndex = 0
+
     /** 启动采集（幂等）。 */
     fun start() {
         if (running) return
@@ -88,6 +99,8 @@ class MetricsRepository(
             runCatching { collector.start(scope) }
                 .onFailure { Log.w(TAG, "${collector.javaClass.simpleName} 启动失败（降级处理）", it) }
         }
+        runCatching { deepCollector.start() }
+            .onFailure { Log.w(TAG, "DeepCollector 启动失败（帧率统计降级）", it) }
         jobs += scope.launch {
             settingsRepository.settings.collect { s ->
                 // 兜底：任何档位都不慢于 MAX_TICK_MS，保证每秒至少更新一次
@@ -118,6 +131,7 @@ class MetricsRepository(
         jobs.forEach { it.cancel() }
         jobs.clear()
         collectors.forEach { runCatching { it.stop() } }
+        runCatching { deepCollector.stop() }
         runCatching { history.persist() }
     }
 
@@ -149,6 +163,13 @@ class MetricsRepository(
 
         val previous = _snapshot.value
         _snapshot.value = buildSnapshot(merged, now, previous)
+
+        // 深度监测：每 2 个 tick 采一次（约 2s），避免每秒扫 /proc 全部进程造成额外耗电
+        tickIndex++
+        if (!minimalMode && tickIndex % DEEP_EVERY_TICKS == 0) {
+            val deep = runCatching { deepCollector.sample() }.getOrNull()
+            if (deep != null && deep.sections.isNotEmpty()) _deep.value = deep
+        }
     }
 
     private fun buildSnapshot(
@@ -238,5 +259,8 @@ class MetricsRepository(
          * 这里做兜底钳制，防止将来新增的档位把采样拖到 1s 以上。
          */
         const val MAX_TICK_MS = 1000L
+
+        /** 深度监测采样间隔（单位：采集 tick）。2 = 约 2 秒一次。 */
+        const val DEEP_EVERY_TICKS = 2
     }
 }

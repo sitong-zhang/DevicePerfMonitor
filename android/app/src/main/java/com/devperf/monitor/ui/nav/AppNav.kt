@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -78,6 +79,7 @@ import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
 import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
+import com.devperf.monitor.ui.screen.DeepMetricsScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
@@ -97,6 +99,7 @@ import kotlin.math.roundToInt
  */
 object Routes {
     const val OVERVIEW = "overview"
+    const val DEEP = "deep"
     const val SETTINGS = "settings"
     const val DETAIL = "detail/{metricId}"
 
@@ -110,10 +113,11 @@ private data class TopLevelTab(
 )
 
 /** 顶级 tab 路由集合（总览 / 设置），用于判断「顶层互切」以走瞬时切换。 */
-private val TOP_LEVEL_ROUTES = setOf(Routes.OVERVIEW, Routes.SETTINGS)
+private val TOP_LEVEL_ROUTES = setOf(Routes.OVERVIEW, Routes.DEEP, Routes.SETTINGS)
 
 private val topLevelTabs = listOf(
     TopLevelTab(Routes.OVERVIEW, "总览", Icons.Filled.Home),
+    TopLevelTab(Routes.DEEP, "监测", Icons.Filled.Refresh),
     TopLevelTab(Routes.SETTINGS, "设置", Icons.Filled.Settings),
 )
 
@@ -217,6 +221,9 @@ fun AppNav(
                         viewModel = viewModel,
                         onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
                     )
+                }
+                composable(Routes.DEEP) {
+                    DeepMetricsScreen(viewModel = viewModel)
                 }
                 composable(Routes.SETTINGS) {
                     SettingsScreen(

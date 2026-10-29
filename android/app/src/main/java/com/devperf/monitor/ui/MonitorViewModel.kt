@@ -8,6 +8,7 @@ import com.devperf.monitor.MonitorApp
 import com.devperf.monitor.analysis.AlertManager
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
+import com.devperf.monitor.core.DeepSnapshot
 import com.devperf.monitor.core.Metric
 import com.devperf.monitor.core.MetricId
 import com.devperf.monitor.core.MetricState
@@ -59,6 +60,9 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         settingsRepository.settings.stateIn(viewModelScope, SharingStarted.Eagerly, MonitorSettings())
 
     val snapshot: StateFlow<DeviceSnapshot> = repository.snapshot
+
+    /** 深度监测快照（CPU 调度器 / PMU / 中断 / 电源轨 / UFS / 网络细分 / 进程扩展等）。 */
+    val deep: StateFlow<DeepSnapshot> = repository.deep
 
     val alert: StateFlow<AlertManager.Alert?> = alertManager.activeAlert
 
