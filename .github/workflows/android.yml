@@ -74,6 +74,15 @@ jobs:
           fi
           ./gradlew :app:assembleRelease :manager:assembleRelease --no-daemon
 
+      # 提取 app 版本号，用于 Release 的语义化 tag（vX.Y.Z）：
+      # 让 app 端用 releases/latest 的 tag_name 做 isNewer 比较时能正确触发自动更新。
+      - name: Read app version
+        id: app_version
+        run: |
+          VER=$(grep -oE 'versionName\s*=\s*"[^"]+"' android/app/build.gradle.kts | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "App version: $VER"
+
       # 签名核对：产物必须是正式证书（CN=DevicePerfMonitor），防止误用 debug 签名发版
       - name: Verify APK signature
         working-directory: android
@@ -85,11 +94,12 @@ jobs:
             exit 1
           }
 
-      - name: Upload APK to Release (apk tag)
+      - name: Upload APK to Release (versioned tag)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apk
-          name: PulseGuard 安卓版 APK
+          tag_name: v${{ steps.app_version.outputs.version }}
+          name: PulseGuard 安卓版 APK v${{ steps.app_version.outputs.version }}
+          make_latest: true
           body: |
             PulseGuard 安卓版正式签名安装包（app-release.apk）。
             首次打开需注册 / 登录本地账号后即可使用。
@@ -107,17 +117,10 @@ jobs:
         with:
           tag_name: manager
           name: 分子智能科技 · 管理端（仅限管理人员下载）
+          make_latest: false
           body: |
-            管理端安卓安装包（manager-release.apk）。
-
-            ⚠️ 仅限管理人员下载：内含管理密码与账号管控能力，请勿外传。
-
-            功能（v2.0.0）：
-            · 密码锁：管理密码 421083，输入一次本地永久记住（除非卸载）；
-            · 用户管控：注册用户列表与详情、操作记录、单独公告；
-            · 账号限制：禁用功能、正常 / 受限 / 禁用三态切换；
-            · 全局公告：发布后所有用户端实时可见。
-            数据全部来自自建后端（backend/），不再依赖 GitHub。
+            ⚠️ 警告：本安装包为管理端，仅供本项目授权管理人员使用，内含账号管控能力。
+            严禁向非授权人员分发或泄露。如非管理人员，请勿下载、安装或使用。
           files: android/manager/build/outputs/apk/release/manager-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
