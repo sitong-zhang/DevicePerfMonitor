@@ -254,10 +254,13 @@ def send_code_email(email: str, code: str) -> bool:
         )
         msg.add_alternative(html, subtype="html")
         if logo is not None:
-            # 把 logo 挂到 HTML 分支上作内嵌资源（cid:brand-logo）
-            msg.get_payload()[1].add_attachment(
+            # 关键：必须用 add_related（multipart/related + inline），
+            # 用 add_attachment 会变成 multipart/mixed + attachment，
+            # QQ 邮箱会当成附件收下、正文 cid 位置留白（表现为"没有 logo"）。
+            msg.get_payload()[1].add_related(
                 logo, maintype="image", subtype="png",
-                filename="brand_logo.png", cid="brand-logo",
+                filename="brand_logo.png",
+                cid="<brand-logo>", disposition="inline",
             )
         ctx = ssl.create_default_context()
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx) as server:
