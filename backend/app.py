@@ -185,8 +185,7 @@ def json_err(msg, code=400):
     return jsonify({"ok": False, "msg": msg}), code
 
 
-def _load_logo() -> bytes | None:
-    """读取内嵌品牌 logo（assets/brand_logo_email.png，相对本文件目录）。"""
+def _read_logo_file() -> bytes | None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "assets", "brand_logo_email.png")
     try:
@@ -194,6 +193,17 @@ def _load_logo() -> bytes | None:
             return f.read()
     except OSError:
         return None
+
+
+# 必须在进程启动（模块加载）时读入内存：托管环境（GitHub Actions）里，
+# 后端启动后"发布官方地址"步骤会把工作区切到 backend-host 分支，
+# assets/logo 文件随之从磁盘消失；若发送时才读盘，线上邮件就会丢 logo。
+_LOGO_BYTES = _read_logo_file()
+
+
+def _load_logo() -> bytes | None:
+    """返回启动时缓存的品牌 logo 字节（不再依赖磁盘文件）。"""
+    return _LOGO_BYTES
 
 
 def send_code_email(email: str, code: str) -> bool:
