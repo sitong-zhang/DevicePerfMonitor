@@ -1,0 +1,107 @@
+name: Backend Hosting (GitHub-hosted)
+
+# 用 GitHub Actions 的 runner（GitHub 自己的临时 Linux 虚拟机）把 Flask 后端跑起来，
+# 再用 cloudflared 临时隧道（无需注册账号）把 localhost:5000 暴露成公网 HTTPS 地址。
+# 这是「纯 GitHub 自带能力」能实现的临时后端托管：后端活在 GitHub 机器上。
+#
+# 限制（务必知悉）：
+#   - runner 单次任务上限 6 小时，到点后端自动下线；需要时在 Actions 页手动 re-run。
+#   - 每次启动都会换一个新的公网地址（quick tunnel 特性），需重新把地址填进 App。
+#   - 免费额度有限，仅适合演示 / 临时联调，长期请部署到 Render / Railway 等平台。
+#   - runner 重启会清空 /app/data，SQLite 数据不持久。
+#
+# 用法：Actions → Backend Hosting → Run workflow → 等 Tunnel 步骤打印出
+#       https://xxxx.trycloudflare.com 公网地址，填进 App 的「后端服务器地址」。
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "运行时长（小时，≤6）"
+        required: false
+        default: "6"
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend deps
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Start Flask backend
+        working-directory: backend
+        env:
+          PORT: "5000"
+          DEV_MODE: "1"
+        run: |
+          nohup python app.py > /tmp/backend.log 2>&1 &
+          echo "backend started, pid $!"
+
+      - name: Wait for backend /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:5000/health >/dev/null 2>&1; then
+              echo "backend is up"; break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:5000/health || { echo "backend failed to start:"; tail -n 30 /tmp/backend.log; exit 1; }
+
+      - name: Install cloudflared
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared; then
+              break
+            fi
+            echo "download retry $i"; sleep 5
+          done
+          chmod +x cloudflared
+          ./cloudflared --version
+
+      - name: Expose backend via cloudflared quick tunnel
+        run: |
+          ./cloudflared tunnel --url http://localhost:5000 --no-autoupdate > /tmp/tunnel.log 2>&1 &
+          echo "tunnel started, pid $!"
+          URL=""
+          for i in $(seq 1 40); do
+            URL=$(grep -oE 'https://[a-z0-9.-]+\.trycloudflare\.com' /tmp/tunnel.log | head -1)
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          if [ -z "$URL" ]; then
+            echo "未能获取隧道地址，日志如下："; tail -n 20 /tmp/tunnel.log; exit 1
+          fi
+          {
+            echo "## 后端公网地址（cloudflared quick tunnel）"
+            echo ""
+            echo "$URL"
+            echo ""
+            echo "> 把上面这个地址填进 App / 管理端的「后端服务器地址」即可联网。"
+            echo "> 地址每次运行都会变化，且最长存活 6 小时。"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "========================================="
+          echo "Backend public URL: $URL"
+          echo "========================================="
+          echo "PUBLIC_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Keep backend alive
+        run: |
+          H="${{ github.event.inputs.hours }}"
+          H="${H:-6}"
+          if [ "$H" -gt 6 ] 2>/dev/null; then H=6; fi
+          S=$((H * 3600))
+          echo "Backend will stay alive for ${H}h (${S}s)..."
+          sleep "$S"
+          echo "Time is up — backend going offline. Re-run the workflow to bring it back."
