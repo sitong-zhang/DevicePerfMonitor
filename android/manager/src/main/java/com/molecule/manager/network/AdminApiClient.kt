@@ -1,20 +1,22 @@
 package com.molecule.manager.network
 
+import android.util.Base64
 import android.util.Log
 import com.molecule.manager.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
-import kotlinx.coroutines.withContext
 
 /**
  * 管理端后端 API 客户端（账号 / 用户管控 / 公告，唯一联网出口）。
  *
  * 与用户端 net/ApiClient 同一风格：内置 HttpURLConnection + org.json，不引额外依赖。
- * 全部请求发往 [BuildConfig.SERVER_URL] 指向的自建后端（backend/，Flask + SQLite）。
+ * 全部请求发往官方后端（backend/，Flask + SQLite），地址由 [resolveServerUrl] 自动发现。
  *
  * 鉴权：管理端登录拿到的 token 走 `Authorization: Bearer <token>` 头（后端
  * current_admin 仅认 Bearer，与 Web 管理页的 session cookie 是两条独立通道）。
@@ -26,13 +28,76 @@ object AdminApiClient {
     private const val READ_TIMEOUT_MS = 15_000
 
     /**
-     * 运行时可覆盖的后端地址：设置页写入后对整个管理端立即生效。
-     * 为空/空白时回落到 [BuildConfig.SERVER_URL]（编译期注入，默认 10.0.2.2 仅供模拟器联调）。
+     * 官方后端地址：启动时由 [resolveServerUrl] 从仓库官方文件自动发现并写入，
+     * 无需用户手动填写；为空时回落到 [BuildConfig.SERVER_URL]（编译期注入）。
      */
-    var overrideUrl: String? = null
+    var officialUrl: String? = null
 
-    private fun baseUrl(): String =
-        overrideUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: BuildConfig.SERVER_URL
+    fun baseUrl(): String =
+        officialUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: BuildConfig.SERVER_URL
+
+    /**
+     * 从官方文件（仓库 backend-host 分支根目录 backend-host.txt）自动发现当前后端地址。
+     * 该文件由后端托管工作流持续更新，官方集中维护、使用方无需任何配置。
+     */
+    suspend fun resolveServerUrl(): String? = withContext(Dispatchers.IO) {
+        val url = fetchRaw() ?: fetchContentsApi()
+        if (!url.isNullOrBlank()) {
+            officialUrl = url
+            url
+        } else {
+            null
+        }
+    }
+
+    /** 主通道：raw CDN 取纯文本，无限流、响应快。 */
+    private fun fetchRaw(): String? {
+        val url =
+            "https://raw.githubusercontent.com/sitong-zhang/DevicePerfMonitor/backend-host/backend-host.txt"
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8000
+                readTimeout = 8000
+            }
+            if (conn.responseCode != 200) return null
+            conn.inputStream.bufferedReader().use { it.readText() }.trim()
+                .takeIf { it.isNotBlank() && it.startsWith("http") }
+        } catch (e: Exception) {
+            Log.w(TAG, "raw 通道取后端地址失败", e)
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    /** 兜底通道：GitHub Contents API（base64），raw 不可达时使用。 */
+    private fun fetchContentsApi(): String? {
+        val api =
+            "https://api.github.com/repos/sitong-zhang/DevicePerfMonitor/contents/backend-host.txt?ref=backend-host"
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(api).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("User-Agent", "DevicePerfMonitor")
+                connectTimeout = 8000
+                readTimeout = 8000
+            }
+            if (conn.responseCode != 200) return null
+            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            String(
+                Base64.decode(json.optString("content", "").replace("\n", ""), Base64.DEFAULT),
+                Charsets.UTF_8,
+            ).trim().takeIf { it.isNotBlank() && it.startsWith("http") }
+        } catch (e: Exception) {
+            Log.w(TAG, "API 通道取后端地址失败", e)
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
 
     data class Result(val ok: Boolean, val data: JSONObject?, val msg: String?)
 

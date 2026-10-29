@@ -53,3 +53,7 @@ backend/data/
 backend/__pycache__/
 backend/*.pyc
 backend/.env
+
+# iOS / 全能签遗留目录（项目已全面安卓化，仅残留本地副本）
+/ios/
+/sign-tool/

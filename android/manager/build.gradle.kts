@@ -26,8 +26,8 @@ android {
         applicationId = "com.molecule.manager"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "2.0.0"
+        versionCode = 4
+        versionName = "2.0.1"
         vectorDrawables.useSupportLibrary = true
 
         // 后端服务地址（账号 / 管控 / 公告）：构建可用 -PdevperfServerUrl=... 或

@@ -1,17 +1,18 @@
 name: Backend Hosting (GitHub-hosted)
 
-# 用 GitHub Actions 的 runner（GitHub 自己的临时 Linux 虚拟机）把 Flask 后端跑起来，
+# 用 GitHub Actions 的 runner（GitHub 自己的 Linux 虚拟机）把 Flask 后端跑起来，
 # 再用 cloudflared 临时隧道（无需注册账号）把 localhost:5000 暴露成公网 HTTPS 地址。
-# 这是「纯 GitHub 自带能力」能实现的临时后端托管：后端活在 GitHub 机器上。
+# 这是「纯 GitHub 自带能力」实现的后端托管：后端活在 GitHub 机器上。
 #
-# 限制（务必知悉）：
-#   - runner 单次任务上限 6 小时，到点后端自动下线；需要时在 Actions 页手动 re-run。
-#   - 每次启动都会换一个新的公网地址（quick tunnel 特性），需重新把地址填进 App。
-#   - 免费额度有限，仅适合演示 / 临时联调，长期请部署到 Render / Railway 等平台。
-#   - runner 重启会清空 /app/data，SQLite 数据不持久。
+# 关键设计：
+#   - 拿到公网地址后自动写回本仓库 backend-host 分支的 backend-host.txt，
+#     客户端启动时自动发现该地址，用户无需填写任何配置。
+#   - 定时（每 5 小时）+ 手动两种触发，runner 单次上限 6 小时，
+#     到期自动下线后由下一次定时运行接上，实现长期在线。
+#   - SQLite 数据通过 actions/cache 跨运行持久化，重启不丢账号数据。
 #
-# 用法：Actions → Backend Hosting → Run workflow → 等 Tunnel 步骤打印出
-#       https://xxxx.trycloudflare.com 公网地址，填进 App 的「后端服务器地址」。
+# 限制：每次重启公网地址会变（quick tunnel 特性），但客户端每次启动都重新
+#       发现地址，因此对用户完全透明。
 
 on:
   workflow_dispatch:
@@ -19,15 +20,22 @@ on:
       hours:
         description: "运行时长（小时，≤6）"
         required: false
-        default: "6"
+        default: "5"
+  schedule:
+    # 每 5 小时续期一次（UTC），保证后端长期在线
+    - cron: "0 */5 * * *"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: backend-hosting
+  cancel-in-progress: false
 
 jobs:
   host:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +43,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Restore database cache
+        uses: actions/cache@v4
+        with:
+          path: backend/data
+          key: backend-db-${{ github.run_id }}
+          restore-keys: |
+            backend-db-
 
       - name: Install backend deps
         working-directory: backend
@@ -46,6 +62,8 @@ jobs:
           PORT: "5000"
           DEV_MODE: "1"
         run: |
+          # git 不跟踪空目录，runner 上 data/ 可能不存在，必须显式创建
+          mkdir -p data
           nohup python app.py > /tmp/backend.log 2>&1 &
           echo "backend started, pid $!"
 
@@ -71,6 +89,7 @@ jobs:
           ./cloudflared --version
 
       - name: Expose backend via cloudflared quick tunnel
+        id: tunnel
         run: |
           ./cloudflared tunnel --url http://localhost:5000 --no-autoupdate > /tmp/tunnel.log 2>&1 &
           echo "tunnel started, pid $!"
@@ -83,25 +102,52 @@ jobs:
           if [ -z "$URL" ]; then
             echo "未能获取隧道地址，日志如下："; tail -n 20 /tmp/tunnel.log; exit 1
           fi
-          {
-            echo "## 后端公网地址（cloudflared quick tunnel）"
-            echo ""
-            echo "$URL"
-            echo ""
-            echo "> 把上面这个地址填进 App / 管理端的「后端服务器地址」即可联网。"
-            echo "> 地址每次运行都会变化，且最长存活 6 小时。"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # 隧道刚建立时域名 DNS 可能尚未生效，用公网地址自检一次
+          for i in $(seq 1 20); do
+            if curl -fsS "$URL/health" >/dev/null 2>&1; then echo "public URL verified"; break; fi
+            sleep 3
+          done
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "PUBLIC_URL=$URL" >> "$GITHUB_ENV"
           echo "========================================="
           echo "Backend public URL: $URL"
           echo "========================================="
-          echo "PUBLIC_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Publish address to backend-host branch
+        run: |
+          set -e
+          git config user.name "pulseguard-bot"
+          git config user.email "pulseguard-bot@users.noreply.github.com"
+          if git ls-remote --heads origin backend-host | grep -q "refs/heads/backend-host"; then
+            git fetch origin backend-host
+            git checkout -B backend-host origin/backend-host
+          else
+            git checkout --orphan backend-host
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          printf '%s\n' "$PUBLIC_URL" > backend-host.txt
+          git add backend-host.txt
+          git commit -m "chore(backend): 更新官方后端地址 $PUBLIC_URL" || echo "no change"
+          git push origin backend-host
+          {
+            echo "## 官方后端地址已发布"
+            echo ""
+            echo "**$PUBLIC_URL**"
+            echo ""
+            echo "客户端启动时自动从 \`backend-host\` 分支的 \`backend-host.txt\` 发现该地址，无需用户配置。"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep backend alive
         run: |
           H="${{ github.event.inputs.hours }}"
-          H="${H:-6}"
-          if [ "$H" -gt 6 ] 2>/dev/null; then H=6; fi
+          H="${H:-5}"
+          if [ "$H" -gt 5 ] 2>/dev/null; then H=5; fi
           S=$((H * 3600))
           echo "Backend will stay alive for ${H}h (${S}s)..."
-          sleep "$S"
-          echo "Time is up — backend going offline. Re-run the workflow to bring it back."
+          end=$(( $(date +%s) + S ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            sleep 60
+            # 后端或隧道意外退出则提前结束，交给下一次定时运行接手
+            curl -fsS http://localhost:5000/health >/dev/null 2>&1 || { echo "backend down, exiting"; break; }
+          done
+          echo "Time is up — backend going offline. 下一次定时运行会自动接上。"

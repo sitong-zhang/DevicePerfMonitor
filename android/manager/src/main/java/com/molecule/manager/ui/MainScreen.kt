@@ -148,35 +148,25 @@ private fun ManagerContent(vm: ManagerViewModel) {
             )
         }
 
-        // 后端地址：真机默认连不上编译期写死的 10.0.2.2（仅模拟器可达），
-        // 这里允许运行时填入自建/局域网/云端地址，保存后立即对全网请求生效。
-        var serverInput by remember { mutableStateOf(vm.getServerUrl()) }
+        // 后端地址由官方统一维护：管理端启动时自动发现，这里只做只读展示。
         GlassCard(modifier = Modifier.padding(horizontal = 16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "后端服务器地址",
+                    text = "官方后端服务器",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = BrandBlue,
                 )
-                GlassTextField(
-                    value = serverInput,
-                    onValueChange = { serverInput = it },
-                    label = "http://<地址>:<端口>",
-                    keyboardType = KeyboardType.Uri,
-                )
                 Text(
-                    text = "默认地址仅模拟器联调可达。连接自建 / 局域网 / 云端后端时填入完整地址，保存后立即生效；留空恢复默认。",
+                    text = com.molecule.manager.network.AdminApiClient.baseUrl(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                GlassButton(
-                    onClick = { vm.setServerUrl(serverInput) },
-                    tint = BrandBlue,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("保存地址", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
-                }
+                Text(
+                    text = "由官方统一维护并自动接入，无需配置。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 

@@ -191,45 +191,27 @@ fun SettingsScreen(
             }
 
             // ================= 后端服务器 =================
-            // 真机默认连不上编译期写死的 10.0.2.2（仅模拟器可达）。这里允许运行时
-            // 填入任意可达后端地址（自建/局域网/云端），保存后立即对所有请求生效，
-            // 无需重新出包。留空恢复默认。
+            // 官方后端地址由 App 启动时自动发现（仓库 backend-host 分支维护），
+            // 用户无需、也不能手动填写。这里只做只读展示。
             GlassSectionHeader(text = "后端服务器")
             GlassPanel {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                 ) {
-                    var serverInput by remember(settings.serverUrl) {
-                        mutableStateOf(settings.serverUrl ?: "")
-                    }
                     Text(
-                        text = "后端地址",
+                        text = "官方服务器",
                         style = MaterialTheme.typography.bodyLarge,
                         color = colors.textPrimary,
                     )
-                    OutlinedTextField(
-                        value = serverInput,
-                        onValueChange = { serverInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("http://<地址>:<端口>") },
-                    )
                     Text(
-                        text = "默认：${BuildConfig.SERVER_URL}（仅模拟器联调可达）。" +
-                            "连接自建 / 局域网 / 云端后端时，填入完整地址（含 http:// 与端口），" +
-                            "保存后立即生效。留空恢复默认。",
+                        text = com.devperf.monitor.net.ApiClient.baseUrl(),
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
-                    GlassButton(
-                        text = "保存地址",
-                        onClick = {
-                            haptics.tick()
-                            val url = serverInput.trim().ifBlank { null }
-                            viewModel.setServerUrl(url)
-                            com.devperf.monitor.net.ApiClient.overrideUrl = url
-                        },
-                        variant = GlassButtonVariant.SECONDARY,
+                    Text(
+                        text = "由官方统一维护并自动接入，无需配置。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
                     )
                 }
             }

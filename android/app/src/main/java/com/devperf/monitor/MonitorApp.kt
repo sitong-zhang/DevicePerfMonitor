@@ -64,11 +64,14 @@ class MonitorApp : Application() {
         runCatching {
             settingsRepository = SettingsRepository(this)
             BootTrace.mark("SettingsRepository 就绪")
-            // 后端地址运行时覆盖：设置页改地址后对全网请求立即生效
+            // 官方后端地址：启动即从仓库自动发现并缓存，用户无需填写
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-                settingsRepository.settings.collect { settings ->
-                    com.devperf.monitor.net.ApiClient.overrideUrl = settings.serverUrl
+                val prefs = getSharedPreferences("backend", MODE_PRIVATE)
+                prefs.getString("official_url", null)?.let {
+                    com.devperf.monitor.net.ApiClient.officialUrl = it
                 }
+                val url = com.devperf.monitor.net.ApiClient.resolveServerUrl()
+                if (!url.isNullOrBlank()) prefs.edit().putString("official_url", url).apply()
             }
             metricsRepository = MetricsRepository(this, settingsRepository)
             BootTrace.mark("MetricsRepository 就绪")
