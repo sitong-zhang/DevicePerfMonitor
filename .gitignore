@@ -11,23 +11,10 @@ android/*.jks
 android/captures/
 android/.cxx/
 
-# Xcode
-ios/build/
-ios/DerivedData/
-ios/*.xcuserstate
-ios/xcuserdata/
-ios/.swiftpm/
-ios/DevicePerfMonitor.xcodeproj/project.xcworkspace/xcuserdata/
-ios/DevicePerfMonitor.xcodeproj/xcuserdata/
-
 # 构建产物：安装包二进制只通过 GitHub Release 分发，不进 git 版本库
 *.apk
 *.aab
-*.ipa
-*.app
-*.dSYM.zip
-*.dSYM
-# releases/ 整个目录都是本地产物（含 .xcarchive），不入库
+# releases/ 整个目录都是本地产物，不入库
 releases/
 
 # IDE

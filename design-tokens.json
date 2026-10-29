@@ -149,7 +149,7 @@
       "fastSpatial": { "dampingRatio": 0.6, "stiffness": 800 },
       "defaultSpatial": { "dampingRatio": 0.8, "stiffness": 380 },
       "slowSpatial": { "dampingRatio": 0.8, "stiffness": 200 },
-      "$comment": "Material 3 Expressive 空间弹簧（与 androidx ExpressiveMotionTokens 同参数）：fastSpatial=按压/形态切换等改边界的短促动效，defaultSpatial=中等形变，slowSpatial=大范围位移。Compose 侧 dampingRatio/stiffness 直接使用；SwiftUI 侧由生成器换算 response=2π/√stiffness、dampingFraction=dampingRatio/2。"
+      "$comment": "Material 3 Expressive 空间弹簧（与 androidx ExpressiveMotionTokens 同参数）：fastSpatial=按压/形态切换等改边界的短促动效，defaultSpatial=中等形变，slowSpatial=大范围位移。Compose 侧 dampingRatio/stiffness 直接使用。"
     },
     "$comment": "三条曲线替代原单一 300ms；所有页面切换/卡片展开/数值变化/悬浮窗弹出收起必须使用其中之一。组件级交互（按压、形态切换）走 spring（Material 3 Expressive 物理曲线）。"
   },
