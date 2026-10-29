@@ -288,7 +288,7 @@ fun AppNav(
  *
  * 悬浮窗 / 无玻璃（backdrop 为 null）保留自绘路径：Surface + 投影 + 描边 +
  * fastSpatial 弹簧滑动指示器，几何参数仍取 design-tokens 的 bottomBar 段，
- * 与 iOS 的 FloatingCapsuleBar 用同一组数字。
+ * 与悬浮窗胶囊栏用同一组数字。
  */
 @Composable
 internal fun BottomNavBar(

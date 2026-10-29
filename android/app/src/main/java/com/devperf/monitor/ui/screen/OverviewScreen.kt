@@ -88,7 +88,7 @@ fun OverviewScreen(
             end = 16.dp,
             // 底部必须给浮动胶囊底栏让出空间（底栏高度 + 下边距 + 一点呼吸），
             // 否则最后一张卡片会被底栏压住——1.0.9 之前没留，列表滚到底也看不见末尾。
-            // iOS 侧同样处理（ContentView 里的 bottom inset）。
+            // 同样处理底部安全区 inset。
             bottom = DesignTokens.BottomBar.HEIGHT.dp +
                 DesignTokens.BottomBar.MARGIN_BOTTOM.dp + 16.dp,
         ),
