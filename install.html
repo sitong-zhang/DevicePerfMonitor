@@ -19,6 +19,10 @@ h1{font-size:27px;font-weight:800;margin-top:14px;letter-spacing:.5px}
 .btn.blue{background:var(--blue);color:#fff;margin-top:12px;font-size:15px;padding:14px 30px}
 .steps{margin:22px 0 0 20px;color:var(--ink-2);font-size:15px}
 .steps li{margin-bottom:8px}
+.qr-sec{display:flex;align-items:center;gap:18px;margin-top:20px;background:#F4F8FF;border:1px dashed #B9CDF2;border-radius:14px;padding:16px 18px}
+.qr{width:118px;height:118px;border-radius:10px;background:#fff;flex:none}
+.qr-txt{display:flex;flex-direction:column;gap:6px;font-size:13.5px;color:var(--ink-2)}
+.qr-txt b{font-size:15px;color:var(--ink)}
 .note{margin-top:22px;background:#FFF6E0;border:1px solid #F2DDA6;color:#7A5A00;padding:14px 16px;border-radius:10px;font-size:14px}
 .sec{margin-top:26px;border-top:1px solid var(--line);padding-top:20px}
 .sec h2{font-size:16px;font-weight:700}
@@ -35,11 +39,26 @@ h1{font-size:27px;font-weight:800;margin-top:14px;letter-spacing:.5px}
 
     <a class="btn" href="itms-services://?action=download-manifest&url=https://sitong-zhang.github.io/DevicePerfMonitor/manifest.plist">一键安装全能签</a>
 
+    <div class="qr-sec">
+      <img class="qr" src="qrcode.png" alt="扫码安装">
+      <div class="qr-txt">
+        <b>用另一台设备？扫码安装</b>
+        <span>用 iPhone 自带<b>相机</b>对准二维码 → 点击弹出的 Safari 链接 → 回到本页点「一键安装」。</span>
+      </div>
+    </div>
+
     <ol class="steps">
-      <li>请用 iPhone 自带的 <b>Safari</b> 打开本页，点上方按钮，弹出确认时点「安装」；</li>
-      <li>首次打开若提示「未受信任的企业级开发者」，到「设置 → 通用 → VPN与设备管理」中信任对应证书即可打开；</li>
-      <li>iOS 16+ 若提示需要开发者模式：设置 → 隐私与安全性 → 开发者模式 → 打开并重启（仅一次）。</li>
+      <li><b>必须用 Safari</b>：请用 iPhone 自带的 Safari 浏览器打开本页（微信 / QQ / 抖音等 App 内置浏览器打开无效，请点右上角「…」选择「在 Safari 中打开」）；</li>
+      <li>点上方<b>「一键安装全能签」</b>→ 系统弹窗「…正尝试安装一个应用程序」→ 点<b>「安装」</b> → 桌面出现全能签图标；</li>
+      <li>首次打开若提示「未受信任的企业级开发者」：到<b>「设置 → 通用 → VPN与设备管理」</b>→ 找到 <b>China Telecom Corporation Limited</b> → 点<b>「信任」</b>；</li>
+      <li>iOS 16+ 若打开时提示「需要开发者模式」：<b>「设置 → 隐私与安全性 → 开发者模式」</b>→ 打开并重启手机（只需一次，企业证书用户多数无需此步）。</li>
     </ol>
+
+    <div class="note">
+      <b>我是从「文件」里下载的 ipa，点开只有详情、装不上？</b>这是正常的：
+      iOS <b>不允许</b>从「文件」App 直接安装 ipa，那个文件没用，可以删掉。
+      安装只有一种免电脑方式：<b>用 Safari 打开本页 → 点上方「一键安装全能签」按钮</b>，由系统自动弹出安装，全程不会经过「文件」App。
+    </div>
 
     <div class="note">
       <b>提示「无法安装 / 无法验证 App」？</b>说明该免费企业证书已被苹果吊销。
