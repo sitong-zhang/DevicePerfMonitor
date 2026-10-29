@@ -22,7 +22,14 @@ object ApiClient {
     /** 请求结果：ok=true 时 data 为响应 JSON，否则 msg 为可展示给用户的错误。 */
     data class Result(val ok: Boolean, val data: JSONObject?, val msg: String?)
 
-    fun baseUrl(): String = BuildConfig.SERVER_URL
+    /**
+     * 运行时可覆盖的后端地址：设置页写入后对整个客户端立即生效。
+     * 为空/空白时回落到 [BuildConfig.SERVER_URL]（编译期注入，默认 10.0.2.2 仅供模拟器联调）。
+     */
+    var overrideUrl: String? = null
+
+    fun baseUrl(): String =
+        overrideUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: BuildConfig.SERVER_URL
 
     /** GET 请求。extraHeaders 可带 Authorization 等。 */
     fun get(path: String, extraHeaders: Map<String, String> = emptyMap()): Result =
@@ -40,7 +47,7 @@ object ApiClient {
     ): Result {
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(BuildConfig.SERVER_URL.trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
+            conn = (URL(baseUrl().trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 requestMethod = method

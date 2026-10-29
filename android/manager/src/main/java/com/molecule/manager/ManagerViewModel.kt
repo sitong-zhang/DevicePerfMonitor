@@ -25,12 +25,18 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         const val ADMIN_PASSWORD: String = "421083"
         private const val PREFS = "manager_lock"
         private const val KEY_UNLOCKED = "unlocked"
+        private const val KEY_SERVER_URL = "server_url_override"
     }
 
     // ---- 密码锁 ----
     private val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _unlocked = MutableStateFlow(prefs.getBoolean(KEY_UNLOCKED, false))
     val unlocked = _unlocked.asStateFlow()
+
+    init {
+        // 启动即应用已保存的自定义后端地址（真机默认连不上 10.0.2.2 模拟器地址）
+        AdminApiClient.overrideUrl = prefs.getString(KEY_SERVER_URL, "")?.takeIf { it.isNotBlank() }
+    }
 
     private val _adminToken = MutableStateFlow<String?>(null)
     val adminToken = _adminToken.asStateFlow()
@@ -51,6 +57,20 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
             _adminToken.value = token
             if (err != null) _status.value = "后端连接失败：$err"
         }
+    }
+
+    // ---- 后端地址（运行时可改，真机才能连上自建/局域网/云端后端）----
+
+    /** 当前自定义后端地址（空白 = 使用编译期默认的 BuildConfig.SERVER_URL）。 */
+    fun getServerUrl(): String = prefs.getString(KEY_SERVER_URL, "") ?: ""
+
+    /** 保存自定义后端地址：立即对全网请求生效，并重新登录拿 token。留空恢复默认。 */
+    fun setServerUrl(input: String) {
+        val url = input.trim().trimEnd('/')
+        prefs.edit().putString(KEY_SERVER_URL, if (url.isBlank()) "" else url).apply()
+        AdminApiClient.overrideUrl = url.ifBlank { null }
+        _status.value = if (url.isBlank()) "已恢复默认后端地址" else "后端地址已更新：$url"
+        refreshToken()
     }
 
     // ---- 公告（全局）----

@@ -78,6 +78,11 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         _overlayGranted.value = OverlayPermissions.canDrawOverlays(getApplication())
     }
 
+    /** 设置自定义后端地址（留空恢复默认）。设置页调用，持久化到 DataStore。 */
+    fun setServerUrl(value: String?) {
+        viewModelScope.launch { settingsRepository.setServerUrl(value) }
+    }
+
     init {
         viewModelScope.launch {
             repository.snapshot.collect { s ->

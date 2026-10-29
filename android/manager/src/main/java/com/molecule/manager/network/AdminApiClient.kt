@@ -25,6 +25,15 @@ object AdminApiClient {
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 15_000
 
+    /**
+     * 运行时可覆盖的后端地址：设置页写入后对整个管理端立即生效。
+     * 为空/空白时回落到 [BuildConfig.SERVER_URL]（编译期注入，默认 10.0.2.2 仅供模拟器联调）。
+     */
+    var overrideUrl: String? = null
+
+    private fun baseUrl(): String =
+        overrideUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: BuildConfig.SERVER_URL
+
     data class Result(val ok: Boolean, val data: JSONObject?, val msg: String?)
 
     // ---- 数据模型 ----
@@ -76,7 +85,7 @@ object AdminApiClient {
     ): Result {
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(BuildConfig.SERVER_URL.trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
+            conn = (URL(baseUrl().trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 requestMethod = method

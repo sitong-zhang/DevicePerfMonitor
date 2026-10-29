@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -185,6 +186,50 @@ fun SettingsScreen(
                         text = "账号资料用于登录与数据同步。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
+                    )
+                }
+            }
+
+            // ================= 后端服务器 =================
+            // 真机默认连不上编译期写死的 10.0.2.2（仅模拟器可达）。这里允许运行时
+            // 填入任意可达后端地址（自建/局域网/云端），保存后立即对所有请求生效，
+            // 无需重新出包。留空恢复默认。
+            GlassSectionHeader(text = "后端服务器")
+            GlassPanel {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+                ) {
+                    var serverInput by remember(settings.serverUrl) {
+                        mutableStateOf(settings.serverUrl ?: "")
+                    }
+                    Text(
+                        text = "后端地址",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.textPrimary,
+                    )
+                    OutlinedTextField(
+                        value = serverInput,
+                        onValueChange = { serverInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("http://<地址>:<端口>") },
+                    )
+                    Text(
+                        text = "默认：${BuildConfig.SERVER_URL}（仅模拟器联调可达）。" +
+                            "连接自建 / 局域网 / 云端后端时，填入完整地址（含 http:// 与端口），" +
+                            "保存后立即生效。留空恢复默认。",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                    GlassButton(
+                        text = "保存地址",
+                        onClick = {
+                            haptics.tick()
+                            val url = serverInput.trim().ifBlank { null }
+                            viewModel.setServerUrl(url)
+                            com.devperf.monitor.net.ApiClient.overrideUrl = url
+                        },
+                        variant = GlassButtonVariant.SECONDARY,
                     )
                 }
             }

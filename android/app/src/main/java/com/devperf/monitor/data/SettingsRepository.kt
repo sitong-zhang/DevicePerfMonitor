@@ -101,6 +101,11 @@ data class MonitorSettings(
     val wallpaper: WallpaperId = WallpaperId.LIGHT_TEAL,
     /** 自定义壁纸文件绝对路径（wallpaper = CUSTOM 时有效）。 */
     val wallpaperCustomPath: String? = null,
+    /**
+     * 自定义后端地址（留空 = 使用编译期默认的 [BuildConfig.SERVER_URL]）。
+     * 让 app 在真机/局域网/自建后端上都能连：设置页填一次即可，无需重新出包。
+     */
+    val serverUrl: String? = null,
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -140,6 +145,7 @@ class SettingsRepository(private val context: Context) {
                 runCatching { WallpaperId.valueOf(name) }.getOrNull()
             } ?: WallpaperId.LIGHT_TEAL,
             wallpaperCustomPath = prefs[KEY_WALLPAPER_CUSTOM],
+            serverUrl = prefs[KEY_SERVER_URL]?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -196,6 +202,18 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    /**
+     * 设置自定义后端地址；留空/空白则恢复编译期默认（[BuildConfig.SERVER_URL]）。
+     * 去除首尾空白与末尾斜杠，存储时统一格式。
+     */
+    suspend fun setServerUrl(value: String?) {
+        context.settingsDataStore.edit { prefs ->
+            val url = value?.trim()?.trimEnd('/')
+            if (url.isNullOrBlank()) prefs.remove(KEY_SERVER_URL)
+            else prefs[KEY_SERVER_URL] = url
+        }
+    }
+
     private suspend fun <T> put(key: Preferences.Key<T>, value: T) {
         context.settingsDataStore.edit { it[key] = value }
     }
@@ -237,5 +255,6 @@ class SettingsRepository(private val context: Context) {
         val KEY_THEME = stringPreferencesKey("theme_mode")
         val KEY_WALLPAPER = stringPreferencesKey("wallpaper")
         val KEY_WALLPAPER_CUSTOM = stringPreferencesKey("wallpaper_custom_path")
+        val KEY_SERVER_URL = stringPreferencesKey("server_url_override")
     }
 }
