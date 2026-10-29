@@ -113,15 +113,21 @@ fun RegisterScreen(
                         if (sending || countdown > 0) return@Button
                         scope.launch {
                             sending = true
-                            val err = accountManager.sendCode(email)
+                            val result = accountManager.sendCode(email)
                             sending = false
-                            if (err == null) {
+                            if (result.error == null) {
                                 messageError = false
-                                message = "验证码已发送，请查收邮箱（注意垃圾箱）"
                                 countdown = 60
+                                if (result.devCode != null) {
+                                    // 官方服务器免邮件模式：验证码直接下发，自动填入
+                                    code = result.devCode
+                                    message = "验证码已自动填入：${result.devCode}"
+                                } else {
+                                    message = "验证码已发送，请查收邮箱（注意垃圾箱）"
+                                }
                             } else {
                                 messageError = true
-                                message = err
+                                message = result.error
                             }
                         }
                     },

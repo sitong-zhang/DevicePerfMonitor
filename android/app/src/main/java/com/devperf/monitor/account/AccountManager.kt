@@ -41,17 +41,29 @@ class AccountManager(context: Context) {
     // 邮箱验证码
     // ------------------------------------------------------------------
 
-    /** 请求发送邮箱验证码；返回 null 表示已发送，否则为错误提示。 */
-    suspend fun sendCode(email: String): String? = withContext(Dispatchers.IO) {
+    /** 发送验证码结果：error 非空即失败；devCode 为官方服务器在免邮件模式下直接下发的验证码。 */
+    data class SendCodeResult(val error: String?, val devCode: String?)
+
+    /**
+     * 请求发送邮箱验证码。
+     *
+     * 官方服务器在未配置邮件通道时会把验证码直接随响应下发（dev_code），
+     * 此时 UI 自动填入，用户无需查收邮件即可完成注册 / 登录。
+     */
+    suspend fun sendCode(email: String): SendCodeResult = withContext(Dispatchers.IO) {
         val mail = email.trim()
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()) {
-            return@withContext "邮箱格式不正确"
+            return@withContext SendCodeResult("邮箱格式不正确", null)
         }
         val res = ApiClientHolder.api.post(
             "/api/send_code",
             JSONObject().put("email", mail),
         )
-        if (res.ok) null else (res.msg ?: "验证码发送失败，请稍后再试")
+        if (!res.ok) {
+            SendCodeResult(res.msg ?: "验证码发送失败，请稍后再试", null)
+        } else {
+            SendCodeResult(null, res.data?.optString("dev_code")?.takeIf { it.isNotBlank() })
+        }
     }
 
     // ------------------------------------------------------------------
