@@ -1,12 +1,14 @@
 package com.devperf.monitor.data.collectors
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.os.BatteryManager
+import android.os.Build
 import android.location.LocationManager
 import android.media.AudioManager
 import android.net.ConnectivityManager
@@ -812,6 +814,9 @@ class DeepCollector(private val context: Context) {
     // ==================================================================
     // 网络细分
     // ==================================================================
+    // 蜂窝细分（CellSignalStrength*）为 API 29+，本文件已用 SDK_INT 判断保护；
+    // WiFi 的 getWifiStandard 属系统 API，走反射 + 推算兜底。
+    @SuppressLint("NewApi")
     private fun networkSection(): com.devperf.monitor.core.DeepSection {
         val b = DeepBuilder(DeepCategory.NETWORK)
         val rx = netTotal(1)
@@ -834,6 +839,26 @@ class DeepCollector(private val context: Context) {
             b.real("wifi.channel", "WiFi 信道", channelOf(freq))
             b.real("wifi.rssi", "WiFi 信号 RSSI", info.rssi, "dBm")
             b.real("wifi.link", "WiFi 链路速率", info.linkSpeed, "Mbps")
+            // 信号格数（0~4）：API 30 起官方建议用 getSignalLevel，旧版用静态换算
+            b.real("wifi.level", "WiFi 信号格数", runCatching {
+                @Suppress("DEPRECATION")
+                WifiManager.calculateSignalLevel(info.rssi, 5)
+            }.getOrNull(), "/4")
+            // SSID：Android 13+ 需 NEARBY_WIFI_DEVICES 或精确定位；旧版需定位权限
+            val ssid = runCatching {
+                info.ssid?.trim('"')?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+            }.getOrNull()
+            if (ssid != null) {
+                b.real("wifi.ssid", "WiFi 名称 SSID", ssid)
+            } else {
+                b.missing("wifi.ssid", "WiFi 名称 SSID",
+                    "未授予 NEARBY_WIFI_DEVICES / 定位权限（或系统隐藏了 SSID）")
+            }
+            // WiFi 制式（802.11ax/ac/n…）：厂商开放时反射读取，否则按链路速率推算
+            val std = wifiStandardOf(info, info.linkSpeed)
+            if (std.first) b.real("wifi.standard", "WiFi 制式", std.second)
+            else b.estimate("wifi.standard", "WiFi 制式（推算）", std.second,
+                note = "系统未开放 WIFI_STANDARD，按链路速率 + 频段推算")
         } else {
             b.missing("wifi.band", "WiFi 频段", "未连接 WiFi 或 ACCESS_WIFI_STATE 未授予")
         }
@@ -842,20 +867,79 @@ class DeepCollector(private val context: Context) {
             note = "由 WiFi 开关状态 + 参考功耗推算，驱动级功耗状态节点未开放")
         b.missing("wifi.scan", "WiFi 扫描次数", "需系统私有统计（第三方应用不可读）")
 
-        // 蜂窝
+        // 蜂窝：READ_PHONE_STATE（或 Android 13+ 的 READ_BASIC_PHONE_STATE / 定位权限）
+        // 任一通道放行就真实读网络类型、运营商、信号强度；全部被拒则推算并注明。
         val tm = runCatching { context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager }.getOrNull()
-        val granted = runCatching {
-            context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
-        }.getOrDefault(false)
-        if (tm != null && granted) {
+        val cellGranted = hasAnyPermission(
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                hasAnyPermission("android.permission.READ_BASIC_PHONE_STATE"))
+        if (tm != null && cellGranted) {
             val type = runCatching { tm.dataNetworkType }.getOrNull()
             b.realOrMissing("cell.type", "蜂窝网络类型（4G/5G NR）", type?.let { mapNetworkType(it) })
-            b.missing("cell.rsrp", "RSRP / RSRQ 信噪比", "需持续监听 PhoneStateListener，本版本按秒采样不驻留监听")
+            b.realOrMissing("cell.operator", "运营商", runCatching { tm.networkOperatorName }.getOrNull()
+                ?.takeIf { it.isNotBlank() })
+            b.realOrMissing("cell.roaming", "漫游状态", runCatching { tm.isNetworkRoaming }.getOrNull()?.let {
+                if (it) "漫游中" else "非漫游"
+            })
+            b.realOrMissing("cell.sim_count", "生效 SIM 卡数", runCatching {
+                android.telephony.SubscriptionManager.from(context).activeSubscriptionInfoCount
+            }.getOrNull())
+            // 信号强度：API 28+ 可一次性读取（无需常驻 PhoneStateListener）
+            val cells = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) tm.signalStrength?.cellSignalStrengths else null
+            }.getOrNull()
+            if (!cells.isNullOrEmpty()) {
+                // 取信号最好的那一制式（多制式共存时以 LTE/NR 为准）
+                val lte = cells.filterIsInstance<android.telephony.CellSignalStrengthLte>().maxByOrNull { it.dbm }
+                val nr = cells.filterIsInstance<android.telephony.CellSignalStrengthNr>().maxByOrNull { it.dbm }
+                val gsm = cells.filterIsInstance<android.telephony.CellSignalStrengthGsm>().maxByOrNull { it.dbm }
+                val wcdma = cells.filterIsInstance<android.telephony.CellSignalStrengthWcdma>().maxByOrNull { it.dbm }
+                val best = nr ?: lte ?: wcdma ?: gsm
+                if (nr != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    b.real("cell.nr_ssrsrp", "5G SS-RSRP", nr.ssRsrp.takeIf { it != Int.MAX_VALUE }, "dBm")
+                    b.real("cell.nr_ssrsrq", "5G SS-RSRQ", nr.ssRsrq.takeIf { it != Int.MAX_VALUE }, "dB")
+                    b.real("cell.nr_sssinr", "5G SS-SINR", nr.ssSinr.takeIf { it != Int.MAX_VALUE }, "dB")
+                }
+                if (lte != null) {
+                    b.real("cell.lte_rsrp", "LTE RSRP", lte.rsrp.takeIf { it != Int.MAX_VALUE }, "dBm")
+                    b.real("cell.lte_rsrq", "LTE RSRQ", lte.rsrq.takeIf { it != Int.MAX_VALUE }, "dB")
+                    b.real("cell.lte_rssnr", "LTE RSSNR", lte.rssnr.takeIf { it != Int.MAX_VALUE }, "dB")
+                    b.real("cell.lte_cqi", "LTE CQI", lte.cqi.takeIf { it != Int.MAX_VALUE })
+                    b.real("cell.lte_ta", "LTE 时间提前量 TA", lte.timingAdvance.takeIf { it != Int.MAX_VALUE })
+                }
+                b.realOrMissing("cell.dbm", "蜂窝信号强度", best?.dbm?.takeIf { it != Int.MAX_VALUE }, "dBm")
+                b.realOrMissing("cell.level", "蜂窝信号格数", best?.level, "/4")
+                b.real("cell.asu", "蜂窝 ASU", best?.asuLevel?.takeIf { it != Int.MAX_VALUE })
+            } else {
+                b.missing("cell.dbm", "蜂窝信号强度",
+                    "系统未返回 CellSignalStrength（多为空闲态/无卡/厂商限制）")
+                b.estimate("cell.level_est", "蜂窝信号格数（推算）",
+                    runCatching {
+                        val l = tm.signalStrength?.level
+                        if (l != null && l in 0..4) "$l / 4（由 SignalStrength.level 推算）" else null
+                    }.getOrNull(),
+                    note = "无细分制式信息时，用系统综合信号等级 level(0~4) 推算")
+            }
         } else {
-            b.missing("cell.type", "蜂窝网络类型", "未授予 READ_PHONE_STATE")
+            b.missing("cell.type", "蜂窝网络类型", "未授予电话状态/定位类权限（READ_PHONE_STATE）")
+            b.missing("cell.dbm", "蜂窝信号强度", "同上：无权限时系统不再返回任何蜂窝信息")
+            // 无权限时用「WiFi 是否在用 + 移动数据开关」推算是否走蜂窝
+            b.estimate("cell.active_est", "是否走蜂窝（推算）",
+                if (wifiEnabled()) "否（当前 WiFi 可用）" else "大概率是（WiFi 未开启）",
+                note = "无权限时按 WiFi 开关状态推算数据通路，非精确值")
         }
         b.realOrMissing("cell.temp", "基带温度", thermalMax("modem", "mdm", "pa", "rf", "radio"))
         return b.build()
+    }
+
+    /** 任一权限被授予即返回 true（用于多渠道兜底的指标读取）。 */
+    private fun hasAnyPermission(vararg perms: String): Boolean = perms.any { p ->
+        runCatching { context.checkSelfPermission(p) }.getOrDefault(
+            PackageManager.PERMISSION_DENIED
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun mapNetworkType(t: Int): String = when (t) {
@@ -866,6 +950,39 @@ class DeepCollector(private val context: Context) {
         TelephonyManager.NETWORK_TYPE_EDGE, TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
         TelephonyManager.NETWORK_TYPE_UNKNOWN -> "未知"
         else -> "type=$t"
+    }
+
+    /**
+     * WiFi 制式（802.11ax/ac/n/g…）。
+     * 优先反射系统 `WifiInfo.wifiStandard`（少数厂商/版本开放，属系统 API），
+     * 失败则按「频段 + 链路速率 + 流数」推算，调用方按返回的 real 标记打角标。
+     */
+    private fun wifiStandardOf(info: android.net.wifi.WifiInfo, linkMbps: Int): Pair<Boolean, String> {
+        val reflected = runCatching {
+            val m = info.javaClass.getMethod("getWifiStandard")
+            val v = m.invoke(info) as? Int ?: return@runCatching null
+            when (v) {
+                0 -> "802.11a/b/g"
+                1 -> "802.11n (Wi-Fi 4)"
+                2 -> "802.11ac (Wi-Fi 5)"
+                3 -> "802.11ax (Wi-Fi 6)"
+                4 -> "802.11ad (60GHz)"
+                5 -> "802.11be (Wi-Fi 7)"
+                6 -> "802.11ax (Wi-Fi 6E)"
+                else -> "未知($v)"
+            }
+        }.getOrNull()
+        if (reflected != null) return true to reflected
+        val freq = info.frequency
+        val est = when {
+            freq in 5900..7125 -> if (linkMbps >= 1000) "Wi-Fi 6E/7（6GHz 频段）" else "6GHz 频段"
+            freq in 4900..5900 -> if (linkMbps >= 800) "802.11ax (Wi-Fi 6, 5G)" else "802.11ac (Wi-Fi 5, 5G)"
+            linkMbps >= 400 -> "802.11ac (Wi-Fi 5)"
+            linkMbps >= 65 -> "802.11n (Wi-Fi 4)"
+            linkMbps > 0 -> "802.11a/b/g"
+            else -> "未知"
+        }
+        return false to est
     }
 
     private fun channelOf(freq: Int): Int = when {
@@ -1011,8 +1128,10 @@ class DeepCollector(private val context: Context) {
             b.real("proc.top", "CPU 占用 Top5 进程",
                 top.joinToString("  ") { "${it.name}(${it.pid}):${fmt1(it.cpuPercent!!)}%" })
             for (t in top) {
+                // uid → 可读应用名（QUERY_ALL_PACKAGES 授予后可用；未授予则只显示进程名）
+                val app = t.uid?.let { appLabelForUid(it) }
                 b.real(
-                    "proc.${t.pid}", "进程 ${t.name} 详情",
+                    "proc.${t.pid}", "进程 ${t.name}${app?.let { "（$it）" } ?: ""} 详情",
                     "UID=${t.uid ?: "—"} 状态=${stateLabel(t.state)} nice=${t.nice ?: "—"} " +
                         "线程=${t.threads ?: "—"} RSS=${t.rssKb?.div(1024f)?.let { fmt1(it) } ?: "—"}MB " +
                         "CPU累计=${fmt1(t.cpuSeconds)}s 调度策略=${policyLabel(t.policy)}",
@@ -1040,6 +1159,30 @@ class DeepCollector(private val context: Context) {
         val cpuPercent: Float?,
         val cpuSeconds: Float,
     )
+
+    /** uid → 应用可读名的缓存（首次解析后不再走 IPC，避免每次采样卡顿）。 */
+    private val appLabelCache = ConcurrentHashMap<Int, String>()
+
+    /**
+     * 把 uid 解析成应用名（如「微信」）。依赖 QUERY_ALL_PACKAGES / 常规包可见性；
+     * 解析不到返回 null，调用方直接显示进程名即可（已足够可读）。
+     */
+    private fun appLabelForUid(uid: Int): String? {
+        val cached = appLabelCache[uid]
+        if (cached != null) return cached.takeIf { it.isNotEmpty() }
+        val label = runCatching {
+            val pm = context.packageManager
+            val pkg = pm.getPackagesForUid(uid)?.firstOrNull() ?: return@runCatching ""
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getApplicationInfo(pkg, android.content.pm.PackageManager.ApplicationInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION") pm.getApplicationInfo(pkg, 0)
+            }
+            pm.getApplicationLabel(info).toString()
+        }.getOrNull().orEmpty()
+        appLabelCache[uid] = label
+        return label.takeIf { it.isNotEmpty() }
+    }
 
     private fun stateLabel(s: String?): String = when (s) {
         "R" -> "R 运行"; "S" -> "S 睡眠"; "D" -> "D 不可中断"; "Z" -> "Z 僵尸"
