@@ -46,6 +46,21 @@ class MainActivity : ComponentActivity() {
             // 结果不改变 UI 结构：通知权限态由设置页实时查询展示
         }
 
+    /**
+     * 深度监测所需的运行时权限（危险权限组，必须动态申请）：
+     * - READ_PHONE_STATE：蜂窝网络类型 / 运营商 / 信号强度（RSRP·RSRQ）；
+     * - NEARBY_WIFI_DEVICES（API 33+）：WiFi SSID，替代定位权限；
+     * - 定位权限：Android 11+ 读取 SignalStrength 的兜底通道之一。
+     * 全部拒绝也不会影响其余功能：相关指标自动降级为"推算 + 说明"。
+     */
+    private val requestDeepMetricsPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val denied = result.filter { !it.value }.keys
+            if (denied.isNotEmpty()) {
+                Log.i("MainActivity", "深度监测可选权限未授予：$denied（相关指标降级为推算）")
+            }
+        }
+
     private val shizukuPermissionListener =
         OnRequestPermissionResultListener { _, _ ->
             // Shizuku API 13.1.5 起授权结果由 SDK 内部自动分发给监听器
@@ -67,6 +82,7 @@ class MainActivity : ComponentActivity() {
         }
 
         maybeRequestNotifications()
+        maybeRequestDeepMetricsPermissions()
         runCatching { Shizuku.addRequestPermissionResultListener(shizukuPermissionListener) }
 
         BootTrace.mark("setContent 开始")
@@ -139,6 +155,30 @@ class MainActivity : ComponentActivity() {
     private fun maybeRequestNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             runCatching { requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) }
+        }
+    }
+
+    /**
+     * 申请深度监测的可选权限（电话状态 / 附近 WiFi 设备 / 定位兜底）。
+     * 只在**尚未授予**时才弹系统框，避免每次启动都打扰用户；
+     * 用户拒绝后相关指标降级为推算值并显示原因（见 DeepCollector）。
+     */
+    private fun maybeRequestDeepMetricsPermissions() {
+        val wanted = linkedSetOf(Manifest.permission.READ_PHONE_STATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            wanted += Manifest.permission.NEARBY_WIFI_DEVICES
+        }
+        // Android 11 起 SignalStrength 也可由定位权限放行，这里一并提出作为兜底
+        wanted += Manifest.permission.ACCESS_COARSE_LOCATION
+        wanted += Manifest.permission.ACCESS_FINE_LOCATION
+        val missing = wanted.filter {
+            runCatching { checkSelfPermission(it) }.getOrDefault(
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }.toTypedArray()
+        if (missing.isNotEmpty()) {
+            runCatching { requestDeepMetricsPermissions.launch(missing) }
+                .onFailure { Log.w("MainActivity", "深度监测权限申请异常", it) }
         }
     }
 
