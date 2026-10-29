@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.molecule.manager.BuildConfig
 import com.molecule.manager.network.AdminApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +14,8 @@ import kotlinx.coroutines.launch
  * 管理端 ViewModel（2.0 重写）：账号管控 + 公告，数据全部来自自建后端
  * （backend/ Flask + SQLite），不再依赖 GitHub。
  *
- * 密码锁：管理密码 421083，输入一次后本地永久记住（SharedPrefs，除非卸载应用）。
+ * 密码锁：管理密码在构建期由环境变量注入（BuildConfig.ADMIN_PASSWORD），
+ * 输入一次后本地永久记住（SharedPrefs，除非卸载应用）。
  * 密码正确即向后端 /api/admin/login 换取 token，后续接口走 Bearer 鉴权。
  */
 class ManagerViewModel(app: Application) : AndroidViewModel(app) {
@@ -21,8 +23,8 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx: Context get() = getApplication()
 
     companion object {
-        /** 管理端密码（仅限管理人员知晓；分发仅限管理人员下载）。 */
-        const val ADMIN_PASSWORD: String = "421083"
+        /** 管理端密码（构建期注入，源码仓库不含明文；分发仅限管理人员）。 */
+        const val ADMIN_PASSWORD: String = BuildConfig.ADMIN_PASSWORD
         private const val PREFS = "manager_lock"
         private const val KEY_UNLOCKED = "unlocked"
         private const val KEY_OFFICIAL_URL = "official_url"

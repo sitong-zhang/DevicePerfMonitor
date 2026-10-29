@@ -26,8 +26,8 @@ android {
         applicationId = "com.molecule.manager"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "2.0.1"
+        versionCode = 5
+        versionName = "2.0.2"
         vectorDrawables.useSupportLibrary = true
 
         // 后端服务地址（账号 / 管控 / 公告）：构建可用 -PdevperfServerUrl=... 或
@@ -36,6 +36,13 @@ android {
             ?: System.getenv("DEVPERF_SERVER_URL")
             ?: "http://10.0.2.2:5000"
         buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
+
+        // 管理端密码：构建时由环境变量 / 仓库机密注入（DEVPERF_ADMIN_PASSWORD），
+        // 源码中不存放明文，避免公开仓库泄露。
+        val adminPassword = System.getenv("DEVPERF_ADMIN_PASSWORD")
+            ?: (project.findProperty("devperfAdminPassword") as String?)
+            ?: ""
+        buildConfigField("String", "ADMIN_PASSWORD", "\"$adminPassword\"")
     }
 
     signingConfigs {

@@ -8,8 +8,8 @@ PulseGuard 后端服务
   - 邮箱验证码发送（真实 SMTP，默认 QQ 邮箱）
   - 账号体系：注册（邮箱验证码 + 手机号 + 账号 + 密码 + 昵称）/ 登录
   - 用户端数据同步：每小时自动 + 关键操作实时上报
-  - 管理端 REST API：密码锁 421083、用户列表、禁用功能 / 限制 / 单独公告 / 全局公告
-  - 可选 Web 管理页（/admin），同样需要密码 421083
+  - 管理端 REST API：密码锁（密码由 ADMIN_PASSWORD 环境变量注入，仓库不记录）、用户列表、禁用功能 / 限制 / 单独公告 / 全局公告
+  - 可选 Web 管理页（/admin），同样需要管理密码（环境变量注入）
 
 存储：单文件 SQLite（默认 backend/data/app.db），零外部依赖（仅需 Flask）。
 部署：见 README.md（Docker / 任意 Python 主机）。
@@ -49,7 +49,8 @@ from flask import (
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "app.db"))
 PORT = int(os.environ.get("PORT", "5000"))
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "421083")
+# 管理密码只从环境变量 / 部署机密注入，源码中不存放明文（仓库公开）。
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 APP_NAME = os.environ.get("APP_NAME", "PulseGuard")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.qq.com")
@@ -570,7 +571,8 @@ def admin_login():
         return json_ok()
     data = request.get_json(silent=True) or {}
     pwd = data.get("password") or ""
-    if pwd != ADMIN_PASSWORD:
+    # 未配置管理密码时一律拒绝登录，避免空密码被绕过
+    if not ADMIN_PASSWORD or pwd != ADMIN_PASSWORD:
         return json_err("密码错误", 403)
     token = secrets.token_hex(32)
     conn = db()
@@ -782,13 +784,13 @@ def admin_announcements():
 
 
 # ---------------------------------------------------------------------------
-# Web 管理页（/admin）：同样需要密码 421083
+# Web 管理页（/admin）：密码同样只从环境变量注入
 # ---------------------------------------------------------------------------
 @app.route("/admin", methods=["GET", "POST"])
 def admin_page():
     if request.method == "POST":
         pwd = request.form.get("password", "")
-        if pwd == ADMIN_PASSWORD:
+        if ADMIN_PASSWORD and pwd == ADMIN_PASSWORD:
             session["admin"] = True
             return redirect(url_for("admin_page"))
         return render_template("admin.html", error="密码错误", authed=False, app_name=APP_NAME)

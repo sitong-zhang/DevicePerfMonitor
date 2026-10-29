@@ -31,13 +31,13 @@ App 内置账号体系（注册需邮箱验证码），性能数据与账号操�
 
 - **后端服务（`backend/`）**：Flask + SQLite 服务，提供邮箱验证码注册、登录、数据同步、操作上报与管理端 API；可自托管，App 通过 `SERVER_URL`（构建期由 `DEVPERF_SERVER_URL` 注入，默认本机联调地址）指向。
 - **用户端 App（`android/app`）**：注册需邮箱验证码 + 手机号 + 账号 + 密码 + 昵称（全部必填）；登录后每小时自动把性能数据与操作记录同步到后端，关键操作（购买、功能激活等）实时上报；管理端的公告 / 功能开关 / 状态变更实时生效。
-- **管理端 App（`android/manager`）**：密码锁 `421083`（输入一次后本地永久记住，除非卸载）；可查看全部注册用户及其数据 / 操作记录，对任意账号进行功能禁用、状态管控、定向公告等，并可发布全局公告。**仅限管理人员下载。**
+- **管理端 App（`android/manager`）**：密码锁（由部署机密注入，仓库不记录明文；输入一次后本地永久记住，除非卸载）；可查看全部注册用户及其数据 / 操作记录，对任意账号进行功能禁用、状态管控、定向公告等，并可发布全局公告。**仅限管理人员下载。**
 - **邮件验证码**：通过真实 SMTP（QQ 邮箱）发送，邮件正文内嵌分子智能科技 logo。
 
 ## 下载与版本
 
 - **安卓版**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/apk) 页面的 `app-release.apk`（液态玻璃版），允许「未知来源」即可安装，首次打开需注册/登录。
-- **管理端**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/manager) 页面的 `manager-release.apk`，**仅限管理人员下载**（内含管理密码 421083 与账号管控能力，请勿外传）。
+- **管理端**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/manager) 页面的 `manager-release.apk`，**仅限管理人员下载**（内含账号管控能力，请勿外传）。
 
 ## 构建
 

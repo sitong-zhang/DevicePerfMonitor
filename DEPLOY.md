@@ -20,7 +20,7 @@
    - `SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS`：发验证码邮件
      （QQ 邮箱填 `smtp.qq.com` + 端口 `465` + 授权码）；不填时 `DEV_MODE=0`
      无法发码，需切回 `DEV_MODE=1` 让验证码回显到 `/api/send_code`。
-   - `ADMIN_PASSWORD`：管理端密码（默认 `421083`）。
+   - `ADMIN_PASSWORD`：管理端密码，**无默认值，必须设置**（值由管理人员另行分发）。
 6. 部署完成后复制分配的 `.onrender.com` 地址，发给开发者注入 APK。
 
 ## 方案 B：Railway

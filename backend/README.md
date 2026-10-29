@@ -9,14 +9,14 @@
 | 邮箱验证码 | 真实 SMTP 发送（默认 QQ 邮箱），注册时校验 |
 | 账号体系 | 注册（邮箱+验证码+手机号+账号+密码+昵称，全必填）/ 登录，口令加盐 SHA-256 |
 | 数据同步 | 用户端每小时自动同步 + 关键操作（购买、功能激活…）实时上报 |
-| 管理端 API | 密码锁 `421083`、用户列表、禁用功能 / 限制账户 / 单独公告 / 全局公告 |
+| 管理端 API | 密码锁（环境变量 `ADMIN_PASSWORD`）、用户列表、禁用功能 / 限制账户 / 单独公告 / 全局公告 |
 | Web 管理页 | `/admin`，与管理端 App 共用同一套后端逻辑 |
 
 ## 环境变量
 
 见 `.env.example`。关键项：
 
-- `ADMIN_PASSWORD`：管理端密码，默认 `421083`
+- `ADMIN_PASSWORD`：管理端密码，**无默认值**，必须自行设置；未设置时登录一律拒绝
 - `SMTP_HOST/PORT/USER/PASS`：发件邮箱（QQ 邮箱填 `smtp.qq.com:465` + 授权码）
 - `APP_NAME`：展示名
 - `DEV_MODE`：本地联调时设为 `1`，SMTP 不通会把验证码回显到 `/api/send_code` 的 `dev_code` 字段；**生产务必设 `0`**
@@ -28,7 +28,7 @@
 ```bash
 cd backend
 pip install -r requirements.txt
-export DEV_MODE=1 ADMIN_PASSWORD=421083   # 本地先跑通流程
+export DEV_MODE=1 ADMIN_PASSWORD=<你的管理密码>   # 本地先跑通流程
 python3 app.py
 ```
 
@@ -38,7 +38,7 @@ python3 app.py
 docker build -t pulseguard-backend ./backend
 docker run -d --name pg -p 5000:5000 \
   -v pg-data:/app/data \
-  -e ADMIN_PASSWORD=421083 \
+  -e ADMIN_PASSWORD=<你的管理密码> \
   -e SMTP_HOST=smtp.qq.com -e SMTP_PORT=465 \
   -e SMTP_USER=你的QQ邮箱 -e SMTP_PASS=你的授权码 \
   -e DEV_MODE=0 \
@@ -60,7 +60,7 @@ docker run -d --name pg -p 5000:5000 \
 | POST | `/api/sync` | 上报数据快照（每小时 / 实时） |
 | POST | `/api/event` | 记录关键操作事件 |
 | GET | `/api/announcements` | 我的公告（全局 + 定向） |
-| POST | `/api/admin/login` | 管理端登录（密码 421083）→ admin token |
+| POST | `/api/admin/login` | 管理端登录（密码取自 `ADMIN_PASSWORD`）→ admin token |
 | GET | `/api/admin/users` | 全部注册用户列表 |
 | GET | `/api/admin/users/<id>` | 用户详情（快照/操作/公告） |
 | POST | `/api/admin/users/<id>/disable_feature` | 禁用/启用某功能 |

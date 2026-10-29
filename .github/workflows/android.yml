@@ -60,6 +60,8 @@ jobs:
         env:
           DEVPERF_FEEDBACK_TOKEN: ${{ secrets.DEVPERF_FEEDBACK_TOKEN }}
           DEVPERF_SERVER_URL: ${{ secrets.DEVPERF_SERVER_URL }}
+          # 管理端密码：构建期注入，源码与 Release 说明中均不含明文
+          DEVPERF_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
           # runner 镜像自带 Android SDK；没有时回退到 $ANDROID_SDK_ROOT
           if [ -z "$ANDROID_HOME" ] && [ -z "$ANDROID_SDK_ROOT" ]; then
