@@ -37,7 +37,7 @@ App 内置账号体系（注册需邮箱验证码），性能数据与账号操�
 ## 下载与版本
 
 - **安卓版**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/apk) 页面的 `app-release.apk`（液态玻璃版），允许「未知来源」即可安装，首次打开需注册/登录。
-- **管理端**：[Releases](https://github.com/sitong-zhang/DevicePerfMonitor/releases/tag/manager) 页面的 `manager-release.apk`，**仅限管理人员下载**（内含账号管控能力，请勿外传）。
+- **管理端**：内部工具，**不公开发布**。由本地构建后以 `管理端<版本号>.apk` 直接交付给授权管理人员（内含账号管控能力，请勿外传）。
 
 ## 构建
 

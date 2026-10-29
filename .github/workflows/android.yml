@@ -74,7 +74,9 @@ jobs:
             echo "DEVPERF_SERVER_URL=$DEVPERF_SERVER_URL" >> local.properties
             echo "::notice::已注入后端地址：$DEVPERF_SERVER_URL"
           fi
-          ./gradlew :app:assembleRelease :manager:assembleRelease --no-daemon
+          # 只构建用户端。管理端（:manager）自 2.0.2 起改为本地出包、直接交付，
+          # 不再由 CI 构建或发布到仓库的 Release。
+          ./gradlew :app:assembleRelease --no-daemon
 
       # 提取 app 版本号，用于 Release 的语义化 tag（vX.Y.Z）：
       # 让 app 端用 releases/latest 的 tag_name 做 isNewer 比较时能正确触发自动更新。
@@ -111,18 +113,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 管理端 APK：固定上架到 manager tag 的 Release。
-      # ⚠️ 仅限管理人员下载：包内集成管理密码与账号管控能力，
-      #    密码另行线下告知，请勿向非管理人员分发。
-      - name: Upload Manager APK to Release (manager tag)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: manager
-          name: 分子智能科技 · 管理端（仅限管理人员下载）
-          make_latest: false
-          body: |
-            ⚠️ 警告：本安装包为管理端，仅供本项目授权管理人员使用，内含账号管控能力。
-            严禁向非授权人员分发或泄露。如非管理人员，请勿下载、安装或使用。
-          files: android/manager/build/outputs/apk/release/manager-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 管理端（:manager）不再发布到仓库：内含账号管控能力，属内部工具，
+      # 改为本地构建后以「管理端<版本号>.apk」直接交付给管理人员。
