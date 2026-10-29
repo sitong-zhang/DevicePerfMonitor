@@ -1,0 +1,147 @@
+name: Free Cert Sign & Publish
+
+# 用免费第三方企业证书（China Telecom，来源 signhub.pro 公开免费证书包）
+# 把全能签重签成「任意 iPhone 可直接安装」的分发版并发布：
+#   1. 签好的 IPA  -> ios-signed Release
+#   2. itms-services 安装清单 -> gh-pages（官网「一键安装」按钮即用它）
+#
+# 企业证书特性：ProvisionsAllDevices，无需 UDID、无需付费开发者账号。
+# 风险：共享企业证书可能被苹果吊销；掉签后换新证书包重跑本工作流即可。
+# 免费证书包地址与密码均来自公开渠道（signhub.pro/Public/freecerts）。
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 21 * * 5" # 每周五 UTC 21:20（北京周六 5:20）自动重签防过期
+
+env:
+  CERT_URL: "https://signhub.pro/Public/freecerts/%5B2026.06.16%5DTelecomCorporationLimited.zip"
+  CERT_PASS: "gbox"
+  # 备用证书包（当前描述文件已过期，仅当主源失效时人工替换）
+  CERT_URL_FALLBACK: "https://signhub.pro/Public/freecerts/%5B2026.06.18%5DVIETNAMAIRLINES.zip"
+
+jobs:
+  free-sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 编译 zsign（Linux iOS 签名工具）
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++ pkg-config libssl-dev
+          git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
+          cd /tmp/zsign/build/linux
+          make
+          cp zsign /usr/local/bin/
+          zsign 2>&1 | head -3 || true
+
+      - name: 下载免费企业证书包
+        run: |
+          set -euo pipefail
+          curl -sL "$CERT_URL" -o cert.zip
+          unzip -oq cert.zip -d certdir
+          P12=$(find certdir -name "*.p12" ! -path "*__MACOSX*" | head -1)
+          PROV=$(find certdir -name "*.mobileprovision" ! -path "*__MACOSX*" | head -1)
+          test -n "$P12" && test -n "$PROV" || { echo "::error::证书包内容异常"; exit 1; }
+          cp "$P12" free.p12 && cp "$PROV" free.mobileprovision
+          # 验证证书可用性（密码与有效期）
+          openssl pkcs12 -legacy -in free.p12 -passin "pass:$CERT_PASS" -clcerts -nokeys 2>/dev/null | \
+            openssl x509 -noout -subject -dates
+          echo "证书主体与有效期如上；描述文件检查："
+          python3 - <<'PY'
+          import subprocess, plistlib
+          raw = subprocess.run(["openssl","smime","-inform","DER","-verify","-noverify",
+                                "-in","free.mobileprovision"],capture_output=True).stdout
+          d = plistlib.loads(raw)
+          exp = d.get("ExpirationDate")
+          import datetime; now = datetime.datetime.now(exp.tzinfo)
+          print("Team:", d.get("TeamName"), "| 描述文件过期:", exp)
+          print("企业分发(ProvisionsAllDevices):", d.get("ProvisionsAllDevices"))
+          assert d.get("ProvisionsAllDevices"), "不是企业分发证书"
+          assert exp > now, f"描述文件已过期: {exp}"
+          print("OK")
+          PY
+
+      - name: 下载未签名全能签 IPA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download ios-unsigned -R "$GITHUB_REPOSITORY" -D . \
+            -p 'Quannengqian-unsigned.ipa' --clobber
+          ls -lh Quannengqian-unsigned.ipa
+
+      - name: 用免费企业证书重签
+        run: |
+          set -euo pipefail
+          zsign -k free.p12 -p "$CERT_PASS" -m free.mobileprovision \
+            -o Quannengqian-signed.ipa -z 9 Quannengqian-unsigned.ipa
+          ls -lh Quannengqian-signed.ipa
+          # 读取签名后包的关键信息（用于安装清单）
+          python3 - <<'PY'
+          import zipfile, plistlib, io
+          z = zipfile.ZipFile("Quannengqian-signed.ipa")
+          info = [n for n in z.namelist() if n.endswith(".app/Info.plist")][0]
+          d = plistlib.load(io.BytesIO(z.read(info)))
+          bid = d.get("CFBundleIdentifier"); ver = d.get("CFBundleShortVersionString", "1.0")
+          open("app-meta.env","w").write(f"APP_BUNDLE_ID={bid}\nAPP_VERSION={ver}\n")
+          print("bundle:", bid, "version:", ver)
+          PY
+          cat app-meta.env >> "$GITHUB_ENV"
+
+      - name: 发布签名版到 ios-signed Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-signed
+          name: 全能签 · 签名版（免费企业证书，一键安装）
+          body: |
+            已用免费企业证书（China Telecom，来源 signhub.pro 公开免费证书包）签名。
+            iPhone 用 Safari 打开官网 install.html 点「一键安装」即可，无需电脑、无需 UDID。
+            证书若被苹果吊销（App 无法打开/提示无法验证），重跑本工作流换新证书后重新安装。
+          files: Quannengqian-signed.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 更新 gh-pages 安装清单
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY.git" pages
+          IPA_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/ios-signed/Quannengqian-signed.ipa"
+          cat > pages/manifest.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>items</key>
+            <array>
+              <dict>
+                <key>assets</key>
+                <array>
+                  <dict>
+                    <key>kind</key><string>software-package</string>
+                    <key>url</key><string>$IPA_URL</string>
+                  </dict>
+                </array>
+                <key>metadata</key>
+                <dict>
+                  <key>bundle-identifier</key><string>${APP_BUNDLE_ID}</string>
+                  <key>bundle-version</key><string>${APP_VERSION}</string>
+                  <key>kind</key><string>software</string>
+                  <key>title</key><string>全能签</string>
+                </dict>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+          cp website/install.html pages/install.html
+          cd pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.plist install.html
+          git commit -m "chore(pages): 免费证书签名版安装清单（run $GITHUB_RUN_NUMBER）" || echo "无变更"
+          git push origin HEAD:gh-pages
+          echo "发布完成：$IPA_URL"
