@@ -34,7 +34,7 @@ jobs:
           git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
           cd /tmp/zsign/build/linux
           make
-          cp zsign /usr/local/bin/
+          cp /tmp/zsign/bin/zsign /usr/local/bin/
           zsign 2>&1 | head -3 || true
 
       - name: 下载免费企业证书包
