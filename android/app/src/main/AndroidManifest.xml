@@ -22,6 +22,28 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <!-- 深度监测：蜂窝细分（网络类型 / 运营商 / 信号强度 RSRP·RSRQ）。
+         危险权限，App 启动时与其他运行时权限一并申请；未授予时相关指标
+         自动降级为"推算 + 说明"，不影响其余功能 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Android 13+ 的普通权限：无需弹窗即可读取基本电话状态（网络类型等），
+         作为 READ_PHONE_STATE 被拒时的兜底通道 -->
+    <uses-permission android:name="android.permission.READ_BASIC_PHONE_STATE" />
+    <!-- 深度监测：WiFi SSID / 信道环境 + 蜂窝信号强度（Android 11+ 读取
+         SignalStrength 需要位置类权限）。仅用于网络质量指标，不采集、
+         不上报任何位置信息 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Android 13+：读取 WiFi SSID 的正式通道，声明 neverForLocation 明确
+         不用于定位（targetSdk 33+ 起 SSID 需此权限或精确定位权限） -->
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="33" />
+    <!-- 深度监测：进程/应用名映射更完整（把 uid 解析成可读应用名） -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
     <!-- Shizuku：可选的免 root 提权通道（全局 FPS / 后台内存 / 各核心频率） -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
