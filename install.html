@@ -31,19 +31,20 @@ h1{font-size:27px;font-weight:800;margin-top:14px;letter-spacing:.5px}
   <div class="card">
     <span class="kicker">iPhone 免电脑安装</span>
     <h1>安装全能签</h1>
-    <p class="lead">全能签是观序苹果版的专用签名工具。装上之后，填入你的 Apple ID，它会自动拉取观序安装包，在手机本地完成签名并安装到本机——全程不需要电脑，也不需要越狱。</p>
+    <p class="lead">此版本已用免费企业证书自动签名（无需 UDID、无需付费开发者账号）。装上之后，在全能签里填入你自己的 Apple ID，它会自动拉取观序安装包，在手机本地完成签名并安装——之后全程不需要电脑，也不需要越狱。</p>
 
     <a class="btn" href="itms-services://?action=download-manifest&url=https://sitong-zhang.github.io/DevicePerfMonitor/manifest.plist">一键安装全能签</a>
 
     <ol class="steps">
-      <li>请用 iPhone 自带的 <b>Safari</b> 打开本页，点上方按钮；</li>
-      <li>弹出安装确认框时点「安装」，图标会自动出现在桌面；</li>
-      <li>首次打开若提示「未受信任的企业级开发者」，到「设置 → 通用 → VPN与设备管理」中选择信任后即可打开。</li>
+      <li>请用 iPhone 自带的 <b>Safari</b> 打开本页，点上方按钮，弹出确认时点「安装」；</li>
+      <li>首次打开若提示「未受信任的企业级开发者」，到「设置 → 通用 → VPN与设备管理」中信任对应证书即可打开；</li>
+      <li>iOS 16+ 若提示需要开发者模式：设置 → 隐私与安全性 → 开发者模式 → 打开并重启（仅一次）。</li>
     </ol>
 
     <div class="note">
-      <b>按钮点了没反应？</b>说明当前还没有生成签名版本（签名服务需要有效的开发者证书与描述文件）。
-      此时请用下方备用方式：下载未签名包，自行用 AltStore / Sideloadly 侧载一次；之后全能签即可自行续签。
+      <b>提示「无法安装 / 无法验证 App」？</b>说明该免费企业证书已被苹果吊销。
+      回到官网让维护者重跑一次签名工作流（换新证书）后，删除旧版重新安装即可。
+      备用方式：下载未签名包，用 AltStore / Sideloadly 侧载一次。
     </div>
 
     <a class="btn blue" href="https://github.com/sitong-zhang/DevicePerfMonitor/releases/download/ios-unsigned/Quannengqian-unsigned.ipa">备用：下载未签名 IPA</a>
