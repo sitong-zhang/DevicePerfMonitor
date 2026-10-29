@@ -28,6 +28,22 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
         private const val PREFS = "manager_lock"
         private const val KEY_UNLOCKED = "unlocked"
         private const val KEY_OFFICIAL_URL = "official_url"
+
+        /**
+         * 可对单个用户禁用的**全部**用户端功能。
+         * key 必须与用户端 SyncManager.isFeatureDisabled 的入参一一对应，
+         * 用户端会在对应功能入口真实拦截（悬浮窗停服务、同步断流、公告不弹等）。
+         */
+        val FEATURES: List<Pair<String, String>> = listOf(
+            "overlay" to "全局悬浮窗",
+            "sync" to "数据同步",
+            "alert" to "告警提醒",
+            "announcement" to "公告展示",
+            "deep_monitor" to "深度监测",
+            "background_collect" to "后台采集",
+            "feedback" to "意见反馈",
+            "auto_update" to "自动更新",
+        )
     }
 
     // ---- 密码锁 ----
@@ -47,6 +63,9 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.edit().putString(KEY_OFFICIAL_URL, url).apply()
             }
         }
+        // 已解锁状态重启（进程被杀后恢复）：必须重新换 token，
+        // 否则界面已解锁但 token 为空，一直显示「尚未连接后端」（用户实测反馈的 bug）。
+        if (_unlocked.value) refreshToken()
     }
 
     private val _adminToken = MutableStateFlow<String?>(null)
@@ -135,23 +154,46 @@ class ManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeUser() { _selectedUser.value = null }
 
-    /** 禁用 / 启用某功能（如 overlay / sync / alert 等）。 */
+    /** 禁用 / 启用某功能。先乐观更新本地详情（界面立即反馈），再同步后端，失败回滚。 */
     fun toggleFeature(uid: Int, feature: String, disabled: Boolean) {
         val token = _adminToken.value ?: return
+        // 乐观更新：UI 立即看到开关变化，避免「点了像没点」
+        _selectedUser.value = _selectedUser.value?.copy(
+            disabledFeatures = if (disabled) {
+                _selectedUser.value?.disabledFeatures?.plus(feature)?.distinct()
+                    ?: listOf(feature)
+            } else {
+                _selectedUser.value?.disabledFeatures?.minus(feature) ?: emptyList()
+            },
+        )
         viewModelScope.launch {
             val err = AdminApiClient.disableFeature(token, uid, feature, disabled)
-            if (err != null) _status.value = err
-            else openUser(uid) // 刷新详情
+            if (err != null) {
+                _status.value = err
+                openUser(uid) // 回滚：重新拉真实状态
+            }
         }
     }
 
-    /** 设置账号状态（normal / restricted / disabled）。 */
+    /** 设置账号状态（normal / restricted / disabled）。乐观更新，失败回滚。 */
     fun setStatus(uid: Int, status: String, note: String) {
         val token = _adminToken.value ?: return
+        val cur = _selectedUser.value
+        _selectedUser.value = cur?.copy(
+            user = cur.user.copy(status = status),
+            restrictionNote = note,
+        )
         viewModelScope.launch {
             val err = AdminApiClient.setStatus(token, uid, status, note)
-            if (err != null) _status.value = err
-            else { _status.value = "已更新状态：$status"; openUser(uid) }
+            if (err != null) {
+                _status.value = err
+                openUser(uid)
+            } else {
+                val label = when (status) {
+                    "normal" -> "正常"; "restricted" -> "受限"; else -> "禁用"
+                }
+                _status.value = "已更新状态：$label"
+            }
         }
     }
 

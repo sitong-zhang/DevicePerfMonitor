@@ -80,6 +80,8 @@ class SyncManager(
 
     /** 立即上报一次设备快照（也在前台恢复等场景可手动触发）。 */
     suspend fun syncNow() {
+        // 管理端禁用「数据同步」：不上报（后端也会 403 兜底）
+        if (isFeatureDisabled("sync")) return
         val session = accountManager.session.value ?: return
         withContext(Dispatchers.IO) {
             val settings = runCatching { settingsRepository.settings.first() }.getOrNull()
@@ -112,6 +114,8 @@ class SyncManager(
 
     /** 实时上报一次用户操作；失败静默（下次每小时同步会补齐状态）。 */
     fun reportEvent(type: String, detail: String) {
+        // 管理端禁用「数据同步」：事件也不上报
+        if (isFeatureDisabled("sync")) return
         val session = accountManager.session.value ?: return
         scope.launch {
             val res = ApiClientHolder.api.post(

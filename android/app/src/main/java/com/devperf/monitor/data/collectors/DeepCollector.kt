@@ -2,7 +2,11 @@ package com.devperf.monitor.data.collectors
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.hardware.display.DisplayManager
+import android.os.BatteryManager
 import android.location.LocationManager
 import android.media.AudioManager
 import android.net.ConnectivityManager
@@ -14,7 +18,6 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import android.view.Choreographer
-import android.hardware.display.DisplayManager
 import com.devperf.monitor.core.DeepBuilder
 import com.devperf.monitor.core.DeepCategory
 import com.devperf.monitor.core.DeepSnapshot
@@ -618,10 +621,29 @@ class DeepCollector(private val context: Context) {
         val b = DeepBuilder(DeepCategory.POWER)
         val ps = powerSupply()
         val batt = ps["battery"] ?: emptyMap()
-        val curUa = batt["current_now"]?.toLongOrNull()
-        val volUv = batt["voltage_now"]?.toLongOrNull()
+        var curUa = batt["current_now"]?.toLongOrNull()
+        var volUv = batt["voltage_now"]?.toLongOrNull()
+        // sysfs 节点读不到时用 BatteryManager 官方 API 兜底：
+        // BATTERY_PROPERTY_CURRENT_NOW / EXTRA_VOLTAGE 无需任何运行时权限，
+        // 绝大多数机型都能取到（用户反馈电压电流要能拿到）
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        // ACTION_BATTERY_CHANGED 广播：电压（mV）/ 温度（0.1℃）/ 电量，无需权限
+        val battIntent = bm?.let {
+            context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }
+        if (curUa == null && bm != null) {
+            curUa = runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW).toLong() }
+                .getOrNull()?.takeIf { it != Int.MIN_VALUE.toLong() && it != 0L }
+        }
+        if (volUv == null) {
+            val mv = battIntent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
+            if (mv > 0) volUv = mv * 1000L
+        }
         val cap = batt["capacity"]?.toIntOrNull()
+            ?: bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it > 0 }
         val temp = batt["temp"]?.toLongOrNull()
+            ?: battIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+                ?.takeIf { it > 0 }?.toLong()
         val status = batt["status"]
         val chargeType = batt["charge_type"]
 

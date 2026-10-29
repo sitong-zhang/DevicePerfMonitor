@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- 通知：高温告警 / 前台常驻通知 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 深度监测：电池电压 / 电流 / 电量与充放电状态（普通权限，声明即生效） -->
+    <uses-permission android:name="android.permission.BATTERY_STATS" />
+    <!-- 深度监测：网络细分（WiFi 状态 / 蜂窝网络类型，普通权限） -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- 重启后按用户设置恢复悬浮窗 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 可选权限：仅当用户主动开启「全局 FPS / 后台应用内存」时引导授权，

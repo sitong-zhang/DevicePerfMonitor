@@ -78,6 +78,19 @@ class MonitorApp : Application() {
             accountManager = AccountManager(this)
             syncManager = SyncManager(this, settingsRepository, accountManager)
             BootTrace.mark("AccountManager / SyncManager 就绪")
+            // 管理端管控真实生效：监听下发的禁用清单，悬浮窗被禁立即停服务、
+            // 后台采集被禁立即停采集。UI 侧各入口另有拦截（同步/公告/反馈/更新）。
+            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+                syncManager.remoteState.collect { state ->
+                    val disabled = state?.disabledFeatures.orEmpty()
+                    if ("overlay" in disabled) {
+                        runCatching { OverlayService.stop(this@MonitorApp) }
+                    }
+                    if ("background_collect" in disabled) {
+                        runCatching { CollectionService.stop(this@MonitorApp) }
+                    }
+                }
+            }
         }.onFailure {
             BootTrace.mark("业务初始化失败: ${it.javaClass.simpleName}: ${it.message}")
             throw it
@@ -87,7 +100,8 @@ class MonitorApp : Application() {
             runCatching {
                 val settings = settingsRepository.settings.first()
                 BootTrace.mark("设置读取完成")
-                if (settings.collectInBackground) {
+                // 管理端禁用「后台采集」时不启动（运行中被禁由 remoteState 监听停止）
+                if (settings.collectInBackground && !syncManager.isFeatureDisabled("background_collect")) {
                     CollectionService.start(this@MonitorApp)
                     BootTrace.mark("后台采集已启动")
                 }
@@ -164,6 +178,8 @@ class MonitorApp : Application() {
     private fun showOverlayOnExit() {
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             runCatching {
+                // 管理端禁用「悬浮窗」：即使本地开关开着也不挂出
+                if (syncManager.isFeatureDisabled("overlay")) return@launch
                 val settings = settingsRepository.settings.first()
                 if (settings.overlayEnabled && OverlayPermissions.canDrawOverlays(this@MonitorApp)) {
                     OverlayService.start(this@MonitorApp)

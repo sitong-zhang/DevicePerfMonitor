@@ -197,29 +197,22 @@ def _load_logo() -> bytes | None:
 
 
 def send_code_email(email: str, code: str) -> bool:
-    """发送验证码邮件（HTML 版，内嵌分子智能科技 logo）；成功返回 True。SMTP 未配置或失败返回 False。"""
+    """发送验证码邮件。**始终**发送网页版（HTML）邮件：内嵌品牌 logo（官方仓库外链，
+    不依赖本地文件）、卡片式排版、大字验证码；text/plain 仅作客户端降级备份。
+    SMTP 未配置或发送失败返回 False。"""
     if not SMTP_USER or not SMTP_PASS:
         app.logger.warning("SMTP 未配置，无法发送验证码邮件（email=%s）", email)
         return False
     try:
-        msg = EmailMessage()
-        msg["Subject"] = f"【{APP_NAME}】您的验证码"
-        msg["From"] = SMTP_FROM
-        msg["To"] = email
         minutes = CODE_TTL // 60
-        msg.set_content(
-            f"您的 {APP_NAME} 账号验证码为：{code}\n"
-            f"验证码 {minutes} 分钟内有效，请勿泄露给他人。\n"
-            f"如非本人操作，请忽略本邮件。\n\n"
-            f"分子智能科技有限公司 MOLECULE TECHNOLOGY"
-        )
+        # logo 以 CID 内嵌进邮件（multipart/related）——外链图会被 QQ 等邮箱
+        # 客户端拦截显示为破图，内嵌图任何客户端都能直接显示
         logo = _load_logo()
-        if logo is not None:
-            html = f"""\
+        html = f"""\
 <div style="margin:0;padding:0;background:#f4f6fb;">
   <div style="max-width:520px;margin:0 auto;padding:28px 16px;font-family:'PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;">
     <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(31,50,110,.10);">
-      <div style="text-align:center;padding:28px 24px 12px;">
+      <div style="text-align:center;padding:28px 24px 12px;background:#ffffff;">
         <img src="cid:brand-logo" alt="分子智能科技 MOLECULE TECHNOLOGY"
              width="180" style="display:block;margin:0 auto;border:0;">
       </div>
@@ -248,7 +241,20 @@ def send_code_email(email: str, code: str) -> bool:
     </div>
   </div>
 </div>"""
-            msg.add_alternative(html, subtype="html")
+        msg = EmailMessage()
+        msg["Subject"] = f"【{APP_NAME}】您的验证码"
+        msg["From"] = SMTP_FROM
+        msg["To"] = email
+        # 纯文本仅作降级备份；HTML 是主展示（与网页版一致的卡片式设计）
+        msg.set_content(
+            f"【{APP_NAME}】登录验证码\n\n"
+            f"您的验证码为：{code}（{minutes} 分钟内有效）\n"
+            f"如非本人操作，请忽略本邮件。\n\n"
+            f"分子智能科技有限公司 MOLECULE TECHNOLOGY"
+        )
+        msg.add_alternative(html, subtype="html")
+        if logo is not None:
+            # 把 logo 挂到 HTML 分支上作内嵌资源（cid:brand-logo）
             msg.get_payload()[1].add_attachment(
                 logo, maintype="image", subtype="png",
                 filename="brand_logo.png", cid="brand-logo",
@@ -502,6 +508,10 @@ def sync():
     u, err = require_user()
     if err:
         return err
+    if u["status"] == "disabled":
+        return json_err("账号已被禁用，无法同步", 403)
+    if "sync" in json.loads(u["disabled_features"] or "[]"):
+        return json_err("数据同步已被管理员关闭", 403)
     data = request.get_json(silent=True) or {}
     payload = json.dumps(data.get("payload", {}), ensure_ascii=False)
     conn = db()
@@ -658,6 +668,19 @@ def admin_user_detail(uid):
     )
 
 
+# 可被管理端禁用的功能清单（key 与用户端 SyncManager.isFeatureDisabled 一致）
+FEATURE_LABELS = {
+    "overlay": "悬浮窗",
+    "sync": "数据同步",
+    "alert": "告警提醒",
+    "announcement": "公告展示",
+    "deep_monitor": "深度监测",
+    "background_collect": "后台采集",
+    "feedback": "意见反馈",
+    "auto_update": "自动更新",
+}
+
+
 @app.route("/api/admin/users/<int:uid>/disable_feature", methods=["POST", "OPTIONS"])
 def admin_disable_feature(uid):
     if request.method == "OPTIONS":
@@ -684,9 +707,11 @@ def admin_disable_feature(uid):
         "UPDATE users SET disabled_features=? WHERE id=?",
         (json.dumps(sorted(cur), ensure_ascii=False), uid),
     )
+    feature_label = FEATURE_LABELS.get(feature, feature)
     conn.execute(
         "INSERT INTO ops(user_id, type, detail, created_at) VALUES(?,?,?,?)",
-        (uid, "admin_disable_feature", f"{feature}={'禁用' if disabled else '启用'}", now_ms()),
+        (uid, "admin_disable_feature",
+         f"{'禁用' if disabled else '恢复'}了「{feature_label}」功能", now_ms()),
     )
     conn.commit()
     conn.close()
@@ -713,9 +738,11 @@ def admin_set_status(uid):
     conn.execute(
         "UPDATE users SET status=?, restriction_note=? WHERE id=?", (status, note, uid)
     )
+    status_label = {"normal": "正常", "restricted": "受限", "disabled": "禁用"}[status]
+    note_part = f"，说明：{note}" if note else ""
     conn.execute(
         "INSERT INTO ops(user_id, type, detail, created_at) VALUES(?,?,?,?)",
-        (uid, "admin_set_status", f"status={status}; note={note}", now_ms()),
+        (uid, "admin_set_status", f"将账号状态改为「{status_label}」{note_part}", now_ms()),
     )
     conn.commit()
     conn.close()

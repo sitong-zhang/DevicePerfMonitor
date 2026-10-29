@@ -190,31 +190,8 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= 后端服务器 =================
-            // 官方后端地址由 App 启动时自动发现（仓库 backend-host 分支维护），
-            // 用户无需、也不能手动填写。这里只做只读展示。
-            GlassSectionHeader(text = "后端服务器")
-            GlassPanel {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
-                ) {
-                    Text(
-                        text = "官方服务器",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.textPrimary,
-                    )
-                    Text(
-                        text = com.devperf.monitor.net.ApiClient.baseUrl(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                    Text(
-                        text = "由官方统一维护并自动接入，无需配置。",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                }
-            }
+            // 后端服务器区块（1.0.36 移除）：官方地址由 App 自动接入，
+            // 对用户而言不该感知「服务器」这个概念，展示无益。
 
             // ================= 悬浮窗 =================
             GlassSectionHeader(text = "全局悬浮窗")
@@ -507,14 +484,17 @@ fun SettingsScreen(
             // 点这行直接拉起邮件 App：收件人=官方邮箱，主题=版本+机型，
             // 正文=待填模板+设备信息，用户在邮件里补两句话点发送即达
             //（发件人是用户自己的邮箱，开发者可直接回复）。
-            GlassInfoRow(
-                label = "意见反馈",
-                value = "去邮件 →",
-                onClick = {
-                    haptics.tick()
-                    openMail(context, viewModel.feedbackMailto())
-                },
-            )
+            // 管理端禁用「意见反馈」时整行隐藏。
+            if (!viewModel.isFeatureDisabled("feedback")) {
+                GlassInfoRow(
+                    label = "意见反馈",
+                    value = "去邮件 →",
+                    onClick = {
+                        haptics.tick()
+                        openMail(context, viewModel.feedbackMailto())
+                    },
+                )
+            }
 
             // ================= 关于 =================
             GlassSectionHeader(text = "关于")
@@ -570,11 +550,7 @@ fun SettingsScreen(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
                 ) {
-                    GlassInfoRow(
-                        label = "官方网站",
-                        value = "molecule-tech.cn",
-                        onClick = { openUrl(context, "https://sitong-zhang.github.io/DevicePerfMonitor/") },
-                    )
+                    // 官方网站入口（1.0.36 移除）：用户端内不再引流到网页
                     GlassInfoRow(
                         label = "联系我们",
                         value = "wpqptwy@qq.com",

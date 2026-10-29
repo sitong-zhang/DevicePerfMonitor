@@ -85,7 +85,10 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     init {
         viewModelScope.launch {
             repository.snapshot.collect { s ->
-                alertManager.evaluate(s, settings.value)
+                // 管理端禁用「告警提醒」时不再评估（不弹通知）
+                if (!app.syncManager.isFeatureDisabled("alert")) {
+                    alertManager.evaluate(s, settings.value)
+                }
             }
         }
     }
@@ -309,6 +312,9 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     /** 当前采集间隔（数值动画打断策略用）。 */
     fun tickMs(): Long = settings.value.refreshMode.tickMs
 
+    /** 管理端是否已禁用某功能（悬浮窗 / 同步 / 公告 / 反馈 / 自动更新等，实时生效）。 */
+    fun isFeatureDisabled(feature: String): Boolean = app.syncManager.isFeatureDisabled(feature)
+
     /** 当前特权通道（设置页展示：root / Shizuku / 无）。 */
     fun snapshotShellBackend(): com.devperf.monitor.data.collectors.PrivilegedShell.Backend =
         repository.shell.backend
@@ -339,6 +345,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
      * 绝不锁死离线用户。每次进程启动都重新检查，因此「忽略版本」不再持久化。
      */
     fun checkForUpdate() {
+        // 管理端禁用「自动更新」时不检查，用户停留在当前版本
+        if (isFeatureDisabled("auto_update")) return
         if (updateSessionHandled) return
         when (_updateState.value) {
             // 已经确认有更新 / 正在下载 / 已下载完等待安装：都不重查。
@@ -416,6 +424,8 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
      * 网络失败 / 文件不存在都按「无公告」处理，不阻塞主流程（也不会锁死离线用户）。
      */
     fun checkAnnouncement() {
+        // 管理端禁用「公告展示」时不拉取、不弹窗
+        if (isFeatureDisabled("announcement")) return
         if (_announcementState.value is AnnouncementUiState.Show) return
         viewModelScope.launch {
             val announcement = runCatching { announcementRepo.latestAnnouncement() }

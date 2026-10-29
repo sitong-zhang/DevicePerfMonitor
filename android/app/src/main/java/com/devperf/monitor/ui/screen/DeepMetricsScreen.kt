@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.devperf.monitor.core.DeepCategory
+import com.devperf.monitor.ui.kit.GlassPanel
 import com.devperf.monitor.core.DeepOrigin
 import com.devperf.monitor.core.DeepRow
 import com.devperf.monitor.core.DeepSection
@@ -50,6 +51,8 @@ import java.util.Locale
 fun DeepMetricsScreen(viewModel: MonitorViewModel) {
     val snapshot by viewModel.deep.collectAsState()
     var selected: DeepCategory? by remember { mutableStateOf(null) }
+    // 管理端禁用「深度监测」：整页停采集并给出说明，不留空数据
+    val deepDisabled = viewModel.isFeatureDisabled("deep_monitor")
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -58,6 +61,15 @@ fun DeepMetricsScreen(viewModel: MonitorViewModel) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
+        if (deepDisabled) {
+            Text(
+                text = "深度监测功能已被管理员关闭，如有疑问请联系官方。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
+            )
+            return@Column
+        }
         val stamp = remember(snapshot.timestampMs) {
             SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(snapshot.timestampMs))
         }
@@ -114,24 +126,24 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 
 @Composable
 private fun SectionCard(section: DeepSection) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = section.category.label,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            androidx.compose.material3.HorizontalDivider(
-                modifier = Modifier.padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-            section.rows.forEach { row ->
-                RowRow(row)
+    // 与总览/设置页同一液态玻璃卡片：统一的圆角、模糊与高光形态
+    GlassPanel {
+        Text(
+            text = section.category.label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        androidx.compose.material3.HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+        section.rows.forEachIndexed { i, row ->
+            RowRow(row)
+            if (i != section.rows.lastIndex) {
+                androidx.compose.material3.HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                )
             }
         }
     }
@@ -139,39 +151,56 @@ private fun SectionCard(section: DeepSection) {
 
 @Composable
 private fun RowRow(row: DeepRow) {
+    val valueText = when {
+        row.value == null -> "—"
+        row.unit.isBlank() -> row.value
+        else -> "${row.value} ${row.unit}"
+    }
+    // 长值（如线程运行时长列表）放不下右侧：单独占一行整宽展示，
+    // 避免把左侧标题挤成一列竖字（真机反馈的排版 bug）
+    val longValue = valueText.length > 18
+
     Column(modifier = Modifier.padding(vertical = 5.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = row.label,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            val valueText = when {
-                row.value == null -> "—"
-                row.unit.isBlank() -> row.value
-                else -> "${row.value} ${row.unit}"
+        if (longValue) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = row.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                OriginBadge(row.origin)
             }
             Text(
                 text = valueText,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
-                color = if (row.value == null) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
+                color = if (row.value == null) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 2.dp),
             )
-            if (row.origin == DeepOrigin.ESTIMATED) {
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    text = " 推算",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    fontSize = 10.sp,
+                    text = row.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
+                Text(
+                    text = valueText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (row.value == null) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
+                )
+                OriginBadge(row.origin)
             }
         }
         row.note?.let { note ->
@@ -183,5 +212,27 @@ private fun RowRow(row: DeepRow) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
+    }
+}
+
+/** 取值来源角标：真实读取不标；推算打琥珀「推算」；不可读为灰色「—」。 */
+@Composable
+private fun OriginBadge(origin: DeepOrigin) {
+    when (origin) {
+        DeepOrigin.ESTIMATED -> Text(
+            text = "推算",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+        DeepOrigin.UNAVAILABLE -> Text(
+            text = "不可读",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+        else -> {}
     }
 }
