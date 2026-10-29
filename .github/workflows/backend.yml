@@ -56,9 +56,49 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
+      - name: 迁移旧库（Actions 缓存 → 私有数据仓库）
+        # runner 没有持久磁盘：此前账号库只靠 actions/cache 跨运行保存，
+        # 一旦运行被取消/缓存淘汰，账号就"查无此人"。这里把缓存里残留的
+        # 旧库一次性迁移到私有仓库（DevicePerfMonitor-data），之后由后端
+        # 自己 pull/push 维护。仓库是私有的：里面有用户邮箱等隐私。
+        env:
+          DATA_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          set -e
+          if [ ! -f backend/data/app.db ]; then
+            echo "缓存中没有旧库，跳过迁移"
+            exit 0
+          fi
+          git config --global user.name "pulseguard-data-bot"
+          git config --global user.email "pulseguard-data-bot@users.noreply.github.com"
+          rm -rf /tmp/data-repo
+          git clone --depth 1 \
+            "https://x-access-token:${DATA_TOKEN}@github.com/sitong-zhang/DevicePerfMonitor-data.git" \
+            /tmp/data-repo 2>/dev/null || {
+              rm -rf /tmp/data-repo; mkdir -p /tmp/data-repo; cd /tmp/data-repo
+              git init -q -b main
+              git remote add origin \
+                "https://x-access-token:${DATA_TOKEN}@github.com/sitong-zhang/DevicePerfMonitor-data.git"
+            }
+          cd /tmp/data-repo
+          if [ -f app.db ]; then
+            echo "私有仓库已有账号库，保留远端版本（不倒退覆盖）"
+          else
+            cp "$GITHUB_WORKSPACE/backend/data/app.db" app.db
+            git add app.db
+            git commit -q -m "chore(data): 迁移旧库（Actions 缓存）到私有数据仓库"
+            git branch -M main
+            git push -q origin main
+            echo "旧库已迁移到私有数据仓库"
+          fi
+
       - name: Start Flask backend
         working-directory: backend
         env:
+          # 账号库持久化到私有仓库（公开仓库不能放用户数据）
+          DATA_REPO: "sitong-zhang/DevicePerfMonitor-data"
+          DATA_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          DATA_SYNC_TOKEN: ${{ secrets.DATA_SYNC_TOKEN }}
           PORT: "5000"
           # 已配置真实邮件通道（QQ 邮箱 SMTP/465 SSL），关闭开发模式：
           # 验证码只走邮件下发，不再随响应回显。
@@ -147,6 +187,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep backend alive
+        env:
+          SYNC_TOKEN: ${{ secrets.DATA_SYNC_TOKEN }}
         run: |
           H="${{ github.event.inputs.hours }}"
           H="${H:-5}"
@@ -154,9 +196,20 @@ jobs:
           S=$((H * 3600))
           echo "Backend will stay alive for ${H}h (${S}s)..."
           end=$(( $(date +%s) + S ))
+          last_sync=0
           while [ "$(date +%s)" -lt "$end" ]; do
             sleep 60
             # 后端或隧道意外退出则提前结束，交给下一次定时运行接手
             curl -fsS http://localhost:5000/health >/dev/null 2>&1 || { echo "backend down, exiting"; break; }
+            now=$(date +%s)
+            # 每 2 分钟把账号库推到私有数据仓库，避免进程被杀时丢数据
+            if [ $((now - last_sync)) -ge 120 ]; then
+              curl -fsS -X POST -H "X-Sync-Token: ${SYNC_TOKEN}" \
+                http://localhost:5000/internal/sync || echo "sync 失败（下一轮重试）"
+              last_sync=$now
+            fi
           done
+          # 退出前最后同步一次：即使上面 break/超时，账号数据也已经落仓
+          curl -fsS -X POST -H "X-Sync-Token: ${SYNC_TOKEN}" \
+            http://localhost:5000/internal/sync || echo "退出前同步失败"
           echo "Time is up — backend going offline. 下一次定时运行会自动接上。"
