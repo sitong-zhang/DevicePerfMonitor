@@ -3,6 +3,11 @@ package com.devperf.monitor.account
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.devperf.monitor.net.ApiClient
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.SettingsRepository
@@ -59,14 +64,16 @@ class SyncManager(
 
     private var pollJob: Job? = null
     private var snapshotJob: Job? = null
+    private var sseJob: Job? = null
     private var settingsWatcherJob: Job? = null
 
-    /** 登录成功后调用：启动管控状态轮询 + 快照上报。幂等。 */
+    /** 登录成功后调用：启动实时推送订阅 + 轮询兜底 + 快照上报。幂等。 */
     fun start() {
         if (pollJob?.isActive == true) return
-        // 管控回拉：每 30 秒拉一次 /api/me（轻量 GET），管理端改状态/发公告秒级到达
+        // 实时推送（SSE）：管理端一改状态/开关/发公告，服务端立即推事件，客户端瞬时回拉
+        sseJob = scope.launch { sseLoop() }
+        // 兜底轮询：SSE 因隧道缓冲/中断失效时，最迟 10 秒也会回拉一次
         pollJob = scope.launch {
-            refreshMe()
             while (isActive) {
                 delay(STATE_POLL_MS)
                 refreshMe()
@@ -86,6 +93,7 @@ class SyncManager(
     fun stop() {
         pollJob?.cancel(); pollJob = null
         snapshotJob?.cancel(); snapshotJob = null
+        sseJob?.cancel(); sseJob = null
         settingsWatcherJob?.cancel(); settingsWatcherJob = null
         _remoteState.value = null
     }
@@ -207,6 +215,52 @@ class SyncManager(
         _remoteState.value?.disabledFeatures?.contains(feature) == true
 
     // ------------------------------------------------------------------
+    // 实时推送（SSE）：订阅 /api/stream，服务端一发事件立即回拉状态
+    // ------------------------------------------------------------------
+
+    /**
+     * SSE 长连接循环：连上后持续读流，收到 `data:` 事件即 [refreshMe]（秒级生效）。
+     * 连接中断/被代理缓冲超时后自动 3 秒重连。与轮询兜底并存，互不冲突。
+     */
+    private suspend fun sseLoop() {
+        while (scope.isActive) {
+            val token = accountManager.session.value?.token ?: run {
+                delay(2000); continue
+            }
+            val url = "${ApiClient.baseUrl()}/api/stream?token=$token"
+            try {
+                withContext(Dispatchers.IO) {
+                    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 10_000
+                        readTimeout = 0 // 长连接，依靠服务端心跳保活
+                        setRequestProperty("Accept", "text/event-stream")
+                        setRequestProperty("Cache-Control", "no-cache")
+                    }
+                    if (conn.responseCode != 200) {
+                        conn.disconnect()
+                        return@withContext
+                    }
+                    BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+                        var line: String? = null
+                        while (scope.isActive && reader.readLine().also { line = it } != null) {
+                            val l = line ?: continue
+                            if (l.startsWith("data:")) {
+                                Log.d(TAG, "SSE 收到推送，立即回拉服务端状态")
+                                refreshMe()
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (scope.isActive) Log.w(TAG, "SSE 连接中断，3 秒后重连", e)
+            }
+            if (!scope.isActive) break
+            delay(3000)
+        }
+    }
+
+    // ------------------------------------------------------------------
     // 设置变更 → 实时上报（账号变动实时同步的自动接线）
     // ------------------------------------------------------------------
 
@@ -259,7 +313,7 @@ class SyncManager(
         /** 设备快照自动上传周期（需求：按小时自动上传）。 */
         const val SYNC_INTERVAL_MS: Long = 60 * 60 * 1000L
 
-        /** 管控状态轮询周期：管理端改状态/发公告后最迟 30 秒生效。 */
-        const val STATE_POLL_MS: Long = 30 * 1000L
+        /** 兜底轮询周期：SSE 不可用时最迟 10 秒也会回拉一次（SSE 正常时亚秒级实时）。 */
+        const val STATE_POLL_MS: Long = 10 * 1000L
     }
 }
