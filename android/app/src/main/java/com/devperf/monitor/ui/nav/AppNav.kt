@@ -543,17 +543,22 @@ internal fun BottomNavBar(
     val haptics = rememberHaptics()
     val cs = MaterialTheme.colorScheme
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
-    val routeIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    // 1.0.45 关键修复：非顶层页（feedback / overlayCustomizer / detail 等）返回 -1，
+    // 不再 coerceAtLeast(0)。原因：以前 coerce 归 0 后，点「意见反馈 / 定制悬浮窗」
+    // 的瞬间 currentRoute 变成子页路由 → routeIndex 归 0 → selectedTab 被写成 0 →
+    // LiquidBottomTabs 内部 snapshotFlow{currentIndex} 触发 onTabSelected(0) →
+    // 组件把「总览」当作用户选择又导航了一次——于是第一次点击总是先跳到总览页，
+    // 要再点一次子页才真正打开。索引语义：-1 = 当前不在任何顶层 tab（保持原选中）。
+    val routeIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }
 
     // 选中态单一真相源：selectedTab 直接持有「绝对索引」，照搬 Kyant0 catalog demo
     // 的写法（GlassComponentsRenderTest 里的官方用法）。点击 / 拖动都先把它同步写成
     // 目标索引——这一步是同步、即时的，pill 立刻跟过去，不再依赖导航把路由带过来
     // 的那一帧延迟。导航交给 onSelect；路由因其它原因变化（如从详情页返回总览）时，
-    // 下方 LaunchedEffect(routeIndex) 再把 selectedTab 拉回当前页面，保证
-    // 「pill 停留位置 == 当前页面」永远成立（点击能切页、滑动也能切页，且两者都会
-    // 把滑块带过去）。
-    var selectedTab by remember { mutableIntStateOf(routeIndex) }
-    LaunchedEffect(routeIndex) { selectedTab = routeIndex }
+    // 下方 LaunchedEffect(routeIndex) 再把 selectedTab 拉回当前页面（只在合法的
+    // 顶层 tab 路由上拉回，见 1.0.45 修复说明），保证「pill 停留位置 == 当前页面」。
+    var selectedTab by remember { mutableIntStateOf(routeIndex.coerceAtLeast(0)) }
+    LaunchedEffect(routeIndex) { if (routeIndex >= 0) selectedTab = routeIndex }
 
     val currentOnSelect by rememberUpdatedState(onSelect)
 
