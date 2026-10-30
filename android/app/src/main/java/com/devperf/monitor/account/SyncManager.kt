@@ -23,14 +23,14 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * 数据同步：用户数据按小时自动上传 + 关键操作实时上报 + 服务端状态回拉。
+ * 数据同步：管控状态实时回拉（30 秒）+ 用户数据按小时上传 + 关键操作实时上报。
  *
  * 三个职责：
- * - [start]：登录后启动常驻循环，每小时向 /api/sync 上报一次设备快照
- *   （机型 / 系统 / App 版本 / 悬浮窗 / 壁纸 / 主题等当前状态）；
+ * - [start]：登录后启动常驻循环——每 30 秒拉一次 /api/me（管理端改状态/开关/发公告
+ *   最迟 30 秒生效），每小时的 /api/sync 上报设备快照；
  * - [reportEvent]：任何账号变动（购买、功能激活、设置修改等）实时上报 /api/event；
- * - [refreshMe]：从 /api/me 拉管理端下发的状态（禁用功能 / 单独 / 全局公告），
- *   UI 层据此禁用对应功能并展示公告。
+ * - [refreshMe]：从 /api/me 拉管理端下发的状态（账号状态 / 禁用功能 / 公告），
+ *   UI 层据此禁用对应功能、展示公告与受限横幅；账号被禁用时自动登出。
  */
 class SyncManager(
     private val context: Context,
@@ -41,24 +41,39 @@ class SyncManager(
     /** 服务端下发的用户侧状态（禁用功能 + 公告），未登录或未拉取时为 null。 */
     data class RemoteState(
         val status: String,
+        val restrictionNote: String,
         val disabledFeatures: List<String>,
         val announcements: List<Announcement>,
     ) {
-        data class Announcement(val title: String, val content: String, val createdAt: Long)
+        data class Announcement(
+            val id: String,
+            val title: String,
+            val content: String,
+            val createdAt: Long,
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _remoteState = MutableStateFlow<RemoteState?>(null)
     val remoteState: StateFlow<RemoteState?> = _remoteState.asStateFlow()
 
-    private var hourlyJob: Job? = null
+    private var pollJob: Job? = null
+    private var snapshotJob: Job? = null
     private var settingsWatcherJob: Job? = null
 
-    /** 登录成功后调用：启动每小时同步 + 设置变更实时上报。幂等。 */
+    /** 登录成功后调用：启动管控状态轮询 + 快照上报。幂等。 */
     fun start() {
-        if (hourlyJob?.isActive == true) return
-        hourlyJob = scope.launch {
+        if (pollJob?.isActive == true) return
+        // 管控回拉：每 30 秒拉一次 /api/me（轻量 GET），管理端改状态/发公告秒级到达
+        pollJob = scope.launch {
             refreshMe()
+            while (isActive) {
+                delay(STATE_POLL_MS)
+                refreshMe()
+            }
+        }
+        // 设备快照上报：保持按小时
+        snapshotJob = scope.launch {
             while (isActive) {
                 syncNow()
                 delay(SYNC_INTERVAL_MS)
@@ -69,7 +84,8 @@ class SyncManager(
 
     /** 登出后调用：停循环、清远端状态。 */
     fun stop() {
-        hourlyJob?.cancel(); hourlyJob = null
+        pollJob?.cancel(); pollJob = null
+        snapshotJob?.cancel(); snapshotJob = null
         settingsWatcherJob?.cancel(); settingsWatcherJob = null
         _remoteState.value = null
     }
@@ -90,7 +106,14 @@ class SyncManager(
                 JSONObject().put("payload", buildPayload(settings)),
                 mapOf("Authorization" to "Bearer ${session.token}"),
             )
-            if (!res.ok) Log.w(TAG, "每小时同步失败：${res.msg}")
+            if (!res.ok) {
+                Log.w(TAG, "每小时同步失败：${res.msg}")
+                // 403 = 管理端刚禁用了账号或同步功能：立即回拉最新状态并执行
+                if (res.code == 403) refreshMe()
+            } else {
+                // 同步响应本身携带最新管控状态，顺带回拉一次
+                applyState(res.data)
+            }
         }
     }
 
@@ -131,7 +154,7 @@ class SyncManager(
     // 服务端状态回拉（禁用功能 / 公告）
     // ------------------------------------------------------------------
 
-    /** 从 /api/me 拉取管理端下发的状态；token 失效时回登录页。 */
+    /** 从 /api/me 拉取管理端下发的状态；账号被禁用时登出。 */
     suspend fun refreshMe() {
         val session = accountManager.session.value ?: return
         withContext(Dispatchers.IO) {
@@ -148,22 +171,35 @@ class SyncManager(
                 }
                 return@withContext
             }
-            val anns = data.optJSONArray("announcements")
-            _remoteState.value = RemoteState(
-                status = data.optString("status", "active"),
-                disabledFeatures = List(data.optJSONArray("disabled_features")?.length() ?: 0) { i ->
-                    data.optJSONArray("disabled_features")?.optString(i).orEmpty()
-                },
-                announcements = List(anns?.length() ?: 0) { i ->
-                    val o = anns?.optJSONObject(i) ?: JSONObject()
-                    RemoteState.Announcement(
-                        title = o.optString("title"),
-                        content = o.optString("content"),
-                        createdAt = o.optLong("created_at"),
-                    )
-                },
-            )
+            applyState(data)
+            // 账号被禁用：立即登出（登录接口同样会拒绝，这里兜底已登录场景）
+            if (data.optString("status") == "disabled") {
+                Log.w(TAG, "账号已被管理员禁用，自动登出")
+                accountManager.logout()
+            }
         }
+    }
+
+    /** 把后端返回的状态/开关/公告写进 [_remoteState]。 */
+    private fun applyState(data: JSONObject?) {
+        if (data == null) return
+        val anns = data.optJSONArray("announcements")
+        _remoteState.value = RemoteState(
+            status = data.optString("status", "normal"),
+            restrictionNote = data.optString("restriction_note", ""),
+            disabledFeatures = List(data.optJSONArray("disabled_features")?.length() ?: 0) { i ->
+                data.optJSONArray("disabled_features")?.optString(i).orEmpty()
+            },
+            announcements = List(anns?.length() ?: 0) { i ->
+                val o = anns?.optJSONObject(i) ?: JSONObject()
+                RemoteState.Announcement(
+                    id = o.optString("id"),
+                    title = o.optString("title"),
+                    content = o.optString("content"),
+                    createdAt = o.optLong("created_at"),
+                )
+            },
+        )
     }
 
     /** 某功能是否被管理端禁用。feature 名与后端 disable_feature 传入一致。 */
@@ -220,7 +256,10 @@ class SyncManager(
     companion object {
         private const val TAG = "SyncManager"
 
-        /** 每小时自动同步一次（需求：按小时自动上传）。 */
+        /** 设备快照自动上传周期（需求：按小时自动上传）。 */
         const val SYNC_INTERVAL_MS: Long = 60 * 60 * 1000L
+
+        /** 管控状态轮询周期：管理端改状态/发公告后最迟 30 秒生效。 */
+        const val STATE_POLL_MS: Long = 30 * 1000L
     }
 }
