@@ -418,7 +418,6 @@ fun SettingsScreen(
                         value = settings.tempAlertThresholdC,
                         onValueChange = { viewModel.setTempAlertThreshold(it) },
                         valueRange = 35f..60f,
-                        steps = 24,
                     )
                 }
             }

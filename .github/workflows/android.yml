@@ -104,9 +104,10 @@ jobs:
           tag_name: v${{ steps.app_version.outputs.version }}
           name: PulseGuard 安卓版 APK v${{ steps.app_version.outputs.version }}
           make_latest: true
-          body: |
-            PulseGuard 安卓版正式签名安装包（app-release.apk）。
-            首次打开需注册 / 登录本地账号后即可使用。
+          # 1.0.41 起更新公告从仓库根 RELEASE_NOTES.md 读取：每次发版把「更新了
+          # 哪些功能」写进该文件，应用内更新弹窗（releases/latest 的 body）就会
+          # 展示完整更新说明，而不是千篇一律的安装包描述。
+          body_path: RELEASE_NOTES.md
           # 1.0.13~1.0.15 曾按 flavor 出双包（路径为 apk/<flavor>/release/）；
           # 1.0.16 起合并为单一发布包，产物固定在 apk/release/ 下
           files: android/app/build/outputs/apk/release/app-release.apk

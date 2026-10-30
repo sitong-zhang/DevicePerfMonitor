@@ -68,6 +68,9 @@ fun OverviewScreen(
 ) {
     val focused by viewModel.focused.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    // 深度指标卡（1.0.41）：CPU 使用率 / GPU 负载 / 实时电压
+    val deep by viewModel.deep.collectAsState()
+    val deepCards = remember(deep) { buildDeepCards(deep) }
     val colors = LocalTokenColors.current
 
     val visible = focused.readings.filter { it.available }
@@ -122,9 +125,129 @@ fun OverviewScreen(
             }
         }
 
+        // 深度指标卡（1.0.41）：监测页能采到的 CPU / GPU / 电压，以与核心指标
+        // 完全一致的卡片形式（大数字 + 波形）进总览。采不到的同样不占位。
+        itemsIndexed(items = deepCards, key = { _, c -> "deep-${c.key}" }) { index, card ->
+            EnterStagger(index = index + 1 + visible.size) {
+                DeepCard(
+                    card = card,
+                    history = viewModel.deepHistory(card.key, CARD_WINDOW_SEC),
+                    tickMs = viewModel.tickMs(),
+                )
+            }
+        }
+
         if (visible.isEmpty()) {
             item(key = "empty") {
                 EmptyState()
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 深度指标卡（1.0.41）
+// ---------------------------------------------------------------------------
+
+/** 总览页深度指标卡：数据来自深度监测快照（监测页「数据来源」同一套）。 */
+private data class DeepCardData(
+    val key: String,
+    val label: String,
+    val unit: String,
+    val value: Float,
+    val decimals: Int,
+    val colorKey: String,
+)
+
+/** 从深度快照提取总览卡数据；行不可读（value 为 null）就不进界面。 */
+private fun buildDeepCards(snap: com.devperf.monitor.core.DeepSnapshot): List<DeepCardData> {
+    val valueOf = { key: String ->
+        snap.sections.asSequence().flatMap { it.rows.asSequence() }
+            .firstOrNull { it.key == key }?.value?.toFloatOrNull()
+    }
+    return buildList {
+        valueOf("cpu.total")?.let {
+            add(DeepCardData("cpu.total", "CPU 使用率", "%", it, 0, "accent"))
+        }
+        valueOf("gpu.load")?.let {
+            add(DeepCardData("gpu.load", "GPU 负载", "%", it, 0, "accentSecondary"))
+        }
+        valueOf("pwr.voltage")?.let {
+            add(DeepCardData("pwr.voltage", "实时电压", "V", it, 2, "success"))
+        }
+    }
+}
+
+/** 视觉与核心指标卡完全一致（WAVE 形态：左侧大数字 + 右侧 60 秒波形）。 */
+@Composable
+private fun DeepCard(
+    card: DeepCardData,
+    history: List<Float>,
+    tickMs: Long,
+) {
+    val colors = LocalTokenColors.current
+    val accent = metricColor(card.colorKey)
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp),
+        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = card.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "波形",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent.copy(alpha = 0.75f),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(0.42f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        AnimatedNumber(
+                            value = card.value,
+                            intervalMs = tickMs,
+                            decimals = card.decimals,
+                            color = accent,
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Text(
+                            text = " ${card.unit}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
+                }
+                Sparkline(
+                    points = history,
+                    color = accent,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                )
             }
         }
     }

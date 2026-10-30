@@ -91,6 +91,47 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+        // 深度指标总览卡（1.0.41）：CPU 使用率 / GPU 负载 / 实时电压。
+        // 深度快照不在核心历史库（HistoryStore 只记四个核心指标），
+        // 这里维护 60 秒内存环形缓冲供总览卡 sparkline 使用。
+        viewModelScope.launch {
+            deep.collect { snap -> recordDeepHistory(snap) }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 深度指标总览卡（1.0.41）
+    // ---------------------------------------------------------------------
+
+    private data class DeepPoint(val tMs: Long, val value: Float)
+
+    private val deepBuffers = HashMap<String, ArrayDeque<DeepPoint>>()
+
+    private fun recordDeepHistory(snap: DeepSnapshot) {
+        if (snap.timestampMs <= 0L) return
+        val rows = snap.sections.asSequence().flatMap { it.rows.asSequence() }
+        fun num(key: String): Float? =
+            rows.firstOrNull { it.key == key }?.value?.toFloatOrNull()?.takeIf { !it.isNaN() }
+        synchronized(deepBuffers) {
+            fun push(key: String, v: Float?) {
+                if (v == null) return
+                val q = deepBuffers.getOrPut(key) { ArrayDeque() }
+                q.addLast(DeepPoint(snap.timestampMs, v))
+                val cutoff = snap.timestampMs - 120_000L
+                while (q.isNotEmpty() && q.first().tMs < cutoff) q.removeFirst()
+            }
+            push("cpu.total", num("cpu.total"))
+            push("gpu.load", num("gpu.load"))
+            push("pwr.voltage", num("pwr.voltage"))
+        }
+    }
+
+    /** 深度指标最近 windowSeconds 秒的取值序列（内存缓冲，无持久化）。 */
+    fun deepHistory(key: String, windowSeconds: Int): List<Float> {
+        val cutoff = System.currentTimeMillis() - windowSeconds * 1000L
+        return synchronized(deepBuffers) {
+            deepBuffers[key].orEmpty().filter { it.tMs >= cutoff }.map { it.value }
+        }
     }
 
     // ---------------------------------------------------------------------

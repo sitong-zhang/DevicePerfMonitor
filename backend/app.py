@@ -24,6 +24,7 @@ import re
 import hmac
 import secrets
 import shutil
+import socket
 import sqlite3
 import smtplib
 import ssl
@@ -380,6 +381,58 @@ def _load_logo() -> bytes | None:
     return _LOGO_BYTES
 
 
+# ---------------------------------------------------------------------------
+# 收件域名真实性校验（1.0.41 配套后端）
+#
+# 假域名邮箱会让 SMTP 服务器产生退信，QQ 邮箱会把退信原文发回我们的发件箱
+# （污染收件箱 + 损害发件信誉）。发码前先查收件域名的 MX 记录：正经邮件域
+# 都有 MX；无 MX 直接拒绝（RFC 5321 的 A 回落在现实中只出现在 parked 域，
+# QQ 对这类域同样投递失败并退信——probe.com 实测）。dnspython 不可用时降级
+# 为 A/AAAA 可达性检查。结果缓存 1 小时。
+# ---------------------------------------------------------------------------
+
+_DOMAIN_DNS_TTL_MS = 60 * 60 * 1000
+_domain_dns_cache: dict = {}
+
+try:  # dnspython 是软依赖：缺失时降级为 getaddrinfo
+    import dns.exception
+    import dns.resolver
+
+    _HAS_DNSPY = True
+except ImportError:  # pragma: no cover
+    _HAS_DNSPY = False
+
+
+def domain_can_receive(email: str) -> bool:
+    """收件邮箱的域名是否真实可收信（MX 优先，降级 A/AAAA）。"""
+    domain = email.rsplit("@", 1)[1].lower()
+    now = now_ms()
+    hit = _domain_dns_cache.get(domain)
+    if hit and hit[1] > now:
+        return hit[0]
+
+    ok = True
+    if _HAS_DNSPY:
+        try:
+            dns.resolver.resolve(domain, "MX")
+        except dns.resolver.NXDOMAIN:
+            ok = False  # 域名不存在
+        except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+            ok = False  # 域名存在但没有 MX：无能力收信
+        except dns.exception.DNSException:
+            ok = True  # 超时/临时故障：宁可放行也不误伤真用户
+    else:  # pragma: no cover
+        try:
+            socket.getaddrinfo(domain, None)
+        except OSError:
+            ok = False
+
+    _domain_dns_cache[domain] = (ok, now + _DOMAIN_DNS_TTL_MS)
+    if not ok:
+        app.logger.warning("收件域名 MX 校验未通过，拒绝发码（email=%s）", email)
+    return ok
+
+
 def send_code_email(email: str, code: str) -> bool:
     """发送验证码邮件。**始终**发送网页版（HTML）邮件：内嵌品牌 logo（官方仓库外链，
     不依赖本地文件）、卡片式排版、大字验证码；text/plain 仅作客户端降级备份。
@@ -534,6 +587,8 @@ def send_code():
     email = (data.get("email") or "").strip()
     if not is_email(email):
         return json_err("邮箱格式不正确")
+    if not domain_can_receive(email):
+        return json_err("该邮箱域名不存在或无法收信，请检查邮箱地址")
 
     conn = db()
     last = conn.execute(

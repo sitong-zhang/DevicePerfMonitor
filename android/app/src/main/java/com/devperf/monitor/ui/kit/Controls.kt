@@ -56,10 +56,16 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import kotlin.math.roundToInt
 
@@ -226,18 +232,19 @@ fun GlassSwitch(
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（1.0.31 恢复 Kyant0 原版，用户明确要求「直接抄原仓库的技术」）
+// 滑块（1.0.41 照上游 Kyant0/AndroidLiquidGlass catalog SliderContent 重写）
 //
-// 视觉与手感完全交给 vendored 的 Kyant0/AndroidLiquidGlass LiquidSlider：
-// DampedDragAnimation 弹簧物理 + 按压放大/速度形变 + InteractiveHighlight +
-// 玻璃嵌玻璃（滑块 backdrop 内叠轨道录制），与官方 demo 参数一字不改。
+// 上游 demo 的接线是「单一状态流直驱」：value lambda 直读状态，onValueChange
+// 直写状态，组件内部的 DampedDragAnimation（弹簧物理 + 按压放大 + 速度形变 +
+// InteractiveHighlight + 玻璃嵌玻璃）自己负责全部视觉动画——包装层不做任何
+// 拖动中的值量化/镜像加工。
 //
-// 跟手的关键不在组件而在接线：视觉值绝不能直接用 ViewModel 的 DataStore 异步
-// 往返驱动（拖动 → 持久化 → StateFlow 回流 → 重组，链路几十毫秒且被 conflate，
-// 表现就是「滑动停顿、不跟手」——1.0.29 与 1.0.30 两版都栽在这）。这里持有
-// 本地即时 mutableFloatStateOf：手势先写本地（同帧生效、下一帧上屏），持久化
-// 异步外发；外部值回流时再同步本地（StateFlow conflate 去重，快拖不回卷）。
-// steps 量化在回调里完成：值被吸附到档位，内部弹簧追赶档位，档位手感自然。
+// 1.0.39 及之前踩过的两个坑，本版修复：
+//  1) 拖动中 snap 量化：慢拖时 delta 累计在被吸附值上，表现为「拖不动、跳档」
+//     ——已删除，档位滑块改为连续值 + 显示层取整；
+//  2) 外部回写回卷：DataStore 异步回流值滞后于手指，拖动中回写镜像值会把
+//     视觉值拉回过去（滑动回弹的根源）——现在按下期间忽略外部回流，抬起后
+//     只接受真正的外部重置。
 // 悬浮窗 / 无玻璃 / 禁用态仍回落 MD3 标准 Slider（本身即 1:1 跟手）。
 // ---------------------------------------------------------------------------
 
@@ -271,34 +278,36 @@ fun GlassSlider(
         return
     }
 
-    // 主窗口：Kyant0/AndroidLiquidGlass 原版 LiquidSlider（vendor 源码未改参数）。
+    // 主窗口：Kyant0/AndroidLiquidGlass 原版 LiquidSlider（vendor 源码未改参数），
+    // 接线方式 1:1 照上游 catalog SliderContent demo。
     val span = valueRange.endInclusive - valueRange.start
-    val stepSize = if (steps > 0) span / (steps + 1) else 0f
-    fun snap(v: Float): Float =
-        if (steps > 0) {
-            val idx = ((v - valueRange.start) / stepSize).roundToInt()
-            (valueRange.start + idx * stepSize).coerceIn(valueRange)
-        } else {
-            v.coerceIn(valueRange)
-        }
 
-    // 本地即时视觉值：手势先写它（同帧生效），持久化异步外发
+    // 本地即时镜像：拖动事件同帧写入、同帧上屏；外部状态（ViewModel）异步外发。
     var localValue by remember { mutableFloatStateOf(value) }
-    // 外部值变化（首帧 / 外部重置 / 异步回流）时同步本地
-    LaunchedEffect(value) { localValue = value }
+    // 按下期间忽略外部回流（回流的 DataStore 值滞后于手指，回写即回卷）。
+    var pressed by remember { mutableStateOf(false) }
+    LaunchedEffect(value) { if (!pressed) localValue = value }
     val currentOnValueChange by rememberUpdatedState(onValueChange)
 
     LiquidSlider(
         value = { localValue },
         onValueChange = { raw ->
-            val snapped = snap(raw)
-            localValue = snapped
-            currentOnValueChange(snapped)
+            val v = raw.coerceIn(valueRange)
+            localValue = v
+            currentOnValueChange(v)
         },
         valueRange = valueRange,
-        visibilityThreshold = span / 2000f,
+        // 与上游 demo 同一相对阈值（0..100 用 0.01 → 区间宽度的 1e-4）
+        visibilityThreshold = span / 10_000f,
         backdrop = backdrop,
-        modifier = modifier,
+        modifier = modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                pressed = true
+                waitForUpOrCancellation()
+                pressed = false
+            }
+        },
     )
 }
 
