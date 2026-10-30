@@ -25,6 +25,7 @@ import com.devperf.monitor.MonitorApp
 import com.devperf.monitor.R
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.Metric
+import com.devperf.monitor.core.MetricState
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.OverlayStyle
@@ -230,14 +231,25 @@ class OverlayService : android.app.Service() {
                 )
                 val snapshot by repository.snapshot.collectAsState()
                 val state by controllerRef.uiState.collectAsState()
-                // 帧率走**全局帧率**（前台应用/游戏的真实帧率，需 Shizuku 或 root，
-                // 见 GlobalFpsCollector）。未授权时 Metric 带 NeedsPermission 三态。
-                // 注意：1.0.17 起悬浮窗那一格显示的是屏幕刷新率而非帧率（用户要求），
-                // 这里的 fps 只用于综合评判的流畅度（按 fps ÷ refreshHz 算达成率），
-                // 不再直接上悬浮窗的行。
+                // 帧率优先走**本 App 渲染帧率**（Choreographer 帧回调，免任何权限，
+                // 见 DisplayCollector）：悬浮窗自身持续重绘即有帧，健康环/呼吸动画
+                // 也在持续产帧。本 App 无持续绘制时（罕见）回落全局帧率
+                // （GlobalFpsCollector，需 Shizuku/root，未授权按三态降级）。
+                // 1.0.44 起用户在悬浮窗勾选「帧率」不再必须授权。
+                val fpsMetric =
+                    if (snapshot.display.fps.state is MetricState.Available<*>) {
+                        snapshot.display.fps
+                    } else {
+                        snapshot.display.globalFps
+                    }
+                // 这里的 fps 用于悬浮窗「帧率」行（用户自选）与综合评判的流畅度
+                //（按 fps ÷ refreshHz 算达成率）。
+                val deep by repository.deep.collectAsState()
                 val data = OverlayData.from(
-                    fps = snapshot.display.globalFps,
+                    fps = fpsMetric,
                     snapshot = snapshot,
+                    // 深度快照进候选池：用户可在悬浮窗里放任意深度数值行（1.0.44）
+                    deep = deep,
                 )
                 val callbacks = rememberOverlayCallbacks(controllerRef)
                 val health = FocusedHealth.evaluate(
@@ -258,7 +270,7 @@ class OverlayService : android.app.Service() {
                         data = data,
                         health = health,
                         intervalMs = settings.refreshMode.tickMs,
-                        selectedMetrics = settings.overlayMetrics,
+                        selectedItems = settings.overlayItems,
                         callbacks = callbacks,
                     )
                 }

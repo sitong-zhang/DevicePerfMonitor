@@ -1,9 +1,9 @@
 package com.devperf.monitor.ui.nav
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -94,6 +94,7 @@ import com.devperf.monitor.ui.screen.DeepMetricsScreen
 import com.devperf.monitor.ui.screen.FeedbackScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
+import com.devperf.monitor.ui.screen.OverlayCustomizerScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalAppMotion
@@ -117,6 +118,8 @@ object Routes {
     const val FEEDBACK = "feedback"
     const val DETAIL = "detail/{metricId}"
     const val DEEP_DETAIL = "deepDetail/{deepKey}"
+    /** 悬浮窗定制器（1.0.44）：自由增删 + 拖拽排序 + 实时预览。 */
+    const val OVERLAY_CUSTOMIZER = "overlayCustomizer"
 
     fun detail(metricId: String) = "detail/$metricId"
 
@@ -129,8 +132,24 @@ private data class TopLevelTab(
     val icon: ImageVector,
 )
 
-/** 顶级 tab 路由集合（总览 / 监测 / 设置 / 账号），用于判断「顶层互切」以走瞬时切换。 */
-private val TOP_LEVEL_ROUTES = setOf(Routes.OVERVIEW, Routes.DEEP, Routes.SETTINGS, Routes.ACCOUNT)
+/**
+ * 顶层 tab 互切的方向（Material Motion Shared Axis X）：
+ * 目标 tab 在来源 tab 右边 → +1（新页自右滑入、旧页向左让位）；
+ * 在左边 → -1（方向相反）。
+ *
+ * 只要有一端不是顶层 tab（压栈进详情 / 返回），返回 0 —— 交给 push/pop
+ * 的视差转场处理，两套动效不混用。
+ */
+private fun sharedAxisDirection(
+    from: String?,
+    to: String?,
+    tabs: List<TopLevelTab>,
+): Int {
+    val f = tabs.indexOfFirst { it.route == from }
+    val t = tabs.indexOfFirst { it.route == to }
+    if (f < 0 || t < 0 || f == t) return 0
+    return if (t > f) 1 else -1
+}
 
 private val topLevelTabs = listOf(
     TopLevelTab(Routes.OVERVIEW, "总览", Icons.Filled.Home),
@@ -180,6 +199,8 @@ fun AppNav(
     )
     // 压栈/返回时旧页「让位消失」的位移系数：旧页比新页慢一档，制造纵深层次
     val PARALLAX = 0.35f
+    // tab 互切（Shared Axis X）的位移比例：20% 屏宽，Material Motion 推荐值
+    val TAB_AXIS_RATIO = 0.20f
     // 底栏显隐用渐显渐隐（Float 曲线），开销远低于整栏纵向滑入
     val fadeSpec = androidx.compose.animation.core.tween<Float>(
         durationMillis = motion.enterDurationMs,
@@ -231,45 +252,103 @@ fun AppNav(
                 // 其中仅开放「提交反馈」与「退出登录」，其余功能（总览/监测/设置等）全部不可达。
                 // 反馈页以独立页面呈现（替换而非覆盖）：showFeedback 为真时整页切到反馈，
                 // 下层锁定页随之消失，符合 iOS 式「页面切换即让位」的交互。
-                if (showFeedback) {
-                    FeedbackScreen(onBack = { showFeedback = false })
-                } else {
-                    AccountScreen(
-                        viewModel = viewModel,
-                        locked = true,
-                        onFeedback = { showFeedback = true },
-                        onLogout = { accountManager.logout() },
-                    )
+                // 1.0.44：切换本身也走与压栈/返回同一套动效（横向滑入 + 放大 + 淡入），
+                // 不再硬切——锁定态下同样有完整的「消失逻辑」。
+                AnimatedContent(
+                    targetState = showFeedback,
+                    transitionSpec = {
+                        if (targetState) {
+                            // 进入反馈：从右滑入 + 放大 + 淡入
+                            (
+                                slideInHorizontally(animationSpec = enterSpec) { it } +
+                                    scaleIn(animationSpec = enterSpecFloat, initialScale = 0.94f) +
+                                    fadeIn(animationSpec = enterSpecFloat)
+                                ) togetherWith (
+                                slideOutHorizontally(animationSpec = exitSpec) {
+                                    (it * PARALLAX).roundToInt()
+                                } +
+                                    scaleOut(animationSpec = exitSpecFloat, targetScale = 0.94f) +
+                                    fadeOut(animationSpec = exitSpecFloat)
+                                )
+                        } else {
+                            // 返回锁定页：方向相反
+                            (
+                                slideInHorizontally(animationSpec = enterSpec) {
+                                    -(it * PARALLAX).roundToInt()
+                                } +
+                                    scaleIn(animationSpec = enterSpecFloat, initialScale = 0.94f) +
+                                    fadeIn(animationSpec = enterSpecFloat)
+                                ) togetherWith (
+                                slideOutHorizontally(animationSpec = exitSpec) { it } +
+                                    scaleOut(animationSpec = exitSpecFloat, targetScale = 0.94f) +
+                                    fadeOut(animationSpec = exitSpecFloat)
+                                )
+                        }
+                    },
+                    label = "lockedFeedback",
+                ) { showing ->
+                    if (showing) {
+                        FeedbackScreen(onBack = { showFeedback = false })
+                    } else {
+                        AccountScreen(
+                            viewModel = viewModel,
+                            locked = true,
+                            onFeedback = { showFeedback = true },
+                            onLogout = { accountManager.logout() },
+                        )
+                    }
                 }
             } else {
             SharedTransitionLayout {
             NavHost(
                 navController = navController,
                 startDestination = Routes.OVERVIEW,
-                // 过渡策略（1.0.43 重写，抄 android/nowinandroid 的 SharedTransitionLayout +
-                // Material Motion 风格，所有页面统一「消失/出现」与交互逻辑）：
-                // - 顶层 tab 互切：瞬时切换（不重叠合成新旧两页），消除卡顿、避免玻璃
-                //   backdrop 同时重录两页；旧页直接移除，消失干净。
-                // - 压入详情：新页从右滑入 + 轻微放大 + 淡入；旧页向左慢一档让位
-                //   （缩放 1→0.94 + 淡出）——「消失逻辑」对所有页面统一生效。
+                // 过渡策略（1.0.44 重写）：全部页面**都有可见的消失/出现动效**，
+                // 参考 Material Motion（material.io Shared Axis）+ android/nowinandroid
+                // 的 SharedTransitionLayout 结构。之前顶层 tab 互切是 EnterTransition.None
+                // 硬切（旧页瞬间蒸发、新页凭空出现），手感断层——本次补上。
+                // - 顶层 tab 互切：Shared Axis X —— 按 tab 下标方向横向滑动 + 淡入淡出
+                //   （新页从目标方向 20% 位移滑入，旧页反向让位淡出）。位移只取 20%
+                //   是 Material 的推荐值：够看清方向，又不会让两页长时间重叠合成
+                //   （玻璃 backdrop 同时采样两页的开销因此可控）。
+                // - 压入子页：新页从右滑入 + 轻微放大 0.94→1 + 淡入；旧页向左慢一档
+                //   让位（视差 PARALLAX + 缩放 + 淡出）——「消失逻辑」全站统一。
                 // - 返回：当前页向右滑出 + 缩小 + 淡出消失；下层页从左淡入。
                 // - Navigation 2.9.4 默认开启 predictive back：侧滑返回时系统进度实时
                 //   驱动 popExit 的位移/缩放，页面跟手（即「交互逻辑」）。
                 enterTransition = {
-                    val switching = initialState.destination.route in TOP_LEVEL_ROUTES &&
-                        targetState.destination.route in TOP_LEVEL_ROUTES
-                    if (switching) EnterTransition.None
-                    else slideInHorizontally(animationSpec = enterSpec) { it } +
-                        scaleIn(animationSpec = enterSpecFloat, initialScale = 0.94f) +
-                        fadeIn(animationSpec = enterSpecFloat)
+                    val axis = sharedAxisDirection(
+                        from = initialState.destination.route,
+                        to = targetState.destination.route,
+                        tabs = topLevelTabs,
+                    )
+                    if (axis != 0) {
+                        // tab 互切：横向 Shared Axis（20% 位移 + 淡入）
+                        slideInHorizontally(animationSpec = enterSpec) {
+                            (it * TAB_AXIS_RATIO * axis).roundToInt()
+                        } + fadeIn(animationSpec = enterSpecFloat)
+                    } else {
+                        slideInHorizontally(animationSpec = enterSpec) { it } +
+                            scaleIn(animationSpec = enterSpecFloat, initialScale = 0.94f) +
+                            fadeIn(animationSpec = enterSpecFloat)
+                    }
                 },
                 exitTransition = {
-                    val switching = initialState.destination.route in TOP_LEVEL_ROUTES &&
-                        targetState.destination.route in TOP_LEVEL_ROUTES
-                    if (switching) ExitTransition.None
-                    else slideOutHorizontally(animationSpec = exitSpec) { (it * PARALLAX).roundToInt() } +
-                        scaleOut(animationSpec = exitSpecFloat, targetScale = 0.94f) +
-                        fadeOut(animationSpec = exitSpecFloat)
+                    val axis = sharedAxisDirection(
+                        from = initialState.destination.route,
+                        to = targetState.destination.route,
+                        tabs = topLevelTabs,
+                    )
+                    if (axis != 0) {
+                        // tab 互切：旧页反向让位（20% 位移 + 淡出）
+                        slideOutHorizontally(animationSpec = exitSpec) {
+                            -(it * TAB_AXIS_RATIO * axis).roundToInt()
+                        } + fadeOut(animationSpec = exitSpecFloat)
+                    } else {
+                        slideOutHorizontally(animationSpec = exitSpec) { (it * PARALLAX).roundToInt() } +
+                            scaleOut(animationSpec = exitSpecFloat, targetScale = 0.94f) +
+                            fadeOut(animationSpec = exitSpecFloat)
+                    }
                 },
                 popEnterTransition = {
                     slideInHorizontally(animationSpec = enterSpec) { -(it * PARALLAX).roundToInt() } +
@@ -296,6 +375,15 @@ fun AppNav(
                     SettingsScreen(
                         viewModel = viewModel,
                         onRequestOverlayPermission = onRequestOverlayPermission,
+                        onOpenOverlayCustomizer = {
+                            navController.navigate(Routes.OVERLAY_CUSTOMIZER)
+                        },
+                    )
+                }
+                composable(Routes.OVERLAY_CUSTOMIZER) {
+                    OverlayCustomizerScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(Routes.ACCOUNT) {

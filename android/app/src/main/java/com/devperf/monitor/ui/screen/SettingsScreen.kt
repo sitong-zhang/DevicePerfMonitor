@@ -96,6 +96,8 @@ import android.net.Uri
 fun SettingsScreen(
     viewModel: MonitorViewModel,
     onRequestOverlayPermission: () -> Unit,
+    /** 打开「悬浮窗定制器」独立页（1.0.44）：自由增删 + 拖拽排序 + 实时预览。 */
+    onOpenOverlayCustomizer: () -> Unit,
 ) {
     val colors = LocalTokenColors.current
     val context = LocalContext.current
@@ -245,38 +247,50 @@ fun SettingsScreen(
                     )
 
                     Spacer(Modifier.height(DesignTokens.Spacing.S4.dp))
-                    // ============ 悬浮窗显示项（1.0.43 个性化） ============
+                    // ============ 悬浮窗定制器入口（1.0.44 最大自由） ============
                     Text(
                         text = "悬浮窗显示项",
                         style = MaterialTheme.typography.bodyLarge,
                         color = colors.textPrimary,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    CoreMetricId.ordered.forEach { id ->
-                        val checked = id in settings.overlayMetrics
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                text = "${id.label}（${id.unit}）",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.textSecondary,
-                                modifier = Modifier.weight(1f),
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                color = colors.accent.copy(alpha = 0.10f),
+                                shape = RoundedCornerShape(14.dp),
                             )
-                            GlassSwitch(
-                                checked = checked,
-                                onCheckedChange = { want ->
-                                    haptics.select()
-                                    viewModel.setOverlayMetrics(
-                                        if (want) settings.overlayMetrics + id else settings.overlayMetrics - id,
-                                    )
-                                },
+                            .clickable {
+                                haptics.tick()
+                                onOpenOverlayCustomizer()
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "定制悬浮窗内容",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.textPrimary,
+                            )
+                            Text(
+                                text = "已选 ${settings.overlayItems.size} 项 · 可自由增删、拖拽排序、实时预览",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.textSecondary,
+                                modifier = Modifier.padding(top = 3.dp),
                             )
                         }
+                        Text(
+                            text = "›",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = colors.accent,
+                        )
                     }
                     Text(
-                        text = "勾选要在悬浮窗中显示的数据；运行中单击可在 卡片 → 纯数字 → 极简 → 收起 之间循环切换形态。",
+                        text = "所有有数据的指标都能放上悬浮窗（含 CPU / GPU / 电压电流功耗等深度项）；" +
+                            "运行中单击可在 卡片 → 纯数字 → 极简 → 收起 之间循环切换形态。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )

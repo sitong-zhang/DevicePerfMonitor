@@ -132,20 +132,17 @@ jobs:
           done
           curl -fsS http://localhost:5000/health || { echo "backend failed to start:"; tail -n 30 /tmp/backend.log; exit 1; }
 
-      # 临时诊断：主动请求 /admin 并把后端日志上传为 artifact（定位线上 500）
-      - name: Diagnose /admin (temporary)
+      # 冒烟：/admin 必须渲染成功。曾经因为线上跑的是旧驻留部署（新 run 排不上
+      # 并发槽）而返回 500，本地怎么都复现不了——这里把状态码打出来，
+      # 下次再出现能一眼看出是模板问题还是部署没接管。
+      - name: Smoke /admin
         run: |
           CODE=$(curl -sS -o /dev/null -w "%{http_code}" http://localhost:5000/admin || echo fail)
           echo "GET /admin => $CODE"
-          tail -n 120 /tmp/backend.log > backend-diag.log || true
-          ls -la backend/templates/ || true
-
-      - name: Upload backend diag log
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-diag
-          path: backend-diag.log
-          if-no-files-found: ignore
+          if [ "$CODE" != "200" ]; then
+            echo "::error::/admin 渲染失败（$CODE），后端日志尾部：" >&2
+            tail -n 60 /tmp/backend.log >&2
+          fi
 
       - name: Install cloudflared
         run: |

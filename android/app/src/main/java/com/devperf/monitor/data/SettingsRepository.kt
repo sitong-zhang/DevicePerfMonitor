@@ -44,12 +44,20 @@ enum class OverlayStyle(val label: String) {
     COMPACT("极简条"),
 }
 
-/** 悬浮窗默认显示项：内存占用率 / 设备温度 / 屏幕刷新率（经典三项）。 */
-fun defaultOverlayMetrics(): Set<CoreMetricId> = setOf(
-    CoreMetricId.MEMORY_RATIO,
-    CoreMetricId.DEVICE_TEMP,
-    CoreMetricId.REFRESH_RATE,
+/** 悬浮窗默认显示项（有序）：内存占用率 / 设备温度 / 屏幕刷新率（经典三项）。 */
+fun defaultOverlayItems(): List<String> = listOf(
+    "core:MEMORY_RATIO",
+    "core:DEVICE_TEMP",
+    "core:REFRESH_RATE",
 )
+
+/**
+ * 悬浮窗显示项的 key 规范（1.0.44 定制器起）：
+ * - `core:<CoreMetricId 名>`：核心指标（内存占用率 / 温度 / 刷新率 / 帧率）；
+ * - `deep:<深度行 key>`：深度监测里**这台设备真实读得到**的任意数值行
+ *   （实时 FPS / 平均 FPS / 1% Low / CPU / GPU / 电压 / 电流 / 功率 / 电池 / 网络…）。
+ * 候选池由「悬浮窗定制器」页动态列出，用户自由增删 + 拖拽排序。
+ */
 
 /**
  * 1.0.26 壁纸选择：内置三张（浅色基调，适配深色主题罩层）+ 用户相册自定义。
@@ -110,16 +118,25 @@ data class MonitorSettings(
      */
     val overlayMiniMode: Boolean = false,
     /**
-     * 悬浮窗显示哪些指标（用户自选，1.0.43 新增）。
-     * 候选池 = 全部稳定可读的核心指标（内存占用率 / 温度 / 屏幕刷新率 / 帧率）。
-     * 默认保留经典三项（内存 / 温度 / 刷新率）；帧率需授权，默认不勾选，
-     * 用户可在设置里自行加入。
+     * 悬浮窗显示哪些指标（用户自选 + 拖拽排序，1.0.44 定制器）。
+     * 有序列表，元素 key 规范见 [defaultOverlayItems] 上方说明。
+     * 候选池 = 核心指标 + 这台设备真实读得到的全部深度数值行（最大自由）。
      */
-    val overlayMetrics: Set<CoreMetricId> = defaultOverlayMetrics(),
+    val overlayItems: List<String> = defaultOverlayItems(),
     /**
      * 悬浮窗显示样式（1.0.43 新增），取代原「默认纯数字模式」单一开关。
      */
     val overlayStyle: OverlayStyle = OverlayStyle.CARD,
+    /**
+     * 深度指标详情页每个指标的可视化模式（1.0.44，key = 深度行 key）。
+     * 与核心指标 [metricViewModes] 同一套交互：数字 / 波形 / 柱状。
+     */
+    val deepViewModes: Map<String, MetricViewMode> = emptyMap(),
+    /**
+     * 深度指标详情页「回看」时间窗口（秒，key = 深度行 key）。
+     * 与核心指标 [metricWindows] 同一套持久化，退出再进保留选择。
+     */
+    val deepWindows: Map<String, Int> = emptyMap(),
     val snapToEdge: Boolean = true,
     val refreshMode: RefreshMode = RefreshMode.NORMAL,
     val tempAlertThresholdC: Float = 45f,
@@ -155,11 +172,22 @@ class SettingsRepository(private val context: Context) {
             overlayOpacity = prefs[KEY_OVERLAY_OPACITY] ?: 1f,
             overlayScale = prefs[KEY_OVERLAY_SCALE] ?: 1f,
             overlayMiniMode = prefs[KEY_OVERLAY_MINI] ?: false,
-            overlayMetrics = prefs[KEY_OVERLAY_METRICS]?.let { parseOverlayMetrics(it) }
-                ?.takeIf { it.isNotEmpty() } ?: defaultOverlayMetrics(),
+            overlayItems = prefs[KEY_OVERLAY_ITEMS]?.let { parseOverlayItems(it) }
+                ?.takeIf { it.isNotEmpty() }
+                // 1.0.43 旧值迁移：老版本只存核心指标名 → 转成 core: 前缀
+                ?: prefs[KEY_OVERLAY_METRICS]?.let { parseOverlayMetrics(it) }
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.map { "core:$it" }
+                ?: defaultOverlayItems(),
             overlayStyle = prefs[KEY_OVERLAY_STYLE]?.let { name ->
                 runCatching { OverlayStyle.valueOf(name) }.getOrNull()
             } ?: OverlayStyle.CARD,
+            deepViewModes = prefs[KEY_DEEP_VIEW_MODES]
+                ?.let { parseDeepViewModes(it) }
+                ?: emptyMap(),
+            deepWindows = prefs[KEY_DEEP_WINDOWS]
+                ?.let { parseDeepWindows(it) }
+                ?: emptyMap(),
             snapToEdge = prefs[KEY_SNAP_EDGE] ?: true,
             refreshMode = prefs[KEY_REFRESH_MODE]?.let { name ->
                 runCatching { RefreshMode.valueOf(name) }.getOrNull()
@@ -209,11 +237,35 @@ class SettingsRepository(private val context: Context) {
     suspend fun setOverlayOpacity(value: Float) = put(KEY_OVERLAY_OPACITY, value)
     suspend fun setOverlayScale(value: Float) = put(KEY_OVERLAY_SCALE, value)
     suspend fun setOverlayMiniMode(value: Boolean) = put(KEY_OVERLAY_MINI, value)
-    /** 设置悬浮窗显示哪些指标（1.0.43）。 */
-    suspend fun setOverlayMetrics(metrics: Set<CoreMetricId>) =
-        put(KEY_OVERLAY_METRICS, metrics.joinToString("|") { it.name })
+    /** 设置悬浮窗显示项（有序列表，1.0.44 定制器）。 */
+    suspend fun setOverlayItems(items: List<String>) =
+        put(KEY_OVERLAY_ITEMS, items.joinToString("|"))
     /** 设置悬浮窗显示样式（1.0.43）。 */
     suspend fun setOverlayStyle(style: OverlayStyle) = put(KEY_OVERLAY_STYLE, style.name)
+    /** 切换某个深度指标详情页的可视化模式（1.0.44）。 */
+    suspend fun setDeepViewMode(key: String, mode: MetricViewMode) {
+        context.settingsDataStore.edit { prefs ->
+            val current = (
+                prefs[KEY_DEEP_VIEW_MODES]?.let { parseDeepViewModes(it) }
+                    ?: emptyMap()
+                ).toMutableMap()
+            current[key] = mode
+            prefs[KEY_DEEP_VIEW_MODES] =
+                current.entries.joinToString("|") { "${it.key}:${it.value.name}" }
+        }
+    }
+    /** 切换某个深度指标详情页的回看窗口（秒，1.0.44）。 */
+    suspend fun setDeepWindow(key: String, seconds: Int) {
+        context.settingsDataStore.edit { prefs ->
+            val current = (
+                prefs[KEY_DEEP_WINDOWS]?.let { parseDeepWindows(it) }
+                    ?: emptyMap()
+                ).toMutableMap()
+            current[key] = seconds
+            prefs[KEY_DEEP_WINDOWS] =
+                current.entries.joinToString("|") { "${it.key}:${it.value}" }
+        }
+    }
     suspend fun setSnapToEdge(value: Boolean) = put(KEY_SNAP_EDGE, value)
     suspend fun setRefreshMode(mode: RefreshMode) = put(KEY_REFRESH_MODE, mode.name)
     suspend fun setTempAlertThreshold(value: Float) = put(KEY_TEMP_THRESHOLD, value)
@@ -278,13 +330,39 @@ class SettingsRepository(private val context: Context) {
         val KEY_WALLPAPER = stringPreferencesKey("wallpaper")
         val KEY_WALLPAPER_CUSTOM = stringPreferencesKey("wallpaper_custom_path")
 
-        /** 悬浮窗显示指标：CoreMetricId 名以 `|` 分隔；空串回落到默认值。 */
+        /** 悬浮窗显示指标（1.0.43 旧格式）：CoreMetricId 名以 `|` 分隔。 */
         fun parseOverlayMetrics(raw: String): Set<CoreMetricId> =
             raw.split("|").mapNotNull { part ->
                 runCatching { CoreMetricId.valueOf(part) }.getOrNull()
             }.toSet()
 
+        /** 悬浮窗显示项（1.0.44）：有序 key 列表（core:XXX / deep:YYY）以 `|` 分隔。 */
+        fun parseOverlayItems(raw: String): List<String> =
+            raw.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+
+        /** 深度指标显示方式：`key:MODE` 以 `|` 分隔。 */
+        fun parseDeepViewModes(raw: String): Map<String, MetricViewMode> =
+            raw.split("|").mapNotNull { part ->
+                val kv = part.split(":")
+                if (kv.size != 2) return@mapNotNull null
+                val mode = runCatching { MetricViewMode.valueOf(kv[1]) }.getOrNull()
+                    ?: return@mapNotNull null
+                kv[0] to mode
+            }.toMap()
+
+        /** 深度指标回看窗口：`key:秒数` 以 `|` 分隔。 */
+        fun parseDeepWindows(raw: String): Map<String, Int> =
+            raw.split("|").mapNotNull { part ->
+                val kv = part.split(":")
+                if (kv.size != 2) return@mapNotNull null
+                val sec = kv[1].toIntOrNull() ?: return@mapNotNull null
+                kv[0] to sec
+            }.toMap()
+
         val KEY_OVERLAY_METRICS = stringPreferencesKey("overlay_metrics")
+        val KEY_OVERLAY_ITEMS = stringPreferencesKey("overlay_items")
         val KEY_OVERLAY_STYLE = stringPreferencesKey("overlay_style")
+        val KEY_DEEP_VIEW_MODES = stringPreferencesKey("deep_view_modes")
+        val KEY_DEEP_WINDOWS = stringPreferencesKey("deep_windows")
     }
 }

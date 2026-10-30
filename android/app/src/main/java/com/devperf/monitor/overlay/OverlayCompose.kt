@@ -31,8 +31,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
+import com.devperf.monitor.core.DeepSnapshot
 import com.devperf.monitor.core.Metric
-import com.devperf.monitor.core.MetricState
 import com.devperf.monitor.data.collectors.DeviceSnapshot
 import com.devperf.monitor.ui.kit.AnimatedNumber
 import com.devperf.monitor.ui.kit.GlassCard
@@ -59,43 +59,37 @@ data class OverlayData(
     val fps: Metric<Float>,
     /** 悬浮窗可选显示的全部候选指标（用户自选，1.0.43）。 */
     val metrics: Map<CoreMetricId, Metric<Float>>,
+    /**
+     * 悬浮窗候选池：核心指标 + 这台设备读得到的全部深度数值行（1.0.44）。
+     * 定制器页与悬浮窗渲染共用同一份，选中顺序由用户拖拽决定。
+     */
+    val candidates: List<OverlayCandidate> = emptyList(),
 ) {
     companion object {
         fun from(
             fps: Metric<Float>,
             snapshot: DeviceSnapshot,
+            deep: DeepSnapshot = DeepSnapshot.empty(),
         ): OverlayData {
             val memory = snapshot.memory.usageRatio
             val temp = snapshot.thermal.deviceTempC
             val refresh = snapshot.display.refreshRateHz
+            val metrics = mapOf(
+                CoreMetricId.MEMORY_RATIO to memory,
+                CoreMetricId.DEVICE_TEMP to temp,
+                CoreMetricId.REFRESH_RATE to refresh,
+                CoreMetricId.FPS to fps,
+            )
             return OverlayData(
                 memoryRatio = memory,
                 deviceTemp = temp,
                 refreshHz = refresh,
                 fps = fps,
-                metrics = mapOf(
-                    CoreMetricId.MEMORY_RATIO to memory,
-                    CoreMetricId.DEVICE_TEMP to temp,
-                    CoreMetricId.REFRESH_RATE to refresh,
-                    CoreMetricId.FPS to fps,
-                ),
+                metrics = metrics,
+                candidates = buildOverlayCandidates(metrics, deep),
             )
         }
     }
-}
-
-/** 悬浮窗里的一格：指标 + 当前值；[value] 为 null 时显示 [hint] 引导（不消失）。 */
-private data class GridCell(
-    val id: CoreMetricId,
-    val value: Float?,
-    val hint: String? = null,
-)
-
-/** 指标读不到时的引导文案：告诉用户去哪开启，而不是莫名其妙少一行。 */
-private fun metricHint(state: MetricState<Float>): String = when (state) {
-    is MetricState.NeedsPermission -> "需 ${state.permissionLabel}"
-    is MetricState.Unavailable -> "暂无数据"
-    else -> "暂无数据"
 }
 
 /**
@@ -118,7 +112,7 @@ fun OverlayContent(
     data: OverlayData,
     health: FocusedHealth.Result,
     intervalMs: Long,
-    selectedMetrics: Set<CoreMetricId>,
+    selectedItems: List<String>,
     callbacks: OverlayGestureCallbacks,
     modifier: Modifier = Modifier,
 ) {
@@ -152,13 +146,13 @@ fun OverlayContent(
                 OverlayController.Mode.NUMBERS -> NumbersStrip(
                     data = data,
                     intervalMs = intervalMs,
-                    selectedMetrics = selectedMetrics,
+                    selectedItems = selectedItems,
                 )
 
                 OverlayController.Mode.COMPACT -> NumbersStrip(
                     data = data,
                     intervalMs = intervalMs,
-                    selectedMetrics = selectedMetrics,
+                    selectedItems = selectedItems,
                     compact = true,
                 )
 
@@ -167,7 +161,7 @@ fun OverlayContent(
                     data = data,
                     health = health,
                     intervalMs = intervalMs,
-                    selectedMetrics = selectedMetrics,
+                    selectedItems = selectedItems,
                 )
             }
         }
@@ -181,7 +175,7 @@ private fun CardContent(
     data: OverlayData,
     health: FocusedHealth.Result,
     intervalMs: Long,
-    selectedMetrics: Set<CoreMetricId>,
+    selectedItems: List<String>,
 ) {
     val colors = LocalTokenColors.current
     // 悬浮窗采不到背后画面，容器用主题表面色（真实半透明，能透视后面的应用）；
@@ -204,7 +198,7 @@ private fun CardContent(
         ) {
             HealthBadge(health)
             Spacer(modifier = Modifier.width(10.dp))
-            MetricGrid(data, intervalMs, selectedMetrics, Modifier.weight(1f))
+            MetricGrid(data, intervalMs, selectedItems, Modifier.weight(1f))
         }
     }
 }
@@ -232,31 +226,21 @@ private fun HealthBadge(health: FocusedHealth.Result) {
     )
 }
 
-/** 按用户选中集合从 [OverlayData.metrics] 构造要显示的格子（有值显示，无值显示引导）。 */
-private fun buildCells(
-    data: OverlayData,
-    selectedMetrics: Set<CoreMetricId>,
-): List<GridCell> = buildList {
-    for (id in selectedMetrics) {
-        val m = data.metrics[id] ?: continue
-        if (m.value != null) add(GridCell(id, m.value))
-        else add(GridCell(id, null, metricHint(m.state)))
-    }
-}
-
 /**
- * 悬浮窗显示的指标（1.0.43 起改为用户自选，见 [buildCells]）：内存占用率 / 温度 /
- * 屏幕刷新率 / 帧率等，竖排三行，标签在左、数值右对齐，扫一眼更整齐。
+ * 悬浮窗显示的指标（1.0.43 起用户自选，1.0.44 起候选池扩到全部深度数值行）：
+ * 内存占用率 / 温度 / 刷新率 / 帧率 / CPU / GPU / 电压电流功耗…竖排若干行，
+ * 标签在左、数值右对齐，扫一眼更整齐。
  * 只放采得到的，采不到的留一行引导（如「需 Shizuku 授权」），否则用户看不出是没做还是没授权。
  */
 @Composable
 private fun MetricGrid(
     data: OverlayData,
     intervalMs: Long,
-    selectedMetrics: Set<CoreMetricId>,
+    selectedItems: List<String>,
     modifier: Modifier = Modifier,
 ) {
-    val cells = buildCells(data, selectedMetrics)
+    // 顺序完全听用户的（定制器拖拽排序结果）
+    val cells = resolveOverlayCells(data.candidates, selectedItems)
 
     if (cells.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -280,18 +264,18 @@ private fun MetricGrid(
 /** 一行指标：标签靠左、数值靠右对齐；无值时显示灰色引导小字。 */
 @Composable
 private fun MetricRow(
-    cell: GridCell,
+    cell: OverlayCandidate,
     intervalMs: Long,
 ) {
     val colors = LocalTokenColors.current
-    val accent = metricColor(cell.id.source.colorKey)
+    val accent = metricColor(cell.colorKey)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            text = cell.id.label,
+            text = cell.label,
             style = MaterialTheme.typography.labelSmall,
             color = colors.textSecondary,
             // 标签不抢数值的位置，超出就截断（悬浮窗宽度有限）
@@ -304,12 +288,12 @@ private fun MetricRow(
                 AnimatedNumber(
                     value = cell.value,
                     intervalMs = intervalMs,
-                    decimals = cell.id.decimals,
+                    decimals = cell.decimals,
                     color = accent,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = " ${cell.id.unit}",
+                    text = " ${cell.unit}",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.textSecondary,
                 )
@@ -338,12 +322,12 @@ private fun MetricRow(
 private fun NumbersStrip(
     data: OverlayData,
     intervalMs: Long,
-    selectedMetrics: Set<CoreMetricId>,
+    selectedItems: List<String>,
     compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    val cells = buildCells(data, selectedMetrics)
+    val cells = resolveOverlayCells(data.candidates, selectedItems)
 
     if (cells.isEmpty()) {
         // 纯数字态没有容器，缺数据时给一行小字兜底（避免空白窗口看不出所以然）
@@ -362,7 +346,7 @@ private fun NumbersStrip(
     ) {
         cells.forEach { cell ->
             if (cell.value != null) {
-                val numberColor = metricColor(cell.id.source.colorKey)
+                val numberColor = metricColor(cell.colorKey)
                 Row(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.Bottom,
@@ -371,12 +355,12 @@ private fun NumbersStrip(
                     AnimatedNumber(
                         value = cell.value,
                         intervalMs = intervalMs,
-                        decimals = cell.id.decimals,
+                        decimals = cell.decimals,
                         color = numberColor,
                         style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = cell.id.unit,
+                        text = cell.unit,
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )

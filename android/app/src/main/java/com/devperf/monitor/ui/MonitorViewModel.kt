@@ -299,14 +299,24 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         settingsRepository.setOverlayScale(value)
     }
 
-    /** 设置悬浮窗显示哪些指标（1.0.43 个性化）。 */
-    fun setOverlayMetrics(metrics: Set<CoreMetricId>) = viewModelScope.launch {
-        settingsRepository.setOverlayMetrics(metrics)
+    /** 设置悬浮窗显示项（有序列表，1.0.44 定制器：自由增删 + 拖拽排序）。 */
+    fun setOverlayItems(items: List<String>) = viewModelScope.launch {
+        settingsRepository.setOverlayItems(items)
     }
 
     /** 设置悬浮窗显示样式（1.0.43 个性化）。 */
     fun setOverlayStyle(style: OverlayStyle) = viewModelScope.launch {
         settingsRepository.setOverlayStyle(style)
+    }
+
+    /** 切换某个深度指标详情页的可视化模式（1.0.44）。 */
+    fun setDeepViewMode(key: String, mode: MetricViewMode) = viewModelScope.launch {
+        settingsRepository.setDeepViewMode(key, mode)
+    }
+
+    /** 切换某个深度指标详情页的回看窗口（1.0.44）。 */
+    fun setDeepWindow(key: String, seconds: Int) = viewModelScope.launch {
+        settingsRepository.setDeepWindow(key, seconds)
     }
 
     fun setRefreshMode(mode: RefreshMode) = viewModelScope.launch {
