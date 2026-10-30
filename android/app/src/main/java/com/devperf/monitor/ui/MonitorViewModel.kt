@@ -20,7 +20,7 @@ import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.AppRelease
 import com.devperf.monitor.data.FeedbackRepository
 import com.devperf.monitor.data.SettingsRepository
-import com.devperf.monitor.data.AnnouncementRepository
+import com.devperf.monitor.data.AppAnnouncement
 import com.devperf.monitor.data.UpdateRepository
 import com.devperf.monitor.data.defaultMetricViewModes
 import com.devperf.monitor.data.isNewer
@@ -411,28 +411,39 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ---------------------------------------------------------------------
-    // 公告（1.0.22 新增）：打开 App 时拉取，有新公告（id 变化）才弹，读完即止
+    // 公告：来自服务端（管理端单独/全局公告），随 SyncManager 回拉实时更新
     // ---------------------------------------------------------------------
 
-    private val announcementRepo = AnnouncementRepository(getApplication())
+    /** 服务端下发的管控状态（状态/开关/公告），供 UI 层（受限横幅等）消费。 */
+    val remoteState get() = app.syncManager.remoteState
+
     private val _announcementState =
         MutableStateFlow<AnnouncementUiState>(AnnouncementUiState.Idle)
     val announcementState = _announcementState.asStateFlow()
 
+    init {
+        // 服务端状态每次回拉到达后检查公告：管理端一发公告，30 秒内弹窗
+        viewModelScope.launch {
+            app.syncManager.remoteState.collect { state ->
+                if (state != null) checkAnnouncement()
+            }
+        }
+    }
+
     /**
-     * 打开 App 时调用：从仓库拉公告。若 id 与本地已读 id 不同，弹「必须读完」公告。
-     * 网络失败 / 文件不存在都按「无公告」处理，不阻塞主流程（也不会锁死离线用户）。
+     * 检查服务端最新公告（onResume 时也会调用）。若 id 与本地已读不同则弹「必须读完」。
+     * 管理端禁用「公告展示」时不弹。
      */
     fun checkAnnouncement() {
-        // 管理端禁用「公告展示」时不拉取、不弹窗
+        // 管理端禁用「公告展示」时不弹窗
         if (isFeatureDisabled("announcement")) return
         if (_announcementState.value is AnnouncementUiState.Show) return
-        viewModelScope.launch {
-            val announcement = runCatching { announcementRepo.latestAnnouncement() }
-                .getOrNull() ?: return@launch
-            if (announcement.id != lastSeenAnnouncementId()) {
-                _announcementState.value = AnnouncementUiState.Show(announcement)
-            }
+        val latest = app.syncManager.remoteState.value?.announcements
+            ?.maxByOrNull { it.createdAt } ?: return
+        if (latest.id.isNotEmpty() && latest.id != lastSeenAnnouncementId()) {
+            _announcementState.value = AnnouncementUiState.Show(
+                AppAnnouncement(id = latest.id, title = latest.title, content = latest.content),
+            )
         }
     }
 
