@@ -21,6 +21,7 @@ PulseGuard 后端服务
 
 import os
 import re
+import hmac
 import secrets
 import shutil
 import sqlite3
@@ -31,6 +32,7 @@ import threading
 import hashlib
 import json
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 
@@ -73,6 +75,10 @@ DEV_MODE = os.environ.get("DEV_MODE", "0") == "1"
 CODE_TTL = int(os.environ.get("CODE_TTL", "300"))
 # 验证码重发冷却（秒）
 CODE_COOLDOWN = int(os.environ.get("CODE_COOLDOWN", "60"))
+# 同一邮箱连续验证码错误次数上限：达到后作废当前验证码，强制重新获取（防爆破）
+REG_FAIL_LIMIT = int(os.environ.get("REG_FAIL_LIMIT", "5"))
+# 每邮箱连续错误计数（单实例内存，进程重启自动清零；爆破防护无需跨重启持久）
+_REG_FAIL = defaultdict(int)
 
 # ---------------------------------------------------------------------------
 # 账号数据持久化（私有 Git 仓库）
@@ -545,6 +551,8 @@ def send_code():
     )
     conn.commit()
     conn.close()
+    # 重新获取验证码即重置连续错误计数（用户在重发，视为新的一次尝试）
+    _REG_FAIL[email] = 0
 
     ok = send_code_email(email, code)
     if not ok and not DEV_MODE:
@@ -586,10 +594,21 @@ def register():
 
     conn = db()
     c = conn.execute("SELECT code, created_at FROM codes WHERE email=?", (email,)).fetchone()
-    if not c or c["code"] != code:
+    if not c or not hmac.compare_digest(c["code"], code):
+        _REG_FAIL[email] += 1
+        # 连续错误过多：作废当前验证码，强制重新获取（避免无限试错爆破）
+        if _REG_FAIL[email] >= REG_FAIL_LIMIT:
+            conn.execute("DELETE FROM codes WHERE email=?", (email,))
+            _REG_FAIL[email] = 0
+            conn.commit()
+            conn.close()
+            return json_err("验证码错误次数过多，请重新获取验证码")
         conn.close()
         return json_err("验证码错误")
     if now_ms() - c["created_at"] > CODE_TTL * 1000:
+        conn.execute("DELETE FROM codes WHERE email=?", (email,))
+        _REG_FAIL[email] = 0
+        conn.commit()
         conn.close()
         return json_err("验证码已过期，请重新获取")
 
@@ -609,8 +628,9 @@ def register():
         (account, email, phone, nickname, pw_hash, salt.hex(), now_ms()),
     )
     user_id = cur.lastrowid
-    # 消费验证码
+    # 消费验证码并清零错误计数
     conn.execute("DELETE FROM codes WHERE email=?", (email,))
+    _REG_FAIL[email] = 0
     # 发用户 token
     token = secrets.token_hex(32)
     conn.execute(
@@ -641,10 +661,8 @@ def login():
     if not u:
         conn.close()
         return json_err("账号不存在")
-    if u["status"] == "disabled":
-        conn.close()
-        note = (u["restriction_note"] or "").strip()
-        return json_err("账号已被管理员禁用" + (f"：{note}" if note else ""), 403)
+    # 禁用账号仍允许登录：客户端据此进入「仅反馈」模式（其余功能全部锁定）。
+    # 数据同步等写操作接口仍会对 disabled 返回 403（见 /api/sync）。
     salt = bytes.fromhex(u["pw_salt"])
     if hash_pw(password, salt) != u["pw_hash"]:
         conn.close()

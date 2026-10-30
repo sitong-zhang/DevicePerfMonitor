@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -43,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -61,6 +63,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
+import com.devperf.monitor.MonitorApp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
@@ -80,7 +84,9 @@ import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.kit.pressScale
 import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
+import com.devperf.monitor.ui.screen.AccountScreen
 import com.devperf.monitor.ui.screen.DeepMetricsScreen
+import com.devperf.monitor.ui.screen.FeedbackScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.SettingsScreen
@@ -102,6 +108,7 @@ object Routes {
     const val OVERVIEW = "overview"
     const val DEEP = "deep"
     const val SETTINGS = "settings"
+    const val ACCOUNT = "account"
     const val DETAIL = "detail/{metricId}"
 
     fun detail(metricId: String) = "detail/$metricId"
@@ -113,13 +120,14 @@ private data class TopLevelTab(
     val icon: ImageVector,
 )
 
-/** 顶级 tab 路由集合（总览 / 设置），用于判断「顶层互切」以走瞬时切换。 */
-private val TOP_LEVEL_ROUTES = setOf(Routes.OVERVIEW, Routes.DEEP, Routes.SETTINGS)
+/** 顶级 tab 路由集合（总览 / 监测 / 设置 / 账号），用于判断「顶层互切」以走瞬时切换。 */
+private val TOP_LEVEL_ROUTES = setOf(Routes.OVERVIEW, Routes.DEEP, Routes.SETTINGS, Routes.ACCOUNT)
 
 private val topLevelTabs = listOf(
     TopLevelTab(Routes.OVERVIEW, "总览", Icons.Filled.Home),
     TopLevelTab(Routes.DEEP, "监测", Icons.Filled.Refresh),
     TopLevelTab(Routes.SETTINGS, "设置", Icons.Filled.Settings),
+    TopLevelTab(Routes.ACCOUNT, "账号", Icons.Filled.Person),
 )
 
 @Composable
@@ -134,6 +142,12 @@ fun AppNav(
     val updateState by viewModel.updateState.collectAsState()
     // 1.0.26 壁纸自由切换：背景层按设置解析（内置三选一 / 相册自定义）
     val settings by viewModel.settings.collectAsState()
+    // 账号状态：禁用时整个 App 锁定为「仅反馈」模式（账号界面/禁用闸门）
+    val remote by viewModel.remoteState.collectAsState()
+    val disabled = remote?.status == "disabled"
+    // 反馈页以浮层形式覆盖在当前页面之上（正常态的账号页 / 禁用态闸门都可触发）
+    var showFeedback by remember { mutableStateOf(false) }
+    val accountManager = (LocalContext.current.applicationContext as MonitorApp).accountManager
 
     // NavHost / AnimatedVisibility 的 enter/exit 均为非 Composable lambda，
     // 不能在其中读取 CompositionLocal —— 先在 Composable 作用域取出曲线值
@@ -192,6 +206,16 @@ fun AppNav(
         androidx.compose.runtime.CompositionLocalProvider(
             com.devperf.monitor.ui.kit.LocalBackdrop provides backdrop
         ) {
+            if (disabled) {
+                // 账号被管理员禁用：锁定为「仅反馈」模式——只显示账号/禁用视图，
+                // 其中仅开放「提交反馈」与「退出登录」，其余功能（总览/监测/设置等）全部不可达。
+                AccountScreen(
+                    viewModel = viewModel,
+                    locked = true,
+                    onFeedback = { showFeedback = true },
+                    onLogout = { accountManager.logout() },
+                )
+            } else {
             NavHost(
                 navController = navController,
                 startDestination = Routes.OVERVIEW,
@@ -232,6 +256,14 @@ fun AppNav(
                         onRequestOverlayPermission = onRequestOverlayPermission,
                     )
                 }
+                composable(Routes.ACCOUNT) {
+                    AccountScreen(
+                        viewModel = viewModel,
+                        locked = false,
+                        onFeedback = { showFeedback = true },
+                        onLogout = { accountManager.logout() },
+                    )
+                }
                 composable(Routes.DETAIL) { entry ->
                     val coreId = entry.arguments?.getString("metricId")
                         ?.let { name ->
@@ -261,7 +293,7 @@ fun AppNav(
                     // 写的是 `{ selectedTabIndex = it }` 这种纯 setter；我们必须把
                     // 「先判断再跳」的逻辑留在 Stack 外——组件内部的 LaunchedEffect
                     // 只捕获第一次组合的 lambda，里面读到的 currentRoute 永远是陈旧的，
-                    // 于是拖动 pill 回第一个 tab 时它自己把调用吞掉了（表观：拖回去没反应）。
+                    //   于是拖动 pill 回第一个 tab 时它自己把调用吞掉了（表观：拖回去没反应）。
                     onSelect = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -283,8 +315,6 @@ fun AppNav(
             if (!updateBlocking) AnnouncementDialog(viewModel)
 
             // 账号被管理端标记为「受限」：顶部常驻横幅展示限制说明（1.0.38）
-            // 禁用账号由 SyncManager 自动登出，到不了这里
-            val remote by viewModel.remoteState.collectAsState()
             val restricted = remote?.status == "restricted"
             var restrictionDismissed by remember {
                 androidx.compose.runtime.mutableStateOf(false)
@@ -295,6 +325,12 @@ fun AppNav(
                     onDismiss = { restrictionDismissed = true },
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
+            }
+            }
+
+            // 反馈页浮层：禁用闸门与账号页均可触发，覆盖在当前内容之上
+            if (showFeedback) {
+                FeedbackScreen(onBack = { showFeedback = false })
             }
         }
     }

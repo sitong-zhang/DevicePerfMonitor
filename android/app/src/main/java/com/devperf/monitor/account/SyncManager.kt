@@ -162,7 +162,7 @@ class SyncManager(
     // 服务端状态回拉（禁用功能 / 公告）
     // ------------------------------------------------------------------
 
-    /** 从 /api/me 拉取管理端下发的状态；账号被禁用时登出。 */
+    /** 从 /api/me 拉取管理端下发的状态；账号被禁用时保留会话、交由 UI 锁定为仅反馈模式。 */
     suspend fun refreshMe() {
         val session = accountManager.session.value ?: return
         withContext(Dispatchers.IO) {
@@ -180,10 +180,11 @@ class SyncManager(
                 return@withContext
             }
             applyState(data)
-            // 账号被禁用：立即登出（登录接口同样会拒绝，这里兜底已登录场景）
+            // 账号被禁用：不再自动登出——保留会话，由 UI 层将其锁定为「仅反馈」模式
+            // （账号界面/禁用闸门只开放反馈与退出登录，其余功能全部屏蔽）。
+            // 这样被禁用的用户仍能登录并正常提交反馈，而非被直接踢回登录页。
             if (data.optString("status") == "disabled") {
-                Log.w(TAG, "账号已被管理员禁用，自动登出")
-                accountManager.logout()
+                Log.w(TAG, "账号已被管理员禁用，进入仅反馈模式")
             }
         }
     }
