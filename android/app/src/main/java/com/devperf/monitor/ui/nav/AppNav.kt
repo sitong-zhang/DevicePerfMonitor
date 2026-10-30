@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -280,6 +281,69 @@ fun AppNav(
                 updateState is UpdateUiState.Downloading ||
                 updateState is UpdateUiState.Ready
             if (!updateBlocking) AnnouncementDialog(viewModel)
+
+            // 账号被管理端标记为「受限」：顶部常驻横幅展示限制说明（1.0.38）
+            // 禁用账号由 SyncManager 自动登出，到不了这里
+            val remote by viewModel.remoteState.collectAsState()
+            val restricted = remote?.status == "restricted"
+            var restrictionDismissed by remember {
+                androidx.compose.runtime.mutableStateOf(false)
+            }
+            if (restricted && !restrictionDismissed) {
+                RestrictionBanner(
+                    note = remote?.restrictionNote.orEmpty(),
+                    onDismiss = { restrictionDismissed = true },
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 受限账号顶部横幅（1.0.38 新增）：管理端把账号改为「受限」后 30 秒内出现，
+ * 展示限制说明，点 × 收起（本轮会话内不再出现）。
+ */
+@Composable
+private fun RestrictionBanner(note: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .padding(top = 12.dp)
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF3A2E10),
+        border = BorderStroke(1.dp, Color(0xFFB8860B)),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "⚠️",
+                fontSize = 16.sp,
+            )
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "账号受限",
+                    color = Color(0xFFFFC857),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                )
+                if (note.isNotBlank()) {
+                    Text(
+                        note,
+                        color = Color(0xFFE8DCC0),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                }
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                Text("✕", color = Color(0xFFB8A87E), fontSize = 13.sp)
+            }
         }
     }
 }
