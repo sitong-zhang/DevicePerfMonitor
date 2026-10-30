@@ -446,6 +446,7 @@ def user_public(u) -> dict:
         "phone": u["phone"],
         "nickname": u["nickname"],
         "status": u["status"],
+        "restriction_note": u["restriction_note"] or "",
         "created_at": u["created_at"],
         "last_sync_at": u["last_sync_at"],
     }
@@ -581,6 +582,10 @@ def login():
     if not u:
         conn.close()
         return json_err("账号不存在")
+    if u["status"] == "disabled":
+        conn.close()
+        note = (u["restriction_note"] or "").strip()
+        return json_err("账号已被管理员禁用" + (f"：{note}" if note else ""), 403)
     salt = bytes.fromhex(u["pw_salt"])
     if hash_pw(password, salt) != u["pw_hash"]:
         conn.close()
@@ -647,7 +652,13 @@ def sync():
     conn.execute("UPDATE users SET last_sync_at=? WHERE id=?", (now_ms(), u["id"]))
     conn.commit()
     conn.close()
-    return json_ok(msg="同步成功")
+    # 响应直接携带管控状态：客户端每次同步即完成一次回拉，管理端改动秒级生效
+    return json_ok(
+        msg="同步成功",
+        status=u["status"],
+        restriction_note=u["restriction_note"] or "",
+        disabled_features=json.loads(u["disabled_features"] or "[]"),
+    )
 
 
 @app.route("/api/event", methods=["POST", "OPTIONS"])
