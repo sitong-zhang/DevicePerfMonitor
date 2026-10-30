@@ -132,6 +132,21 @@ jobs:
           done
           curl -fsS http://localhost:5000/health || { echo "backend failed to start:"; tail -n 30 /tmp/backend.log; exit 1; }
 
+      # 临时诊断：主动请求 /admin 并把后端日志上传为 artifact（定位线上 500）
+      - name: Diagnose /admin (temporary)
+        run: |
+          CODE=$(curl -sS -o /dev/null -w "%{http_code}" http://localhost:5000/admin || echo fail)
+          echo "GET /admin => $CODE"
+          tail -n 120 /tmp/backend.log > backend-diag.log || true
+          ls -la backend/templates/ || true
+
+      - name: Upload backend diag log
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-diag
+          path: backend-diag.log
+          if-no-files-found: ignore
+
       - name: Install cloudflared
         run: |
           for i in 1 2 3 4 5; do
