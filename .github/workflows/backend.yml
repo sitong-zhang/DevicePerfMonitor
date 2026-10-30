@@ -21,6 +21,10 @@ on:
         description: "运行时长（小时，≤6）"
         required: false
         default: "5"
+      maintenance:
+        description: "维护模式（服务暂停）：true 启动即暂停并推送《服务暂停》公告"
+        required: false
+        default: "false"
   schedule:
     # 每 5 小时续期一次（UTC），保证后端长期在线
     - cron: "0 */5 * * *"
@@ -110,6 +114,8 @@ jobs:
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          # 维护模式：true 时启动即暂停服务并推送《服务暂停》公告（随时可关）
+          MAINTENANCE: ${{ github.event.inputs.maintenance == 'true' && '1' || '' }}
         run: |
           # git 不跟踪空目录，runner 上 data/ 可能不存在，必须显式创建
           mkdir -p data

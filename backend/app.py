@@ -320,10 +320,112 @@ def init_db():
             created_at      INTEGER NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS config (
+            k               TEXT PRIMARY KEY,
+            v               TEXT NOT NULL DEFAULT ''
+        );
         """
     )
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 维护模式（服务暂停）：开关存 config 表，可经部署环境变量 MAINTENANCE 或
+# 管理端 /api/admin/maintenance 实时切换（无需重新部署即可恢复）。
+# 维护期间：核心数据写入接口（/api/sync、/api/event）返回 503，其余
+# 登录 / 状态回拉 / 公告接口保持可用——已登录用户打开 App 会看到《服务暂停》
+# 强制公告，真正做到「暂时关服务 + 通知说明」。
+# ---------------------------------------------------------------------------
+_MAINTENANCE_ANN_TITLE = "服务暂停"
+
+
+def _maintenance_env_on() -> bool:
+    """部署环境变量 MAINTENANCE 是否开启（接受 1/true/yes，大小写不敏感）。"""
+    return (os.environ.get("MAINTENANCE") or "").strip().lower() in ("1", "true", "yes")
+
+
+def _get_config(key: str, default: str = "") -> str:
+    try:
+        conn = db()
+        row = conn.execute("SELECT v FROM config WHERE k=?", (key,)).fetchone()
+        conn.close()
+        return row["v"] if row else default
+    except Exception:  # noqa: BLE001
+        return default
+
+
+def _set_config(key: str, value: str) -> None:
+    conn = db()
+    conn.execute(
+        "INSERT INTO config(k, v) VALUES(?, ?) "
+        "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+        (key, value),
+    )
+    conn.commit()
+    conn.close()
+    push_async("config")
+
+
+def get_maintenance() -> tuple[bool, str]:
+    """返回 (是否维护中, 维护文案)。部署环境变量 MAINTENANCE=1/true 优先级最高。"""
+    if _maintenance_env_on():
+        return True, os.environ.get(
+            "MAINTENANCE_MESSAGE", "相关服务暂时停止，恢复时间另行通知"
+        )
+    try:
+        conn = db()
+        row = conn.execute("SELECT v FROM config WHERE k='maintenance'").fetchone()
+        conn.close()
+        if row and row["v"]:
+            msg = _get_config("maintenance_message", "相关服务暂时停止，恢复时间另行通知")
+            return True, msg
+    except Exception:  # noqa: BLE001
+        pass
+    return False, ""
+
+
+def set_maintenance(enabled: bool, message: str = "") -> None:
+    """开启/关闭维护模式。开启时幂等写入一条《服务暂停》全局公告，关闭时移除。"""
+    _set_config("maintenance", "1" if enabled else "")
+    if enabled:
+        msg = message or "相关服务暂时停止，恢复时间另行通知"
+        _set_config("maintenance_message", msg)
+        conn = db()
+        # 幂等：以固定标题标记维护公告，重复开启不叠加多条
+        conn.execute(
+            "DELETE FROM announcements WHERE scope='global' AND title=?",
+            (_MAINTENANCE_ANN_TITLE,),
+        )
+        conn.execute(
+            "INSERT INTO announcements(scope, user_id, title, content, created_at) "
+            "VALUES('global', NULL, ?, ?, ?)",
+            (_MAINTENANCE_ANN_TITLE, msg, now_ms()),
+        )
+        conn.commit()
+        conn.close()
+        # 全局公告：推送给所有在线用户端，立即弹《服务暂停》
+        with SSE_LOCK:
+            all_uids = list(SSE_SUBS.keys())
+        for u in all_uids:
+            _sse_notify(u)
+    else:
+        conn = db()
+        conn.execute(
+            "DELETE FROM announcements WHERE scope='global' AND title=?",
+            (_MAINTENANCE_ANN_TITLE,),
+        )
+        conn.commit()
+        conn.close()
+    push_async("maintenance")
+
+
+def require_not_maintenance():
+    """维护期间拦截核心写入接口，返回 503；正常时返回 None。"""
+    on, msg = get_maintenance()
+    if on:
+        return json_err(msg or "相关服务暂时停止，恢复时间另行通知", 503)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -766,6 +868,10 @@ def me():
 def sync():
     if request.method == "OPTIONS":
         return json_ok()
+    # 维护模式：核心数据写入接口暂停服务，返回 503（登录/公告接口不受影响）
+    blocked = require_not_maintenance()
+    if blocked:
+        return blocked
     u, err = require_user()
     if err:
         return err
@@ -797,6 +903,10 @@ def sync():
 def event():
     if request.method == "OPTIONS":
         return json_ok()
+    # 维护模式：核心数据写入接口暂停服务，返回 503
+    blocked = require_not_maintenance()
+    if blocked:
+        return blocked
     u, err = require_user()
     if err:
         return err
@@ -1085,6 +1195,22 @@ def admin_announcements():
     return json_ok(announcements=[dict(r) for r in rows])
 
 
+@app.route("/api/admin/maintenance", methods=["POST", "OPTIONS"])
+def admin_maintenance():
+    """实时切换维护模式（服务暂停）。无需重新部署，随时可恢复。"""
+    if request.method == "OPTIONS":
+        return json_ok()
+    ok, err = require_admin()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+    message = (data.get("message") or "").strip()
+    set_maintenance(enabled, message)
+    on, msg = get_maintenance()
+    return json_ok(maintenance=on, message=msg)
+
+
 # ---------------------------------------------------------------------------
 # Web 管理页（/admin）：密码同样只从环境变量注入
 # ---------------------------------------------------------------------------
@@ -1160,6 +1286,10 @@ if __name__ == "__main__":
     # 顺序很重要：先取回上次的数据，再建表（否则空库会把旧库覆盖掉）
     data_pull()
     init_db()
+    # 部署环境变量 MAINTENANCE=1 时启动即进入维护（服务暂停）：
+    # 写入《服务暂停》全局公告，核心写入接口随后对全部用户返回 503。
+    if _maintenance_env_on():
+        set_maintenance(True, os.environ.get("MAINTENANCE_MESSAGE", ""))
     print(f"[PulseGuard backend] ADMIN_PASSWORD={'*'*len(ADMIN_PASSWORD)} "
           f"DEV_MODE={DEV_MODE} SMTP_USER={SMTP_USER} "
           f"DATA_REPO={DATA_REPO or '未配置'}")
