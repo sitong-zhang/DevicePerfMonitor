@@ -85,6 +85,7 @@ import com.devperf.monitor.ui.kit.pressScale
 import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.screen.AccountScreen
+import com.devperf.monitor.ui.screen.DeepDetailScreen
 import com.devperf.monitor.ui.screen.DeepMetricsScreen
 import com.devperf.monitor.ui.screen.FeedbackScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
@@ -110,8 +111,11 @@ object Routes {
     const val SETTINGS = "settings"
     const val ACCOUNT = "account"
     const val DETAIL = "detail/{metricId}"
+    const val DEEP_DETAIL = "deepDetail/{deepKey}"
 
     fun detail(metricId: String) = "detail/$metricId"
+
+    fun deepDetail(key: String) = "deepDetail/$key"
 }
 
 private data class TopLevelTab(
@@ -245,6 +249,7 @@ fun AppNav(
                     OverviewScreen(
                         viewModel = viewModel,
                         onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
+                        onOpenDeepDetail = { key -> navController.navigate(Routes.deepDetail(key)) },
                     )
                 }
                 composable(Routes.DEEP) {
@@ -274,6 +279,13 @@ fun AppNav(
                     MetricDetailScreen(
                         viewModel = viewModel,
                         coreId = coreId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.DEEP_DETAIL) { entry ->
+                    DeepDetailScreen(
+                        viewModel = viewModel,
+                        deepKey = entry.arguments?.getString("deepKey"),
                         onBack = { navController.popBackStack() },
                     )
                 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
@@ -64,11 +65,12 @@ private const val CARD_WINDOW_SEC = 60
 fun OverviewScreen(
     viewModel: MonitorViewModel,
     onOpenDetail: (CoreMetricId) -> Unit,
+    onOpenDeepDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focused by viewModel.focused.collectAsState()
     val settings by viewModel.settings.collectAsState()
-    // 深度指标卡（1.0.41）：CPU 使用率 / GPU 负载 / 实时电压
+    // 深度指标卡（1.0.42 全量版）：这台设备能读到的所有深度指标全部进总览
     val deep by viewModel.deep.collectAsState()
     val deepCards = remember(deep) { buildDeepCards(deep) }
     val colors = LocalTokenColors.current
@@ -125,14 +127,19 @@ fun OverviewScreen(
             }
         }
 
-        // 深度指标卡（1.0.41）：监测页能采到的 CPU / GPU / 电压，以与核心指标
-        // 完全一致的卡片形式（大数字 + 波形）进总览。采不到的同样不占位。
+        // 深度指标卡（1.0.42 全量版）：监测页能采到的所有指标，以与核心指标
+        // 完全一致的卡片形式（大数字 + 波形）进总览，全部可点击进详情。
+        // 采不到的同样不占位。
         itemsIndexed(items = deepCards, key = { _, c -> "deep-${c.key}" }) { index, card ->
             EnterStagger(index = index + 1 + visible.size) {
                 DeepCard(
                     card = card,
-                    history = viewModel.deepHistory(card.key, CARD_WINDOW_SEC),
-                    tickMs = viewModel.tickMs(),
+                    history = if (card.value != null) {
+                        viewModel.deepHistory(card.key, CARD_WINDOW_SEC)
+                    } else {
+                        emptyList()
+                    },
+                    onClick = { onOpenDeepDetail(card.key) },
                 )
             }
         }
@@ -146,53 +153,83 @@ fun OverviewScreen(
 }
 
 // ---------------------------------------------------------------------------
-// 深度指标卡（1.0.41）
+// 深度指标卡（1.0.42 全量版）
 // ---------------------------------------------------------------------------
+
+/** 深度分类 → 卡片强调色轮换（与核心卡同一组语义色），总览卡与深度详情页共用。 */
+internal val DEEP_CATEGORY_COLORS =
+    listOf("accent", "accentSecondary", "success", "warning", "danger")
 
 /** 总览页深度指标卡：数据来自深度监测快照（监测页「数据来源」同一套）。 */
 private data class DeepCardData(
     val key: String,
     val label: String,
     val unit: String,
-    val value: Float,
-    val decimals: Int,
+    /** 数值行的当前值（画波形用）。 */
+    val value: Float?,
+    /** 当前值的显示字符串（数值行与文本行都用它，保真不重排格式）。 */
+    val display: String,
     val colorKey: String,
+    /** 推算依据 / 备注（仅推算行展示）。 */
+    val note: String?,
+    val estimated: Boolean,
 )
 
-/** 从深度快照提取总览卡数据；行不可读（value 为 null）就不进界面。 */
+/**
+ * 从深度快照提取总览卡数据：这台设备**能读到的所有**深度指标全部进总览
+ * （实测 + 推算都算读到的），读不到的行如实不占位。保持采集器的分组顺序。
+ */
 private fun buildDeepCards(snap: com.devperf.monitor.core.DeepSnapshot): List<DeepCardData> {
-    val valueOf = { key: String ->
-        snap.sections.asSequence().flatMap { it.rows.asSequence() }
-            .firstOrNull { it.key == key }?.value?.toFloatOrNull()
+    val cards = ArrayList<DeepCardData>()
+    for (section in snap.sections) {
+        val colorKey = DEEP_CATEGORY_COLORS[section.category.ordinal % DEEP_CATEGORY_COLORS.size]
+        for (row in section.rows) {
+            if (row.origin == com.devperf.monitor.core.DeepOrigin.UNAVAILABLE) continue
+            val raw = row.value ?: continue
+            if (raw == "—") continue
+            val v = raw.toFloatOrNull()?.takeIf { !it.isNaN() && !it.isInfinite() }
+            cards += DeepCardData(
+                key = row.key,
+                label = row.label,
+                unit = row.unit,
+                value = v,
+                display = raw,
+                colorKey = colorKey,
+                note = row.note,
+                estimated = row.isEstimated,
+            )
+        }
     }
-    return buildList {
-        valueOf("cpu.total")?.let {
-            add(DeepCardData("cpu.total", "CPU 使用率", "%", it, 0, "accent"))
-        }
-        valueOf("gpu.load")?.let {
-            add(DeepCardData("gpu.load", "GPU 负载", "%", it, 0, "accentSecondary"))
-        }
-        valueOf("pwr.voltage")?.let {
-            add(DeepCardData("pwr.voltage", "实时电压", "V", it, 2, "success"))
-        }
-    }
+    return cards
 }
 
-/** 视觉与核心指标卡完全一致（WAVE 形态：左侧大数字 + 右侧 60 秒波形）。 */
+/**
+ * 视觉与核心指标卡完全一致（WAVE 形态：左侧大数字 + 右侧 60 秒波形），
+ * 可点击进详情。文本值行（governor / 充电状态等）没有波形意义：左半显示
+ * 当前文本，右上角标「实时」。
+ */
 @Composable
 private fun DeepCard(
     card: DeepCardData,
     history: List<Float>,
-    tickMs: Long,
+    onClick: () -> Unit,
 ) {
     val colors = LocalTokenColors.current
     val accent = metricColor(card.colorKey)
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
 
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp),
+            .height(120.dp)
+            .pressScale(interactionSource),
         shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        onClick = {
+            haptics.tick()
+            onClick()
+        },
+        interactionSource = interactionSource,
     ) {
         Column(
             modifier = Modifier
@@ -208,45 +245,79 @@ private fun DeepCard(
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.textSecondary,
                     modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "波形",
+                    text = when {
+                        card.estimated -> "推算"
+                        card.value != null -> "波形"
+                        else -> "实时"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = accent.copy(alpha = 0.75f),
                 )
             }
             Row(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(0.42f)
-                        .fillMaxHeight(),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        AnimatedNumber(
-                            value = card.value,
-                            intervalMs = tickMs,
-                            decimals = card.decimals,
-                            color = accent,
-                            style = MaterialTheme.typography.headlineSmall,
-                        )
-                        Text(
-                            text = " ${card.unit}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.textSecondary,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
+                if (card.value != null) {
+                    Box(
+                        modifier = Modifier
+                            .weight(0.42f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = card.display,
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = accent,
+                                maxLines = 1,
+                            )
+                            Text(
+                                text = " ${card.unit}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.textSecondary,
+                                modifier = Modifier.padding(bottom = 4.dp),
+                            )
+                        }
                     }
+                    Sparkline(
+                        points = history,
+                        color = accent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                    )
+                } else {
+                    Text(
+                        text = card.display,
+                        style = if (card.display.length <= 8) {
+                            MaterialTheme.typography.headlineSmall
+                        } else {
+                            MaterialTheme.typography.bodyMedium
+                        },
+                        color = accent,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = " ${card.unit}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
                 }
-                Sparkline(
-                    points = history,
-                    color = accent,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp),
+            }
+            if (card.estimated && !card.note.isNullOrBlank()) {
+                Text(
+                    text = "推算：${card.note}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

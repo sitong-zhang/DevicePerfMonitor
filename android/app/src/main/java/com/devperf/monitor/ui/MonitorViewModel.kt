@@ -109,20 +109,18 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     private fun recordDeepHistory(snap: DeepSnapshot) {
         if (snap.timestampMs <= 0L) return
-        val rows = snap.sections.asSequence().flatMap { it.rows.asSequence() }
-        fun num(key: String): Float? =
-            rows.firstOrNull { it.key == key }?.value?.toFloatOrNull()?.takeIf { !it.isNaN() }
         synchronized(deepBuffers) {
-            fun push(key: String, v: Float?) {
-                if (v == null) return
-                val q = deepBuffers.getOrPut(key) { ArrayDeque() }
+            val cutoff = snap.timestampMs - 300_000L
+            // 全量缓冲（1.0.42）：总览展示这台设备能读到的全部深度指标，
+            // 所以每个能解析出数值的行都记一条；文本值行（governor 名、充电
+            // 状态等）没有波形意义，不进缓冲，只在卡片上显示当前文本。
+            for (row in snap.sections.asSequence().flatMap { it.rows.asSequence() }) {
+                val v = row.value?.toFloatOrNull()?.takeIf { !it.isNaN() && !it.isInfinite() }
+                    ?: continue
+                val q = deepBuffers.getOrPut(row.key) { ArrayDeque() }
                 q.addLast(DeepPoint(snap.timestampMs, v))
-                val cutoff = snap.timestampMs - 120_000L
                 while (q.isNotEmpty() && q.first().tMs < cutoff) q.removeFirst()
             }
-            push("cpu.total", num("cpu.total"))
-            push("gpu.load", num("gpu.load"))
-            push("pwr.voltage", num("pwr.voltage"))
         }
     }
 

@@ -56,18 +56,13 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
-import kotlin.math.roundToInt
 
 /**
  * 控件层：主窗口按钮/开关/滑块直接调用 Kyant0 catalog 液态玻璃组件，
@@ -232,20 +227,18 @@ fun GlassSwitch(
 }
 
 // ---------------------------------------------------------------------------
-// 滑块（1.0.41 照上游 Kyant0/AndroidLiquidGlass catalog SliderContent 重写）
+// 滑块（1.0.42 完全照上游 Kyant0/AndroidLiquidGlass catalog SliderContent 抄）
 //
-// 上游 demo 的接线是「单一状态流直驱」：value lambda 直读状态，onValueChange
-// 直写状态，组件内部的 DampedDragAnimation（弹簧物理 + 按压放大 + 速度形变 +
-// InteractiveHighlight + 玻璃嵌玻璃）自己负责全部视觉动画——包装层不做任何
-// 拖动中的值量化/镜像加工。
+// 上游 demo 的接线：单一状态是唯一事实源——value lambda 直读状态，onValueChange
+// 直写状态，组件内部 DampedDragAnimation（弹簧物理 + 按压放大 + 速度形变 +
+// InteractiveHighlight + 玻璃嵌玻璃）自己负责全部视觉动画，包装层不做任何加工。
 //
-// 1.0.39 及之前踩过的两个坑，本版修复：
-//  1) 拖动中 snap 量化：慢拖时 delta 累计在被吸附值上，表现为「拖不动、跳档」
-//     ——已删除，档位滑块改为连续值 + 显示层取整；
-//  2) 外部回写回卷：DataStore 异步回流值滞后于手指，拖动中回写镜像值会把
-//     视觉值拉回过去（滑动回弹的根源）——现在按下期间忽略外部回流，抬起后
-//     只接受真正的外部重置。
-// 悬浮窗 / 无玻璃 / 禁用态仍回落 MD3 标准 Slider（本身即 1:1 跟手）。
+// demo 里没有「持久化回流」环节；我们设置项要写 DataStore，但回流绝不能回到
+// 拖动路径上——回流值滞后于手指，回写即乱跳（1.0.41 实测：快滑到处跳，根源
+// 是独立手势检测误判松手 + 旧回流回写）。本版照抄 demo 语义：本地状态一旦被
+// 用户碰过就是唯一事实源，外部值只在用户第一次碰之前跟随（覆盖 DataStore
+// 异步加载完成的那次跳变），此后一律忽略。不做任何拖动中检测、不猜手势。
+// 悬浮窗 / 无玻璃 / 禁用态仍回落 MD3 标准 Slider（同一套本地状态驱动）。
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -254,20 +247,32 @@ fun GlassSlider(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
-    steps: Int = 0,
     enabled: Boolean = true,
 ) {
     val colors = LocalTokenColors.current
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
 
+    // 上游 demo 语义：本地状态唯一事实源。用户没碰过之前跟随外部值（DataStore
+    // 异步加载完成会带一次跳变，跟随即可）；碰过之后外部回流一律忽略——拖动
+    // 路径上不再有任何异步环节，快滑绝不回跳。
+    var localValue by remember { mutableFloatStateOf(value.coerceIn(valueRange)) }
+    var touched by remember { mutableStateOf(false) }
+    LaunchedEffect(value) { if (!touched) localValue = value.coerceIn(valueRange) }
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val change: (Float) -> Unit = { raw ->
+        touched = true
+        val v = raw.coerceIn(valueRange)
+        localValue = v
+        currentOnValueChange(v)
+    }
+
     // 悬浮窗 / 无玻璃（backdrop 为 null）/ 禁用态：MD3 标准件
     if (backdrop == null || !enabled) {
         Slider(
-            value = value,
-            onValueChange = onValueChange,
+            value = localValue,
+            onValueChange = change,
             modifier = modifier.alpha(if (enabled) 1f else 0.45f),
             valueRange = valueRange,
-            steps = steps,
             enabled = enabled,
             colors = SliderDefaults.colors(
                 thumbColor = colors.accent,
@@ -278,36 +283,16 @@ fun GlassSlider(
         return
     }
 
-    // 主窗口：Kyant0/AndroidLiquidGlass 原版 LiquidSlider（vendor 源码未改参数），
-    // 接线方式 1:1 照上游 catalog SliderContent demo。
+    // 主窗口：Kyant0 原版 LiquidSlider，接线 1:1 照上游 catalog SliderContent。
     val span = valueRange.endInclusive - valueRange.start
-
-    // 本地即时镜像：拖动事件同帧写入、同帧上屏；外部状态（ViewModel）异步外发。
-    var localValue by remember { mutableFloatStateOf(value) }
-    // 按下期间忽略外部回流（回流的 DataStore 值滞后于手指，回写即回卷）。
-    var pressed by remember { mutableStateOf(false) }
-    LaunchedEffect(value) { if (!pressed) localValue = value }
-    val currentOnValueChange by rememberUpdatedState(onValueChange)
-
     LiquidSlider(
         value = { localValue },
-        onValueChange = { raw ->
-            val v = raw.coerceIn(valueRange)
-            localValue = v
-            currentOnValueChange(v)
-        },
+        onValueChange = change,
         valueRange = valueRange,
         // 与上游 demo 同一相对阈值（0..100 用 0.01 → 区间宽度的 1e-4）
         visibilityThreshold = span / 10_000f,
         backdrop = backdrop,
-        modifier = modifier.pointerInput(Unit) {
-            awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
-                pressed = true
-                waitForUpOrCancellation()
-                pressed = false
-            }
-        },
+        modifier = modifier,
     )
 }
 
