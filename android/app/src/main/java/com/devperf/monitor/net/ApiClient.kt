@@ -23,7 +23,7 @@ object ApiClient {
     private const val READ_TIMEOUT_MS = 15_000
 
     /** 请求结果：ok=true 时 data 为响应 JSON，否则 msg 为可展示给用户的错误。 */
-    data class Result(val ok: Boolean, val data: JSONObject?, val msg: String?)
+    data class Result(val ok: Boolean, val code: Int, val data: JSONObject?, val msg: String?)
 
     /**
      * 官方后端地址：启动时由 [resolveServerUrl] 从仓库官方文件自动发现并写入，
@@ -132,14 +132,14 @@ object ApiClient {
             val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
             if (code in 200..299) {
                 val json = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
-                Result(ok = json.optBoolean("ok", true), data = json, msg = json.optString("msg").ifEmpty { null })
+                Result(ok = json.optBoolean("ok", true), code = code, data = json, msg = json.optString("msg").ifEmpty { null })
             } else {
                 val json = runCatching { JSONObject(text) }.getOrNull()
-                Result(false, null, json?.optString("msg")?.ifEmpty { null } ?: "网络错误（$code）")
+                Result(false, code, null, json?.optString("msg")?.ifEmpty { null } ?: "网络错误（$code）")
             }
         } catch (e: Exception) {
             Log.w(TAG, "请求失败 $method $path", e)
-            Result(false, null, "无法连接服务器，请检查网络")
+            Result(false, 0, null, "无法连接服务器，请检查网络")
         } finally {
             conn?.disconnect()
         }
