@@ -3,141 +3,330 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>管理端 · {{ app_name }}</title>
+<title>管理控制台 · {{ app_name }}</title>
 <style>
-  :root{--blue:#1B6BFF;--ink:#0B1B33;--line:#E6ECF5;--bg:#F5F8FF;--red:#E5484D;--green:#2E9E5B;--amber:#B8860B}
+  :root{
+    --blue:#4C8DFF; --blue-soft:rgba(76,141,255,.14);
+    --ink:#EAF0FA; --muted:#93a2bd; --line:rgba(255,255,255,.10);
+    --green:#3DDC84; --amber:#FFB020; --red:#FF5C6C; --surface:rgba(255,255,255,.055);
+  }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC",sans-serif;background:var(--bg);color:var(--ink)}
-  header{background:#fff;border-bottom:1px solid var(--line);padding:14px 22px;display:flex;justify-content:space-between;align-items:center}
-  header b{font-size:18px}
-  .wrap{max-width:1100px;margin:22px auto;padding:0 18px}
-  .cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
-  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 20px;min-width:150px;flex:1}
-  .card .n{font-size:26px;font-weight:700}
-  .card .l{color:#6b7a90;font-size:13px;margin-top:4px}
-  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left}
-  th{color:#6b7a90;font-weight:600}
-  .tag{padding:2px 8px;border-radius:999px;font-size:12px}
-  .tag.normal{background:#E7F6EC;color:var(--green)}
-  .tag.restricted{background:#FFF3D6;color:var(--amber)}
-  .tag.disabled{background:#FDE7E7;color:var(--red)}
-  button{cursor:pointer;border:none;border-radius:10px;padding:8px 14px;font-size:14px;background:var(--blue);color:#fff}
-  button.ghost{background:#eef3ff;color:var(--blue)}
-  button.danger{background:#FDE7E7;color:var(--red)}
-  input,textarea,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin:4px 0}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC",sans-serif;
+    color:var(--ink); background:#070b16; overflow-x:hidden;
+  }
+  /* 背景光斑 */
+  body::before, body::after{
+    content:""; position:fixed; z-index:0; border-radius:50%; filter:blur(90px); opacity:.55;
+  }
+  body::before{width:520px;height:520px;background:radial-gradient(circle,#1f5cff,transparent 70%);top:-160px;right:-120px}
+  body::after{width:460px;height:460px;background:radial-gradient(circle,#7a3bff,transparent 70%);bottom:-180px;left:-140px}
+  .app{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:26px 22px 60px}
+
+  .glass{background:var(--surface);backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+
+  /* 登录 */
+  .login-wrap{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:20px}
+  .login{width:100%;max-width:380px;padding:34px 30px}
+  .login h1{margin:0 0 6px;font-size:22px;letter-spacing:.5px}
+  .login p{margin:0 0 22px;color:var(--muted);font-size:13px}
+  .err{color:var(--red);font-size:13px;margin-top:10px;min-height:18px}
+
+  input,textarea,select{
+    width:100%;padding:11px 13px;margin:8px 0;border-radius:12px;font-size:14px;
+    background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);outline:none;
+  }
+  input:focus,textarea:focus,select:focus{border-color:var(--blue);background:rgba(76,141,255,.10)}
+  textarea{resize:vertical;font-family:inherit}
+  label{font-size:12px;color:var(--muted);margin-top:6px;display:block}
+
+  button{cursor:pointer;border:none;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:600;background:var(--blue);color:#fff;transition:.15s}
+  button:hover{filter:brightness(1.08)}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:var(--blue-soft);color:var(--blue)}
+  button.danger{background:rgba(255,92,108,.16);color:var(--red)}
+  button.soft{background:rgba(255,255,255,.08);color:var(--ink)}
+  button.full{width:100%}
+
+  /* 顶栏 */
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .dot{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#4C8DFF,#7A3BFF);box-shadow:0 6px 18px rgba(76,141,255,.45)}
+  .brand b{font-size:18px}
+  .brand span{color:var(--muted);font-size:12px}
+
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px}
+  .stat{padding:18px 20px}
+  .stat .n{font-size:30px;font-weight:800;line-height:1}
+  .stat .l{color:var(--muted);font-size:13px;margin-top:8px}
+  .stat .n.warn{color:var(--amber)}
+
+  .grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;align-items:start}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr}}
+  .panel{padding:18px 20px}
+  .panel h3{margin:0 0 14px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .panel h3 .sub{color:var(--muted);font-size:12px;font-weight:400;margin-left:auto}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  tr:last-child td{border-bottom:none}
+  .tag{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .tag.normal{background:rgba(61,220,132,.16);color:var(--green)}
+  .tag.restricted{background:rgba(255,176,32,.16);color:var(--amber)}
+  .tag.disabled{background:rgba(255,92,108,.16);color:var(--red)}
+  .muted{color:var(--muted)}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .login{max-width:360px;margin:80px auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px}
-  .login h2{margin:0 0 14px}
-  .err{color:var(--red);font-size:13px;margin:6px 0}
-  .muted{color:#6b7a90;font-size:13px}
-  .modal{position:fixed;inset:0;background:rgba(10,20,40,.4);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:30px}
-  .modal.show{display:flex}
-  .sheet{background:#fff;border-radius:16px;padding:22px;max-width:720px;width:100%}
-  .log{font-size:13px;background:#f7f9fc;border-radius:10px;padding:10px;max-height:240px;overflow:auto}
-  .log div{padding:3px 0;border-bottom:1px dashed #eef}
-  .close{float:right}
-  a{color:var(--blue)}
+
+  /* 开关 */
+  .switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+  .track{width:46px;height:26px;border-radius:999px;background:rgba(255,255,255,.14);position:relative;transition:.2s}
+  .track.on{background:var(--blue)}
+  .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
+  .track.on .knob{left:23px}
+
+  .feat{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .feat .item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03)}
+  .feat .item .nm{font-size:13.5px}
+  .feat .item .on{color:var(--green);font-size:12px}
+  .feat .item .off{color:var(--muted);font-size:12px}
+
+  /* 抽屉 */
+  .scrim{position:fixed;inset:0;z-index:8;background:rgba(3,6,14,.5);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:.25s}
+  .scrim.show{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(560px,94vw);z-index:9;background:#0c1322;border-left:1px solid var(--line);
+    transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;padding:24px}
+  .drawer.show{transform:translateX(0)}
+  .drawer h2{margin:0 0 4px;font-size:19px}
+  .drawer .closex{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.08);border-radius:10px;width:34px;height:34px;padding:0}
+  .sec{margin-top:20px}
+  .sec h4{margin:0 0 10px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .kv{font-size:13.5px;line-height:1.9}
+  .kv .k{color:var(--muted)}
+  pre.snap{background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:12px;padding:12px;max-height:300px;overflow:auto;font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+  .log{font-size:12.5px;line-height:1.85;max-height:220px;overflow:auto;color:var(--muted)}
+  .log b{color:var(--ink)}
+  .ann{font-size:13px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+  .ann .t{font-weight:600;color:var(--blue)}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);z-index:20;background:rgba(20,28,46,.96);border:1px solid var(--line);
+    padding:11px 18px;border-radius:12px;font-size:13px;opacity:0;transition:.25s;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .mini{font-size:12px;color:var(--muted);margin-top:6px;display:block}
 </style>
 </head>
 <body>
-<header>
-  <b>管理端 · {{ app_name }}</b>
-  {% if authed %}<a href="/admin/logout">退出登录</a>{% endif %}
-</header>
-
-{% if not authed %}
-  <form class="login" method="POST" action="/admin">
-    <h2>管理端登录</h2>
-    <p class="muted">请输入管理密码</p>
-    <input type="password" name="password" placeholder="管理密码" autofocus required>
-    {% if error %}<div class="err">{{ error }}</div>{% endif %}
-    <button style="width:100%;margin-top:10px">进入</button>
-  </form>
-{% else %}
-  <div class="wrap">
-    <div class="cards" id="stats"></div>
-
-    <div class="panel">
-      <h3>全局公告</h3>
-      <input id="g_title" placeholder="标题">
-      <textarea id="g_content" rows="2" placeholder="内容"></textarea>
-      <button onclick="globalAnnounce()">发布全局公告</button>
-      <span id="g_msg" class="muted"></span>
-    </div>
-
-    <div class="panel">
-      <h3>注册用户（<span id="ucount">0</span>）</h3>
-      <table>
-        <thead><tr><th>账号</th><th>昵称</th><th>邮箱</th><th>手机号</th><th>状态</th><th>最近同步</th><th>操作数</th><th></th></tr></thead>
-        <tbody id="users"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="modal" id="modal">
-    <div class="sheet">
-      <button class="ghost close" onclick="closeModal()">关闭</button>
-      <h3 id="m_title"></h3>
-      <div id="m_body"></div>
-    </div>
-  </div>
+<div class="app" id="app"></div>
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer"></aside>
+<div class="toast" id="toast"></div>
 
 <script>
-const fmt = t => t ? new Date(t).toLocaleString('zh-CN') : '—';
-async function api(u, opt={}){ const r = await fetch(u, opt); return r.json(); }
+const APP = document.getElementById('app');
+const TOKEN_KEY = 'admin_token';
+const FEATURES = [
+  ['overlay','悬浮窗'],['sync','数据同步'],['alert','告警提醒'],['announcement','公告展示'],
+  ['deep_monitor','深度监测'],['background_collect','后台采集'],['feedback','意见反馈'],['auto_update','自动更新']
+];
 
-async function load(){
-  const s = await api('/api/admin/stats');
-  document.getElementById('stats').innerHTML =
-    [['总用户',s.total],['近1小时同步',s.synced_1h],['受限/禁用',s.restricted]]
-    .map(([l,n])=>`<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
-  const d = await api('/admin/api/users');
-  document.getElementById('ucount').textContent = d.users.length;
-  document.getElementById('users').innerHTML = d.users.map(u=>`
-    <tr>
-      <td>${u.account}</td><td>${u.nickname}</td><td>${u.email}</td><td>${u.phone}</td>
-      <td><span class="tag ${u.status}">${u.status}</span></td>
-      <td class="muted">${fmt(u.last_sync_at)}</td><td>${u.op_count}</td>
-      <td><button class="ghost" onclick="openUser(${u.id})">查看/管控</button></td>
-    </tr>`).join('');
+let token = localStorage.getItem(TOKEN_KEY) || '';
+
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function fmt(t){ return t ? new Date(t*1).toLocaleString('zh-CN') : '—'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function api(path, opts={}){
+  opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if(token) opts.headers['Authorization'] = 'Bearer '+token;
+  const r = await fetch(path, opts);
+  if(r.status===401){ logout(); throw new Error('登录已失效'); }
+  return r.json();
 }
+
+/* ---------------- 登录 ---------------- */
+function renderLogin(err){
+  APP.innerHTML = '';
+  const wrap = el(`<div class="login-wrap"><div class="glass login">
+      <h1>管理控制台</h1><p>请输入管理密码以进入 · {{ app_name }}</p>
+      <label for="pw">管理密码</label>
+      <input id="pw" type="password" placeholder="管理密码" autofocus>
+      <button class="full" style="margin-top:14px" onclick="doLogin()">进入控制台</button>
+      <div class="err">${esc(err||'')}</div>
+    </div></div>`);
+  APP.appendChild(wrap);
+  wrap.querySelector('#pw').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+}
+async function doLogin(){
+  const pw = document.getElementById('pw').value;
+  try{
+    const d = await (await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})})).json();
+    if(d.token){ token=d.token; localStorage.setItem(TOKEN_KEY,token); renderConsole(); }
+    else { renderLogin(d.msg || '密码错误'); }
+  }catch(e){ renderLogin('网络错误'); }
+}
+function logout(){ token=''; localStorage.removeItem(TOKEN_KEY); renderLogin(); }
+
+/* ---------------- 控制台 ---------------- */
+async function renderConsole(){
+  APP.innerHTML = `
+    <div class="topbar">
+      <div class="brand"><div class="dot"></div><div><b>管理控制台</b><br><span>{{ app_name }} · 深度绑定用户端</span></div></div>
+      <button class="soft" onclick="logout()">退出登录</button>
+    </div>
+    <div class="cards" id="stats"></div>
+    <div class="grid">
+      <div>
+        <div class="glass panel" style="margin-bottom:18px">
+          <h3>全局公告<span class="sub">推送给所有在线用户</span></h3>
+          <input id="g_title" placeholder="标题">
+          <textarea id="g_content" rows="2" placeholder="内容"></textarea>
+          <button onclick="globalAnnounce()">发布全局公告</button>
+        </div>
+        <div class="glass panel">
+          <h3>维护模式（服务暂停）<span class="sub">随时可恢复</span></h3>
+          <div class="row" style="margin:4px 0 10px">
+            <div class="switch" onclick="toggleMaint()"><div class="track" id="maint_track"><div class="knob"></div></div></div>
+            <span id="maint_label" class="muted">服务正常</span>
+          </div>
+          <input id="maint_msg" placeholder="暂停提示文案（可选）">
+          <span class="mini">开启后数据写入接口暂停，已登录用户将看到《服务暂停》公告。</span>
+        </div>
+      </div>
+      <div class="glass panel">
+        <h3>注册用户<span class="sub" id="ucount"></span></h3>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>账号</th><th>昵称</th><th>邮箱</th><th>状态</th><th>最近同步</th><th>操作</th></tr></thead>
+            <tbody id="users"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+  try{
+    const s = await api('/api/admin/stats');
+    document.getElementById('stats').innerHTML = [
+      ['总用户', s.total, ''],
+      ['近 1 小时同步', s.synced_1h, ''],
+      ['受限 / 禁用', s.restricted, s.restricted>0?'warn':'']
+    ].map(([l,n,c])=>`<div class="glass stat"><div class="n ${c}">${n}</div><div class="l">${l}</div></div>`).join('');
+
+    const d = await api('/api/admin/users');
+    document.getElementById('ucount').textContent = '共 '+d.users.length+' 人';
+    document.getElementById('users').innerHTML = d.users.map(u=>`
+      <tr>
+        <td>${esc(u.account)}</td><td>${esc(u.nickname||'—')}</td><td class="muted">${esc(u.email||'—')}</td>
+        <td><span class="tag ${u.status}">${u.status}</span></td>
+        <td class="muted">${fmt(u.last_sync_at)}</td>
+        <td><button class="ghost" onclick="openUser(${u.id})">详情 / 管控</button></td>
+      </tr>`).join('');
+
+    const m = await api('/api/admin/maintenance');
+    setMaint(m.maintenance, m.message);
+  }catch(e){ /* 401 已在 api 内处理 */ }
+}
+
+function setMaint(on, msg){
+  document.getElementById('maint_track').classList.toggle('on', !!on);
+  document.getElementById('maint_label').textContent = on ? '服务已暂停' : '服务正常';
+  if(msg) document.getElementById('maint_msg').value = msg;
+}
+async function toggleMaint(){
+  const on = !document.getElementById('maint_track').classList.contains('on');
+  const message = document.getElementById('maint_msg').value.trim();
+  const d = await api('/api/admin/maintenance',{method:'POST',body:JSON.stringify({enabled:on,message})});
+  setMaint(d.maintenance, d.message);
+  toast(d.maintenance ? '已开启维护模式' : '已恢复正常服务');
+}
+
+async function globalAnnounce(){
+  const title=document.getElementById('g_title').value.trim();
+  const content=document.getElementById('g_content').value.trim();
+  if(!title||!content){ toast('标题和内容均必填'); return; }
+  const d = await api('/api/admin/announce',{method:'POST',body:JSON.stringify({title,content})});
+  if(d.msg) toast(d.msg);
+  document.getElementById('g_title').value=''; document.getElementById('g_content').value='';
+}
+
+/* ---------------- 用户详情抽屉 ---------------- */
 async function openUser(id){
   const d = await api('/api/admin/users/'+id);
-  const u = d.user;
-  const feats = ['overlay','history','alert','update','feedback'];
-  document.getElementById('m_title').textContent = u.nickname+'（'+u.account+'）';
-  document.getElementById('m_body').innerHTML = `
-    <p class="muted">邮箱 ${u.email} · 手机 ${u.phone} · 注册 ${fmt(u.created_at)} · 状态 <b>${u.status}</b></p>
-    <h4>实时数据快照</h4>
-    <pre class="log">${JSON.stringify(d.snapshot,null,2)||'暂无同步数据'}</pre>
-    <h4>操作记录</h4>
-    <div class="log">${d.operations.map(o=>`<div>[${fmt(o.created_at)}] ${o.type} — ${o.detail}</div>`).join('')||'暂无'}</div>
-    <h4>功能开关</h4>
-    <div class="row">${feats.map(f=>`<button class="ghost" onclick="toggleFeat(${id},'${f}')">${f}</button>`).join('')}</div>
-    <p class="muted">已禁用：${(d.disabled_features||[]).join(', ')||'无'}</p>
-    <h4>账户状态</h4>
-    <div class="row">
-      <select id="st_${id}"><option value="normal">正常</option><option value="restricted">限制</option><option value="disabled">禁用</option></select>
-      <input id="note_${id}" placeholder="限制说明（可选）" value="${(d.restriction_note||'').replace(/"/g,'')}">
-      <button onclick="setStatus(${id})">应用</button>
+  const u = d.user, feats = d.disabled_features||[];
+  const drawer = document.getElementById('drawer');
+  drawer.innerHTML = `
+    <button class="closex" onclick="closeDrawer()">✕</button>
+    <h2>${esc(u.nickname||u.account)} <span class="tag ${u.status}" style="vertical-align:middle">${u.status}</span></h2>
+    <div class="muted" style="font-size:13px">账号 ${esc(u.account)}</div>
+
+    <div class="sec"><div class="kv">
+      <div><span class="k">邮箱：</span>${esc(u.email||'—')}</div>
+      <div><span class="k">手机：</span>${esc(u.phone||'—')}</div>
+      <div><span class="k">注册时间：</span>${fmt(u.created_at)}</div>
+      <div><span class="k">最近同步：</span>${fmt(u.last_sync_at)}</div>
+      <div><span class="k">操作数：</span>${u.op_count??0}</div>
+    </div></div>
+
+    <div class="sec"><h4>功能开关</h4>
+      <div class="feat">${FEATURES.map(([k,name])=>{
+        const off = feats.includes(k);
+        return `<div class="item"><span class="nm">${name}</span>
+          <span class="${off?'off':'on'}" style="cursor:pointer" onclick="toggleFeat(${u.id},'${k}',${!off})">${off?'已禁用 · 恢复':'正常 · 禁用'}</span></div>`;
+      }).join('')}</div>
     </div>
-    <h4>单独公告</h4>
-    <input id="t_${id}" placeholder="标题">
-    <textarea id="c_${id}" rows="2" placeholder="内容"></textarea>
-    <button onclick="announce(${id})">发送给该用户</button>
-    <span id="msg_${id}" class="muted"></span>
-  `;
-  document.getElementById('modal').classList.add('show');
+
+    <div class="sec"><h4>账号状态</h4>
+      <div class="row">
+        <select id="st_${u.id}">
+          <option value="normal" ${u.status==='normal'?'selected':''}>正常</option>
+          <option value="restricted" ${u.status==='restricted'?'selected':''}>受限</option>
+          <option value="disabled" ${u.status==='disabled'?'selected':''}>禁用</option>
+        </select>
+        <input id="note_${u.id}" placeholder="限制说明（可选）" value="${esc(d.restriction_note||'')}">
+        <button onclick="setStatus(${u.id})">应用</button>
+      </div>
+    </div>
+
+    <div class="sec"><h4>该用户端实时数据快照</h4>
+      <pre class="snap">${esc(JSON.stringify(d.snapshot,null,2) || '暂无同步数据')}</pre>
+      <span class="mini">最近更新：${fmt(d.snapshot_updated_at)}</span>
+    </div>
+
+    <div class="sec"><h4>操作记录</h4>
+      <div class="log">${d.operations.map(o=>`<div>[${fmt(o.created_at)}] <b>${esc(o.type)}</b> — ${esc(o.detail)}</div>`).join('')||'暂无'}</div>
+    </div>
+
+    <div class="sec"><h4>单独公告</h4>
+      <input id="t_${u.id}" placeholder="标题">
+      <textarea id="c_${u.id}" rows="2" placeholder="内容"></textarea>
+      <button onclick="announce(${u.id})">发送给该用户</button>
+    </div>`;
+  drawer.classList.add('show');
+  document.getElementById('scrim').classList.add('show');
 }
-function closeModal(){document.getElementById('modal').classList.remove('show');}
-async function toggleFeat(id,f){ const d=await api('/api/admin/users/'+id+'/disable_feature',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feature:f,disabled:true})}); document.getElementById('msg_'+id).textContent='已禁用 '+f; load(); }
-async function setStatus(id){ const st=document.getElementById('st_'+id).value; const note=document.getElementById('note_'+id).value; await api('/api/admin/users/'+id+'/set_status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st,note})}); closeModal(); load(); }
-async function announce(id){ const t=document.getElementById('t_'+id).value; const c=document.getElementById('c_'+id).value; const d=await api('/api/admin/users/'+id+'/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,content:c})}); document.getElementById('msg_'+id).textContent=d.msg; }
-async function globalAnnounce(){ const t=document.getElementById('g_title').value; const c=document.getElementById('g_content').value; const d=await api('/api/admin/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t,content:c})}); document.getElementById('g_msg').textContent=d.msg; }
-load();
+function closeDrawer(){ document.getElementById('drawer').classList.remove('show'); document.getElementById('scrim').classList.remove('show'); }
+
+async function toggleFeat(id, f, disabled){
+  await api('/api/admin/users/'+id+'/disable_feature',{method:'POST',body:JSON.stringify({feature:f,disabled})});
+  openUser(id);
+}
+async function setStatus(id){
+  const status=document.getElementById('st_'+id).value;
+  const note=document.getElementById('note_'+id).value.trim();
+  await api('/api/admin/users/'+id+'/set_status',{method:'POST',body:JSON.stringify({status,note})});
+  toast('状态已更新'); closeDrawer(); renderConsole();
+}
+async function announce(id){
+  const title=document.getElementById('t_'+id).value.trim();
+  const content=document.getElementById('c_'+id).value.trim();
+  if(!title||!content){ toast('标题和内容均必填'); return; }
+  const d = await api('/api/admin/users/'+id+'/announce',{method:'POST',body:JSON.stringify({title,content})});
+  if(d.msg) toast(d.msg);
+}
+
+/* ---------------- 启动 ---------------- */
+if(token) renderConsole().catch(()=>renderLogin());
+else renderLogin();
 </script>
-{% endif %}
 </body>
 </html>

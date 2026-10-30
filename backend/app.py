@@ -1033,9 +1033,13 @@ def admin_user_detail(uid):
         "SELECT id, title, content, created_at FROM announcements WHERE scope='user' AND user_id=? ORDER BY created_at DESC",
         (uid,),
     ).fetchall()
+    user = user_public(u)
+    user["op_count"] = conn.execute(
+        "SELECT COUNT(*) c FROM ops WHERE user_id=?", (uid,)
+    ).fetchone()["c"]
     conn.close()
     return json_ok(
-        user=user_public(u),
+        user=user,
         disabled_features=json.loads(u["disabled_features"] or "[]"),
         restriction_note=u["restriction_note"],
         snapshot=json.loads(snapshot["payload"]) if snapshot else None,
@@ -1195,7 +1199,7 @@ def admin_announcements():
     return json_ok(announcements=[dict(r) for r in rows])
 
 
-@app.route("/api/admin/maintenance", methods=["POST", "OPTIONS"])
+@app.route("/api/admin/maintenance", methods=["GET", "POST", "OPTIONS"])
 def admin_maintenance():
     """实时切换维护模式（服务暂停）。无需重新部署，随时可恢复。"""
     if request.method == "OPTIONS":
@@ -1203,6 +1207,9 @@ def admin_maintenance():
     ok, err = require_admin()
     if err:
         return err
+    if request.method == "GET":
+        on, msg = get_maintenance()
+        return json_ok(maintenance=on, message=msg)
     data = request.get_json(silent=True) or {}
     enabled = bool(data.get("enabled"))
     message = (data.get("message") or "").strip()
@@ -1216,14 +1223,8 @@ def admin_maintenance():
 # ---------------------------------------------------------------------------
 @app.route("/admin", methods=["GET", "POST"])
 def admin_page():
-    if request.method == "POST":
-        pwd = request.form.get("password", "")
-        if ADMIN_PASSWORD and pwd == ADMIN_PASSWORD:
-            session["admin"] = True
-            return redirect(url_for("admin_page"))
-        return render_template("admin.html", error="密码错误", authed=False, app_name=APP_NAME)
-    if not session.get("admin"):
-        return render_template("admin.html", error=None, authed=False, app_name=APP_NAME)
+    # 新版管理端为纯 API 驱动 SPA：登录态由前端 localStorage 的 token 接管，
+    # 后端只渲染外壳（不再依赖 session 登录分支）。
     return render_template("admin.html", error=None, authed=True, app_name=APP_NAME)
 
 
