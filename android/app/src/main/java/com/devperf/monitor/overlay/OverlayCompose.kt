@@ -57,17 +57,30 @@ data class OverlayData(
     val deviceTemp: Metric<Float>,
     val refreshHz: Metric<Float>,
     val fps: Metric<Float>,
+    /** 悬浮窗可选显示的全部候选指标（用户自选，1.0.43）。 */
+    val metrics: Map<CoreMetricId, Metric<Float>>,
 ) {
     companion object {
         fun from(
             fps: Metric<Float>,
             snapshot: DeviceSnapshot,
-        ): OverlayData = OverlayData(
-            memoryRatio = snapshot.memory.usageRatio,
-            deviceTemp = snapshot.thermal.deviceTempC,
-            refreshHz = snapshot.display.refreshRateHz,
-            fps = fps,
-        )
+        ): OverlayData {
+            val memory = snapshot.memory.usageRatio
+            val temp = snapshot.thermal.deviceTempC
+            val refresh = snapshot.display.refreshRateHz
+            return OverlayData(
+                memoryRatio = memory,
+                deviceTemp = temp,
+                refreshHz = refresh,
+                fps = fps,
+                metrics = mapOf(
+                    CoreMetricId.MEMORY_RATIO to memory,
+                    CoreMetricId.DEVICE_TEMP to temp,
+                    CoreMetricId.REFRESH_RATE to refresh,
+                    CoreMetricId.FPS to fps,
+                ),
+            )
+        }
     }
 }
 
@@ -105,6 +118,7 @@ fun OverlayContent(
     data: OverlayData,
     health: FocusedHealth.Result,
     intervalMs: Long,
+    selectedMetrics: Set<CoreMetricId>,
     callbacks: OverlayGestureCallbacks,
     modifier: Modifier = Modifier,
 ) {
@@ -135,13 +149,25 @@ fun OverlayContent(
             when (mode) {
                 OverlayController.Mode.COLLAPSED -> CollapsedStrip(state)
 
-                OverlayController.Mode.NUMBERS -> NumbersStrip(data, intervalMs)
+                OverlayController.Mode.NUMBERS -> NumbersStrip(
+                    data = data,
+                    intervalMs = intervalMs,
+                    selectedMetrics = selectedMetrics,
+                )
 
-                OverlayController.Mode.CARD -> CardContent(
+                OverlayController.Mode.COMPACT -> NumbersStrip(
+                    data = data,
+                    intervalMs = intervalMs,
+                    selectedMetrics = selectedMetrics,
+                    compact = true,
+                )
+
+                else -> CardContent(
                     state = state,
                     data = data,
                     health = health,
                     intervalMs = intervalMs,
+                    selectedMetrics = selectedMetrics,
                 )
             }
         }
@@ -155,6 +181,7 @@ private fun CardContent(
     data: OverlayData,
     health: FocusedHealth.Result,
     intervalMs: Long,
+    selectedMetrics: Set<CoreMetricId>,
 ) {
     val colors = LocalTokenColors.current
     // 悬浮窗采不到背后画面，容器用主题表面色（真实半透明，能透视后面的应用）；
@@ -177,7 +204,7 @@ private fun CardContent(
         ) {
             HealthBadge(health)
             Spacer(modifier = Modifier.width(10.dp))
-            MetricGrid(data, intervalMs, Modifier.weight(1f))
+            MetricGrid(data, intervalMs, selectedMetrics, Modifier.weight(1f))
         }
     }
 }
@@ -205,35 +232,31 @@ private fun HealthBadge(health: FocusedHealth.Result) {
     )
 }
 
+/** 按用户选中集合从 [OverlayData.metrics] 构造要显示的格子（有值显示，无值显示引导）。 */
+private fun buildCells(
+    data: OverlayData,
+    selectedMetrics: Set<CoreMetricId>,
+): List<GridCell> = buildList {
+    for (id in selectedMetrics) {
+        val m = data.metrics[id] ?: continue
+        if (m.value != null) add(GridCell(id, m.value))
+        else add(GridCell(id, null, metricHint(m.state)))
+    }
+}
+
 /**
- * 悬浮窗显示的三项：内存占用率 / 温度 / 屏幕刷新率，竖排三行。
- *
- * 早年这里放四项（含刷新率），1.0.9 应要求去掉刷新率、只留实时帧率，会出现
- * 2×2 缺一格，故改单列：标签在左、数值右对齐，扫一眼更整齐。
- * **1.0.17 起反过来**：用户要求悬浮窗显示手机屏幕刷新率取代实时帧率，所以第三行
- * 现在是「屏幕刷新率」（读 data 里的 `refreshHz`，无需任何授权就一定读得到）。
- * 只放采得到的，采不到的直接不进列表（悬浮窗寸土寸金，不放占位符）——
- * 例外：缺权限才能解释清楚的项要留一行引导，否则用户看不出是没做还是没授权。
+ * 悬浮窗显示的指标（1.0.43 起改为用户自选，见 [buildCells]）：内存占用率 / 温度 /
+ * 屏幕刷新率 / 帧率等，竖排三行，标签在左、数值右对齐，扫一眼更整齐。
+ * 只放采得到的，采不到的留一行引导（如「需 Shizuku 授权」），否则用户看不出是没做还是没授权。
  */
 @Composable
 private fun MetricGrid(
     data: OverlayData,
     intervalMs: Long,
+    selectedMetrics: Set<CoreMetricId>,
     modifier: Modifier = Modifier,
 ) {
-    val cells = buildList<GridCell> {
-        data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
-        data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
-        // 1.0.17：显示手机屏幕刷新率取代实时帧率（用户要求）。
-        // 1.0.9~1.0.16 这里挂的是 FPS，且当时刻意不让刷新率进悬浮窗
-        //（只用于综合评判的流畅度计算）；现在反过来。
-        val refreshValue = data.refreshHz.value
-        if (refreshValue != null) {
-            add(GridCell(CoreMetricId.REFRESH_RATE, refreshValue))
-        } else {
-            add(GridCell(CoreMetricId.REFRESH_RATE, null, metricHint(data.refreshHz.state)))
-        }
-    }
+    val cells = buildCells(data, selectedMetrics)
 
     if (cells.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -304,29 +327,23 @@ private fun MetricRow(
 }
 
 /**
- * 纯数字态：只要卡片上的数字，不要卡片。
+ * 纯数字态 / 极简态：只要数字，不要卡片。
  *
- * 无容器、无阴影、无小环——三个数字直接横排浮在屏幕上，
- * 每个数字保持自己的指标色；告警时统一转危险色（没有卡片可染，染数字）。
- * 帧率缺 Shizuku 授权时显示引导小字（与卡片态一致，不静默消失）。
+ * [compact]=false（纯数字态）：大号数字横排浮在屏幕上，每个数字保持各自的指标色；
+ * 告警时统一转危险色（没有卡片可染，染数字）。
+ * [compact]=true（极简态）：小一号字号、更紧间距，最省空间。
+ * 采不到的指标显示引导小字（与卡片态一致，不静默消失）。
  */
 @Composable
 private fun NumbersStrip(
     data: OverlayData,
     intervalMs: Long,
+    selectedMetrics: Set<CoreMetricId>,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val colors = LocalTokenColors.current
-    val cells = buildList<GridCell> {
-        data.memoryRatio.value?.let { add(GridCell(CoreMetricId.MEMORY_RATIO, it)) }
-        data.deviceTemp.value?.let { add(GridCell(CoreMetricId.DEVICE_TEMP, it)) }
-        // 1.0.17：显示手机屏幕刷新率取代实时帧率（用户要求），见 MetricGrid 注释
-        val refreshValue = data.refreshHz.value
-        if (refreshValue != null) {
-            add(GridCell(CoreMetricId.REFRESH_RATE, refreshValue))
-        } else {
-            add(GridCell(CoreMetricId.REFRESH_RATE, null, metricHint(data.refreshHz.state)))
-        }
-    }
+    val cells = buildCells(data, selectedMetrics)
 
     if (cells.isEmpty()) {
         // 纯数字态没有容器，缺数据时给一行小字兜底（避免空白窗口看不出所以然）
@@ -339,9 +356,9 @@ private fun NumbersStrip(
     }
 
     Row(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
     ) {
         cells.forEach { cell ->
             if (cell.value != null) {
@@ -356,7 +373,7 @@ private fun NumbersStrip(
                         intervalMs = intervalMs,
                         decimals = cell.id.decimals,
                         color = numberColor,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
                     )
                     Text(
                         text = cell.id.unit,
@@ -365,7 +382,7 @@ private fun NumbersStrip(
                     )
                 }
             } else {
-                // 引导行（如「需 Shizuku 授权」）：占一等宽格，保持三格布局稳定
+                // 引导行（如「需 Shizuku 授权」）：占一等宽格，保持布局稳定
                 Text(
                     text = cell.hint ?: "暂无数据",
                     style = MaterialTheme.typography.labelSmall,

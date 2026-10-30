@@ -45,8 +45,8 @@ class OverlayController(
     private val onRequestClose: () -> Unit,
 ) {
 
-    /** 悬浮窗三态。顺序即单击循环顺序。 */
-    enum class Mode { CARD, NUMBERS, COLLAPSED }
+    /** 悬浮窗四态。顺序即单击循环顺序。 */
+    enum class Mode { CARD, NUMBERS, COMPACT, COLLAPSED }
 
     data class UiState(
         val visible: Boolean = false,
@@ -216,7 +216,8 @@ class OverlayController(
         val s = _uiState.value
         val next = when (s.mode) {
             Mode.CARD -> Mode.NUMBERS
-            Mode.NUMBERS -> Mode.COLLAPSED
+            Mode.NUMBERS -> Mode.COMPACT
+            Mode.COMPACT -> Mode.COLLAPSED
             Mode.COLLAPSED -> Mode.CARD
         }
         _uiState.value = s.copy(mode = next)
@@ -300,6 +301,7 @@ class OverlayController(
         !_uiState.value.visible -> 0f
         _uiState.value.mode == Mode.COLLAPSED -> COLLAPSED_W_DP
         _uiState.value.mode == Mode.NUMBERS -> NUMBERS_W_DP
+        _uiState.value.mode == Mode.COMPACT -> COMPACT_W_DP
         else -> CARD_W_DP
     } * scaleFactor
 
@@ -307,6 +309,7 @@ class OverlayController(
         !_uiState.value.visible -> 0f
         _uiState.value.mode == Mode.COLLAPSED -> COLLAPSED_H_DP
         _uiState.value.mode == Mode.NUMBERS -> NUMBERS_H_DP
+        _uiState.value.mode == Mode.COMPACT -> COMPACT_H_DP
         else -> CARD_H_DP
     } * scaleFactor
 
@@ -395,6 +398,8 @@ class OverlayController(
         const val CARD_H_DP = 156f
         const val NUMBERS_W_DP = 224f
         const val NUMBERS_H_DP = 48f
+        const val COMPACT_W_DP = 200f
+        const val COMPACT_H_DP = 40f
         const val COLLAPSED_W_DP = 26f
         const val COLLAPSED_H_DP = 148f
 

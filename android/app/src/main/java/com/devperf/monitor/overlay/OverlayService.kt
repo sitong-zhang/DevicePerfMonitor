@@ -27,6 +27,7 @@ import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.Metric
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
+import com.devperf.monitor.data.OverlayStyle
 import com.devperf.monitor.data.SettingsRepository
 import com.devperf.monitor.ui.theme.DevicePerfTheme
 import kotlinx.coroutines.CoroutineScope
@@ -257,6 +258,7 @@ class OverlayService : android.app.Service() {
                         data = data,
                         health = health,
                         intervalMs = settings.refreshMode.tickMs,
+                        selectedMetrics = settings.overlayMetrics,
                         callbacks = callbacks,
                     )
                 }
@@ -297,34 +299,33 @@ class OverlayService : android.app.Service() {
 
     private fun observeSettings() {
         serviceScope.launch {
-            settingsRepository.settings
-                .distinctUntilChanged { a, b ->
-                    a.overlayEnabled == b.overlayEnabled &&
-                        a.overlayMiniMode == b.overlayMiniMode &&
-                        a.overlayOpacity == b.overlayOpacity &&
-                        a.overlayScale == b.overlayScale
-                }
-                .collect { s ->
-                    if (!s.overlayEnabled) {
-                        stopSelf()
-                    } else {
-                        // 窗口透明度（设置页滑杆 0.4~1.0，1.0.8 起真正接线）
-                        controller?.setOpacity(s.overlayOpacity)
-                        // 默认形态：迷你开关 = 默认纯数字；否则默认完整卡片
-                        controller?.setDefaultMode(
-                            if (s.overlayMiniMode) {
-                                OverlayController.Mode.NUMBERS
-                            } else {
-                                OverlayController.Mode.CARD
-                            }
-                        )
-                        // 默认缩放：仅在设置值变化时应用（不覆盖用户双指缩放的临时值）
-                        if (s.overlayScale != lastAppliedScale) {
-                            lastAppliedScale = s.overlayScale
-                            controller?.setScaleFromSettings(s.overlayScale)
-                        }
+        settingsRepository.settings
+            .distinctUntilChanged { a, b ->
+                a.overlayEnabled == b.overlayEnabled &&
+                    a.overlayStyle == b.overlayStyle &&
+                    a.overlayOpacity == b.overlayOpacity &&
+                    a.overlayScale == b.overlayScale
+            }
+            .collect { s ->
+                if (!s.overlayEnabled) {
+                    stopSelf()
+                } else {
+                    // 窗口透明度（设置页滑杆 0.4~1.0，1.0.8 起真正接线）
+                    controller?.setOpacity(s.overlayOpacity)
+                    // 默认形态：由用户在设置页选定的「悬浮窗样式」决定（1.0.43）
+                    val defaultMode = when (s.overlayStyle) {
+                        OverlayStyle.CARD -> OverlayController.Mode.CARD
+                        OverlayStyle.NUMBERS -> OverlayController.Mode.NUMBERS
+                        OverlayStyle.COMPACT -> OverlayController.Mode.COMPACT
+                    }
+                    controller?.setDefaultMode(defaultMode)
+                    // 默认缩放：仅在设置值变化时应用（不覆盖用户双指缩放的临时值）
+                    if (s.overlayScale != lastAppliedScale) {
+                        lastAppliedScale = s.overlayScale
+                        controller?.setScaleFromSettings(s.overlayScale)
                     }
                 }
+            }
         }
     }
 

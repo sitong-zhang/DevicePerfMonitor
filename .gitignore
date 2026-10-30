@@ -57,3 +57,7 @@ backend/.env
 # iOS / 全能签遗留目录（项目已全面安卓化，仅残留本地副本）
 /ios/
 /sign-tool/
+
+# ---- 长期固定签名（用户要求签名永不变化，密钥库随私有仓库走）----
+!android/keystore.properties
+!android/keystore/**

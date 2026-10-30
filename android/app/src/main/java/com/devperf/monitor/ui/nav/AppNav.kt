@@ -3,10 +3,14 @@ package com.devperf.monitor.ui.nav
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
@@ -110,6 +114,7 @@ object Routes {
     const val DEEP = "deep"
     const val SETTINGS = "settings"
     const val ACCOUNT = "account"
+    const val FEEDBACK = "feedback"
     const val DETAIL = "detail/{metricId}"
     const val DEEP_DETAIL = "deepDetail/{deepKey}"
 
@@ -164,6 +169,17 @@ fun AppNav(
         durationMillis = motion.exitDurationMs,
         easing = motion.exit,
     )
+    // 缩放 / 淡入淡出的曲线（Float 维度），与位移同一组设计令牌
+    val enterSpecFloat = tween<Float>(
+        durationMillis = motion.enterDurationMs,
+        easing = motion.enter,
+    )
+    val exitSpecFloat = tween<Float>(
+        durationMillis = motion.exitDurationMs,
+        easing = motion.exit,
+    )
+    // 压栈/返回时旧页「让位消失」的位移系数：旧页比新页慢一档，制造纵深层次
+    val PARALLAX = 0.35f
     // 底栏显隐用渐显渐隐（Float 曲线），开销远低于整栏纵向滑入
     val fadeSpec = androidx.compose.animation.core.tween<Float>(
         durationMillis = motion.enterDurationMs,
@@ -213,36 +229,57 @@ fun AppNav(
             if (disabled) {
                 // 账号被管理员禁用：锁定为「仅反馈」模式——只显示账号/禁用视图，
                 // 其中仅开放「提交反馈」与「退出登录」，其余功能（总览/监测/设置等）全部不可达。
-                AccountScreen(
-                    viewModel = viewModel,
-                    locked = true,
-                    onFeedback = { showFeedback = true },
-                    onLogout = { accountManager.logout() },
-                )
+                // 反馈页以独立页面呈现（替换而非覆盖）：showFeedback 为真时整页切到反馈，
+                // 下层锁定页随之消失，符合 iOS 式「页面切换即让位」的交互。
+                if (showFeedback) {
+                    FeedbackScreen(onBack = { showFeedback = false })
+                } else {
+                    AccountScreen(
+                        viewModel = viewModel,
+                        locked = true,
+                        onFeedback = { showFeedback = true },
+                        onLogout = { accountManager.logout() },
+                    )
+                }
             } else {
+            SharedTransitionLayout {
             NavHost(
                 navController = navController,
                 startDestination = Routes.OVERVIEW,
-                // 过渡策略（1.0.30 重写）：
-                // - 顶层 tab 互切：瞬时切换，不重叠合成新旧两页——既消除卡顿，
-                //   也避免玻璃 backdrop 同时重录两页的开销；旧页直接移除，消失干净。
-                // - 压入详情：新页从右横滑进入，旧页直接消失（不退出动画），
-                //   同一时刻只合成一页，开销最小、不卡。
-                // - 返回：当前页右滑出，下层页瞬时出现。
+                // 过渡策略（1.0.43 重写，抄 android/nowinandroid 的 SharedTransitionLayout +
+                // Material Motion 风格，所有页面统一「消失/出现」与交互逻辑）：
+                // - 顶层 tab 互切：瞬时切换（不重叠合成新旧两页），消除卡顿、避免玻璃
+                //   backdrop 同时重录两页；旧页直接移除，消失干净。
+                // - 压入详情：新页从右滑入 + 轻微放大 + 淡入；旧页向左慢一档让位
+                //   （缩放 1→0.94 + 淡出）——「消失逻辑」对所有页面统一生效。
+                // - 返回：当前页向右滑出 + 缩小 + 淡出消失；下层页从左淡入。
+                // - Navigation 2.9.4 默认开启 predictive back：侧滑返回时系统进度实时
+                //   驱动 popExit 的位移/缩放，页面跟手（即「交互逻辑」）。
                 enterTransition = {
                     val switching = initialState.destination.route in TOP_LEVEL_ROUTES &&
                         targetState.destination.route in TOP_LEVEL_ROUTES
                     if (switching) EnterTransition.None
-                    else slideInHorizontally(animationSpec = enterSpec) { it }
+                    else slideInHorizontally(animationSpec = enterSpec) { it } +
+                        scaleIn(animationSpec = enterSpecFloat, initialScale = 0.94f) +
+                        fadeIn(animationSpec = enterSpecFloat)
                 },
                 exitTransition = {
-                    ExitTransition.None
+                    val switching = initialState.destination.route in TOP_LEVEL_ROUTES &&
+                        targetState.destination.route in TOP_LEVEL_ROUTES
+                    if (switching) ExitTransition.None
+                    else slideOutHorizontally(animationSpec = exitSpec) { (it * PARALLAX).roundToInt() } +
+                        scaleOut(animationSpec = exitSpecFloat, targetScale = 0.94f) +
+                        fadeOut(animationSpec = exitSpecFloat)
                 },
                 popEnterTransition = {
-                    EnterTransition.None
+                    slideInHorizontally(animationSpec = enterSpec) { -(it * PARALLAX).roundToInt() } +
+                        scaleIn(animationSpec = enterSpecFloat, initialScale = 0.94f) +
+                        fadeIn(animationSpec = enterSpecFloat)
                 },
                 popExitTransition = {
-                    slideOutHorizontally(animationSpec = exitSpec) { it }
+                    slideOutHorizontally(animationSpec = exitSpec) { it } +
+                        scaleOut(animationSpec = exitSpecFloat, targetScale = 0.94f) +
+                        fadeOut(animationSpec = exitSpecFloat)
                 },
             ) {
                 composable(Routes.OVERVIEW) {
@@ -265,9 +302,12 @@ fun AppNav(
                     AccountScreen(
                         viewModel = viewModel,
                         locked = false,
-                        onFeedback = { showFeedback = true },
+                        onFeedback = { navController.navigate(Routes.FEEDBACK) },
                         onLogout = { accountManager.logout() },
                     )
+                }
+                composable(Routes.FEEDBACK) {
+                    FeedbackScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.DETAIL) { entry ->
                     val coreId = entry.arguments?.getString("metricId")
@@ -289,6 +329,7 @@ fun AppNav(
                         onBack = { navController.popBackStack() },
                     )
                 }
+            }
             }
 
             // 底部导航栏
@@ -340,10 +381,6 @@ fun AppNav(
             }
             }
 
-            // 反馈页浮层：禁用闸门与账号页均可触发，覆盖在当前内容之上
-            if (showFeedback) {
-                FeedbackScreen(onBack = { showFeedback = false })
-            }
         }
     }
 }

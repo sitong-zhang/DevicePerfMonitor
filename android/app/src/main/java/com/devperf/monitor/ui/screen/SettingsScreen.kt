@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -58,6 +59,8 @@ import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
 import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.data.WallpaperId
+import com.devperf.monitor.core.CoreMetricId
+import com.devperf.monitor.data.OverlayStyle
 import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.EnterStagger
@@ -242,27 +245,95 @@ fun SettingsScreen(
                     )
 
                     Spacer(Modifier.height(DesignTokens.Spacing.S4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "默认纯数字模式",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = colors.textPrimary,
-                            modifier = Modifier.weight(1f),
-                        )
-                        GlassSwitch(
-                            checked = settings.overlayMiniMode,
-                            onCheckedChange = {
-                                haptics.select()
-                                viewModel.setOverlayMiniMode(it)
-                            },
-                        )
+                    // ============ 悬浮窗显示项（1.0.43 个性化） ============
+                    Text(
+                        text = "悬浮窗显示项",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.textPrimary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    CoreMetricId.ordered.forEach { id ->
+                        val checked = id in settings.overlayMetrics
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = "${id.label}（${id.unit}）",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.textSecondary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            GlassSwitch(
+                                checked = checked,
+                                onCheckedChange = { want ->
+                                    haptics.select()
+                                    viewModel.setOverlayMetrics(
+                                        if (want) settings.overlayMetrics + id else settings.overlayMetrics - id,
+                                    )
+                                },
+                            )
+                        }
                     }
                     Text(
-                        text = "启动悬浮窗时只要数字、不显示卡片；关闭则显示完整卡片。" +
-                            "运行中单击可在 卡片 → 纯数字 → 收起 之间循环切换。",
+                        text = "勾选要在悬浮窗中显示的数据；运行中单击可在 卡片 → 纯数字 → 极简 → 收起 之间循环切换形态。",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textSecondary,
                     )
+                    Spacer(Modifier.height(DesignTokens.Spacing.S12.dp))
+                    // ============ 悬浮窗样式（1.0.43 个性化） ============
+                    Text(
+                        text = "悬浮窗样式",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.textPrimary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OverlayStyle.entries.forEach { style ->
+                        val selected = settings.overlayStyle == style
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { haptics.select(); viewModel.setOverlayStyle(style) }
+                                .then(
+                                    if (selected) {
+                                        Modifier.background(
+                                            colors.accent.copy(alpha = 0.12f),
+                                            RoundedCornerShape(12.dp),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .background(
+                                        color = if (selected) colors.accent else colors.textSecondary.copy(alpha = 0.35f),
+                                        shape = RoundedCornerShape(10.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (selected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(9.dp)
+                                            .background(colors.surface, RoundedCornerShape(5.dp)),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = style.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (selected) colors.textPrimary else colors.textSecondary,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "贴边吸附",

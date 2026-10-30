@@ -21,9 +21,15 @@
 -keep class rikka.shizuku.** { *; }
 -keep class moe.shizuku.** { *; }
 
-# Kotlin 协程
+# Kotlin 协程：必须完整保留、禁止重打包/改名/改可见性。
+# 否则其内部 SynchronizedObject 锁字段在部分 ART（如华为 API36）上会被 R8 优化成
+# null，导致启动即崩：StateFlowImpl.setValue 抛 "Null reference used for
+# synchronization (monitor-enter)"。此规则须放在 -repackageclasses 之前。
 -dontwarn kotlinx.coroutines.**
--keepclassmembers class kotlinx.coroutines.** { volatile <fields>; }
+-keep class kotlinx.coroutines.** { *; }
+-keep interface kotlinx.coroutines.** { *; }
+-keep class kotlinx.coroutines.internal.** { *; }
+-keep class kotlinx.coroutines.flow.** { *; }
 
 # 保留行号以便崩溃归因，但隐藏源文件名
 -keepattributes SourceFile,LineNumberTable

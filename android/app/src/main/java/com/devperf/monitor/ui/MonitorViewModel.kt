@@ -16,6 +16,7 @@ import com.devperf.monitor.core.MetricViewMode
 import com.devperf.monitor.data.MetricsRepository
 import com.devperf.monitor.data.MonitorSettings
 import com.devperf.monitor.data.RefreshMode
+import com.devperf.monitor.data.OverlayStyle
 import com.devperf.monitor.BuildConfig
 import com.devperf.monitor.data.AppRelease
 import com.devperf.monitor.data.FeedbackRepository
@@ -296,6 +297,16 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
 
     fun setOverlayScale(value: Float) = viewModelScope.launch {
         settingsRepository.setOverlayScale(value)
+    }
+
+    /** 设置悬浮窗显示哪些指标（1.0.43 个性化）。 */
+    fun setOverlayMetrics(metrics: Set<CoreMetricId>) = viewModelScope.launch {
+        settingsRepository.setOverlayMetrics(metrics)
+    }
+
+    /** 设置悬浮窗显示样式（1.0.43 个性化）。 */
+    fun setOverlayStyle(style: OverlayStyle) = viewModelScope.launch {
+        settingsRepository.setOverlayStyle(style)
     }
 
     fun setRefreshMode(mode: RefreshMode) = viewModelScope.launch {

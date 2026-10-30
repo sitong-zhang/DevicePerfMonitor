@@ -33,6 +33,25 @@ enum class ThemeMode(val label: String) {
 }
 
 /**
+ * 悬浮窗显示样式（1.0.43 新增）：用户可定制悬浮窗外观。
+ * - CARD：默认完整卡片，带综合健康小环；
+ * - NUMBERS：纯数字横排，无卡片容器与阴影；
+ * - COMPACT：极简条，小字号纯数字，最省屏幕空间。
+ */
+enum class OverlayStyle(val label: String) {
+    CARD("卡片（带健康环）"),
+    NUMBERS("纯数字"),
+    COMPACT("极简条"),
+}
+
+/** 悬浮窗默认显示项：内存占用率 / 设备温度 / 屏幕刷新率（经典三项）。 */
+fun defaultOverlayMetrics(): Set<CoreMetricId> = setOf(
+    CoreMetricId.MEMORY_RATIO,
+    CoreMetricId.DEVICE_TEMP,
+    CoreMetricId.REFRESH_RATE,
+)
+
+/**
  * 1.0.26 壁纸选择：内置三张（浅色基调，适配深色主题罩层）+ 用户相册自定义。
  *
  * 自定义图不在 DataStore 里存位图——只存「选了自定义」这个事实，
@@ -90,6 +109,17 @@ data class MonitorSettings(
      * false = 默认完整卡片（用户主路径：「等它显示那张卡片」）。
      */
     val overlayMiniMode: Boolean = false,
+    /**
+     * 悬浮窗显示哪些指标（用户自选，1.0.43 新增）。
+     * 候选池 = 全部稳定可读的核心指标（内存占用率 / 温度 / 屏幕刷新率 / 帧率）。
+     * 默认保留经典三项（内存 / 温度 / 刷新率）；帧率需授权，默认不勾选，
+     * 用户可在设置里自行加入。
+     */
+    val overlayMetrics: Set<CoreMetricId> = defaultOverlayMetrics(),
+    /**
+     * 悬浮窗显示样式（1.0.43 新增），取代原「默认纯数字模式」单一开关。
+     */
+    val overlayStyle: OverlayStyle = OverlayStyle.CARD,
     val snapToEdge: Boolean = true,
     val refreshMode: RefreshMode = RefreshMode.NORMAL,
     val tempAlertThresholdC: Float = 45f,
@@ -125,6 +155,11 @@ class SettingsRepository(private val context: Context) {
             overlayOpacity = prefs[KEY_OVERLAY_OPACITY] ?: 1f,
             overlayScale = prefs[KEY_OVERLAY_SCALE] ?: 1f,
             overlayMiniMode = prefs[KEY_OVERLAY_MINI] ?: false,
+            overlayMetrics = prefs[KEY_OVERLAY_METRICS]?.let { parseOverlayMetrics(it) }
+                ?.takeIf { it.isNotEmpty() } ?: defaultOverlayMetrics(),
+            overlayStyle = prefs[KEY_OVERLAY_STYLE]?.let { name ->
+                runCatching { OverlayStyle.valueOf(name) }.getOrNull()
+            } ?: OverlayStyle.CARD,
             snapToEdge = prefs[KEY_SNAP_EDGE] ?: true,
             refreshMode = prefs[KEY_REFRESH_MODE]?.let { name ->
                 runCatching { RefreshMode.valueOf(name) }.getOrNull()
@@ -174,6 +209,11 @@ class SettingsRepository(private val context: Context) {
     suspend fun setOverlayOpacity(value: Float) = put(KEY_OVERLAY_OPACITY, value)
     suspend fun setOverlayScale(value: Float) = put(KEY_OVERLAY_SCALE, value)
     suspend fun setOverlayMiniMode(value: Boolean) = put(KEY_OVERLAY_MINI, value)
+    /** 设置悬浮窗显示哪些指标（1.0.43）。 */
+    suspend fun setOverlayMetrics(metrics: Set<CoreMetricId>) =
+        put(KEY_OVERLAY_METRICS, metrics.joinToString("|") { it.name })
+    /** 设置悬浮窗显示样式（1.0.43）。 */
+    suspend fun setOverlayStyle(style: OverlayStyle) = put(KEY_OVERLAY_STYLE, style.name)
     suspend fun setSnapToEdge(value: Boolean) = put(KEY_SNAP_EDGE, value)
     suspend fun setRefreshMode(mode: RefreshMode) = put(KEY_REFRESH_MODE, mode.name)
     suspend fun setTempAlertThreshold(value: Float) = put(KEY_TEMP_THRESHOLD, value)
@@ -237,5 +277,14 @@ class SettingsRepository(private val context: Context) {
         val KEY_THEME = stringPreferencesKey("theme_mode")
         val KEY_WALLPAPER = stringPreferencesKey("wallpaper")
         val KEY_WALLPAPER_CUSTOM = stringPreferencesKey("wallpaper_custom_path")
+
+        /** 悬浮窗显示指标：CoreMetricId 名以 `|` 分隔；空串回落到默认值。 */
+        fun parseOverlayMetrics(raw: String): Set<CoreMetricId> =
+            raw.split("|").mapNotNull { part ->
+                runCatching { CoreMetricId.valueOf(part) }.getOrNull()
+            }.toSet()
+
+        val KEY_OVERLAY_METRICS = stringPreferencesKey("overlay_metrics")
+        val KEY_OVERLAY_STYLE = stringPreferencesKey("overlay_style")
     }
 }
