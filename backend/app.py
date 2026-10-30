@@ -44,7 +44,11 @@ from flask import (
     redirect,
     url_for,
     send_from_directory,
+    Response,
 )
+import threading
+import queue
+import time
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -84,6 +88,61 @@ _DATA_DIR = "/tmp/devperf-data-repo"
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", secrets.token_hex(16))
+
+# ---------------------------------------------------------------------------
+# 实时推送（SSE）：管理端改状态/开关/发公告后，立即推送给在线用户端
+# ---------------------------------------------------------------------------
+# 每个用户持有一个或多个 SSE 连接（单进程内存，GitHub Actions runner 单实例足够）。
+SSE_SUBS: dict[int, list[queue.Queue]] = {}
+SSE_LOCK = threading.Lock()
+
+
+def _sse_notify(uid: int) -> None:
+    """向某用户的所有在线 SSE 连接投递一个事件（唤醒它们立即回拉状态）。"""
+    with SSE_LOCK:
+        subs = list(SSE_SUBS.get(uid, []))
+    for q in subs:
+        try:
+            q.put_nowait(True)
+        except Exception:
+            pass
+
+
+@app.route("/api/stream", methods=["GET"])
+def stream():
+    u, err = require_user()
+    if err:
+        return err
+    uid = u["id"]
+    q: queue.Queue = queue.Queue()
+    with SSE_LOCK:
+        SSE_SUBS.setdefault(uid, []).append(q)
+    log = app.logger
+
+    def gen():
+        try:
+            yield ": connected\n\n"
+            while True:
+                try:
+                    # 阻塞等待推送信号，超时发心跳保活（防止隧道/代理断开）
+                    q.get(timeout=25)
+                    yield 'data: {"type":"sync_now"}\n\n'
+                except queue.Empty:
+                    yield ": ping\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            with SSE_LOCK:
+                subs = SSE_SUBS.get(uid, [])
+                if q in subs:
+                    subs.remove(q)
+
+    resp = Response(gen(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache, no-transform"
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Connection"] = "keep-alive"
+    return resp
+
 
 # 简单 CORS，便于 App / Web 跨域调用（生产可按需收紧）
 @app.after_request
@@ -850,6 +909,7 @@ def admin_disable_feature(uid):
     )
     conn.commit()
     conn.close()
+    _sse_notify(uid)  # 实时推送给该用户的在线客户端
     return json_ok(disabled_features=sorted(cur))
 
 
@@ -881,6 +941,7 @@ def admin_set_status(uid):
     )
     conn.commit()
     conn.close()
+    _sse_notify(uid)  # 实时推送给该用户的在线客户端
     return json_ok(status=status)
 
 
@@ -906,6 +967,7 @@ def admin_user_announce(uid):
     )
     conn.commit()
     conn.close()
+    _sse_notify(uid)  # 实时推送公告给该用户
     return json_ok(msg="已向该用户发送公告")
 
 
@@ -928,6 +990,11 @@ def admin_global_announce():
     )
     conn.commit()
     conn.close()
+    # 全局公告：推送给所有在线用户
+    with SSE_LOCK:
+        all_uids = list(SSE_SUBS.keys())
+    for u in all_uids:
+        _sse_notify(u)
     return json_ok(msg="已发布全局公告")
 
 
@@ -1023,4 +1090,4 @@ if __name__ == "__main__":
     print(f"[PulseGuard backend] ADMIN_PASSWORD={'*'*len(ADMIN_PASSWORD)} "
           f"DEV_MODE={DEV_MODE} SMTP_USER={SMTP_USER} "
           f"DATA_REPO={DATA_REPO or '未配置'}")
-    app.run(host="0.0.0.0", port=PORT, debug=DEV_MODE)
+    app.run(host="0.0.0.0", port=PORT, debug=DEV_MODE, threaded=True)
