@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理端 · 自动发现</title>
+<style>
+  :root{color-scheme:dark;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 820px at 50% -12%,#23233a,#050509 72%);
+    color:#f2f2f7;display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .card{
+    width:min(440px,92vw);
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:22px;padding:38px 30px;text-align:center;
+    backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);
+    box-shadow:0 24px 70px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.10);
+  }
+  .logo{
+    width:58px;height:58px;border-radius:16px;margin:0 auto 18px;
+    background:linear-gradient(180deg,#3a3a3c,#161618);
+    display:flex;align-items:center;justify-content:center;font-size:30px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 8px 20px rgba(0,0,0,.4);
+  }
+  h1{font-size:19px;font-weight:600;letter-spacing:.2px;}
+  p{margin-top:9px;font-size:13.5px;color:#a1a1aa;line-height:1.55;}
+  .spinner{margin:24px auto 4px;width:28px;height:28px;border:3px solid rgba(255,255,255,.15);
+           border-top-color:#0a84ff;border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .err{color:#ff9f0a;font-size:12.5px;margin-top:14px;line-height:1.5;}
+  .hint{color:#6b6b73;font-size:11.5px;margin-top:10px;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">⚙︎</div>
+    <h1>正在连接管理端…</h1>
+    <p>自动发现当前后端地址<br>（与客户端同一套发现机制）</p>
+    <div class="spinner" id="spin"></div>
+    <p id="msg">读取配置中…</p>
+    <div class="err" id="err"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+<script>
+const API="https://api.github.com/repos/sitong-zhang/DevicePerfMonitor/contents/backend-host.txt?ref=backend-host";
+const RAW="https://raw.githubusercontent.com/sitong-zhang/DevicePerfMonitor/backend-host/backend-host.txt";
+const msg=document.getElementById('msg'), errEl=document.getElementById('err'),
+      spin=document.getElementById('spin'), hint=document.getElementById('hint');
+
+function go(url){
+  if(!url||!/^https?:\/\//.test(url)){fail("未找到有效的后端地址。");return;}
+  msg.textContent="已发现后端，正在进入管理端…";
+  hint.textContent=url;
+  setTimeout(()=>{location.href=url.replace(/\/+$/,'')+"/admin";},450);
+}
+function fail(t){spin.style.display='none';errEl.textContent=t;msg.textContent="无法连接管理端。";
+  hint.innerHTML='请运行 <code>start_backend.sh</code> 启动后端，或部署到 Render。';}
+
+async function fetchRaw(){
+  try{const r=await fetch(RAW,{cache:'no-store'});if(r.ok){const t=(await r.text()).trim();
+    if(/^https?:\/\//.test(t))return t;}}catch(e){}
+  return null;
+}
+async function fetchApi(){
+  try{
+    const r=await fetch(API,{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
+    if(r.ok){const j=await r.json();
+      const t=atob((j.content||'').replace(/\s/g,'')).trim();
+      if(/^https?:\/\//.test(t))return t;}
+  }catch(e){}
+  return null;
+}
+(async()=>{
+  const t=(await fetchApi())||(await fetchRaw());
+  if(t) go(t); else fail("后端地址读取失败（可能后端尚未启动）。");
+})();
+</script>
+</body>
+</html>
