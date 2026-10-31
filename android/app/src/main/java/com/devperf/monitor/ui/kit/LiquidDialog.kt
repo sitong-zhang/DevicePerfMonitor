@@ -83,9 +83,6 @@ fun LiquidDialog(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = dismissible,
             dismissOnClickOutside = dismissible,
-            // 关掉系统 dim，用上游同款暗色罩：色相/浓度与玻璃容器配套
-            dimEnabled = false,
-            decorFitsSystemWindows = false,
         ),
     ) {
         Box(
