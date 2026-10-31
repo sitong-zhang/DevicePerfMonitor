@@ -63,8 +63,9 @@ class BottomTabsDragTest {
                 val wallpaper: ImageBitmap =
                     ImageBitmap.imageResource(R.drawable.wallpaper_light)
                 val navController = rememberNavController()
-                val backStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = backStackEntry?.destination?.route
+                // 1.0.48：BottomNavBar 变为受控组件（selectedTab + onSelectTab），
+                // 选中态由外部（AppNav 里是 pager.targetPage）持有，这里用本地状态复刻。
+                var selectedTab by androidx.compose.runtime.mutableIntStateOf(0)
                 Box(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.matchParentSize().appLayerBackdrop(backdrop)) {
                         Canvas(modifier = Modifier.matchParentSize()) {
@@ -97,17 +98,16 @@ class BottomTabsDragTest {
                                 .testTag("tabs"),
                         ) {
                             BottomNavBar(
-                                currentRoute = currentRoute,
-                                // 幂等导航，与 AppNav 里的一致
-                                onSelect = { route ->
-                                    onSelectLog += route
-                                    navController.navigate(route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                                selectedTab = selectedTab,
+                                onSelectTab = { index ->
+                                    // 与 AppNav 的 topLevelTabs 顺序一致（总览/监测/设置/账号）
+                                    onSelectLog += listOf(
+                                        com.devperf.monitor.Routes.OVERVIEW,
+                                        com.devperf.monitor.Routes.DEEP,
+                                        com.devperf.monitor.Routes.SETTINGS,
+                                        com.devperf.monitor.Routes.ACCOUNT,
+                                    )[index]
+                                    selectedTab = index
                                 },
                             )
                         }

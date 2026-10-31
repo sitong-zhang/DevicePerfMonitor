@@ -312,7 +312,12 @@ fun GlassTabs(
     val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
     if (backdrop != null) {
         // 每个选项一颗独立的 LiquidButton 玻璃胶囊（官方组件：vibrancy + blur +
-        // lens + InteractiveHighlight 按压反馈），选中态用 tint 区分。
+        // lens + InteractiveHighlight 按压反馈）。
+        // 1.0.48 可读性修复（用户反馈「按钮字体看不清」）：不再用半透明 accent 染
+        // 玻璃（白底上淡紫玻璃里的 accent 文字对比度不足），改用主题语义色——
+        // 选中 = primary 实底 + onPrimary 文字；未选 = onSurface 6% 浅灰底 +
+        // onSurface 文字。深浅主题都满足对比度要求。
+        val cs = MaterialTheme.colorScheme
         Row(
             modifier = modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -324,15 +329,11 @@ fun GlassTabs(
                     backdrop = backdrop,
                     modifier = Modifier.weight(1f),
                     isInteractive = true,
-                    tint = if (selected) {
-                        colors.accent.copy(alpha = 0.35f)
-                    } else {
-                        Color.Transparent
-                    },
+                    tint = Color.Transparent,
                     surfaceColor = if (selected) {
-                        colors.accent.copy(alpha = 0.5f)
+                        cs.primary.copy(alpha = 0.88f)
                     } else {
-                        Color.White.copy(alpha = 0.06f)
+                        cs.onSurface.copy(alpha = 0.06f)
                     },
                 ) {
                     Text(
@@ -340,21 +341,21 @@ fun GlassTabs(
                         style = MaterialTheme.typography.labelLarge,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
-                        color = if (selected) colors.accent else colors.textSecondary,
+                        color = if (selected) cs.onPrimary else cs.onSurface,
                     )
                 }
             }
         }
         return
     }
-    // 悬浮窗 / 无玻璃（backdrop 为 null）：MD3 标准分段按钮
+    // 悬浮窗 / 无玻璃（backdrop 为 null）：MD3 标准分段按钮（同样换语义色）
     val segColors = SegmentedButtonDefaults.colors(
-        activeContainerColor = colors.accent.copy(alpha = 0.22f),
-        activeContentColor = colors.accent,
-        activeBorderColor = colors.accent.copy(alpha = 0.5f),
-        inactiveContainerColor = colors.surface.copy(alpha = 0.5f),
-        inactiveContentColor = colors.textSecondary,
-        inactiveBorderColor = colors.textSecondary.copy(alpha = 0.25f),
+        activeContainerColor = MaterialTheme.colorScheme.primary,
+        activeContentColor = MaterialTheme.colorScheme.onPrimary,
+        activeBorderColor = MaterialTheme.colorScheme.primary,
+        inactiveContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
     )
     SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->

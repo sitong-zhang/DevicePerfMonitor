@@ -147,10 +147,8 @@ fun SettingsScreen(
                     PaddingValues(
                         start = DesignTokens.Spacing.S16.dp,
                         end = DesignTokens.Spacing.S16.dp,
-                        // 顶部 72dp：给壁纸右上角的公司 logo 角标留位（角标占
-                        // 10~60dp，见 AppNav.drawBrandWallpaper），「设置」标题
-                        // 首屏不压着角标。
-                        top = 72.dp,
+                        // 1.0.48：顶部留白 72→24dp（原为公司 logo 角标让位，角标已移除）
+                        top = 24.dp,
                         bottom = 96.dp,
                     ),
                 ),

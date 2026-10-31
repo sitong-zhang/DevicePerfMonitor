@@ -46,12 +46,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -173,6 +178,18 @@ fun AppNav(
     // 反馈页以浮层形式覆盖在当前页面之上（正常态的账号页 / 禁用态闸门都可触发）
     var showFeedback by remember { mutableStateOf(false) }
     val accountManager = (LocalContext.current.applicationContext as MonitorApp).accountManager
+
+    // 1.0.48 顶层 tab「页面跟随」：四个主页面放进 HorizontalPager，点底栏走
+    // animateScrollToPage——页面连续滑过中间页（从第 1 页跳第 4 页能看到中间页
+    // 掠过的过程），方向天然正确（往右切页面往右滑、往左切往左滑）。
+    // userScrollEnabled=false：页面只由底栏驱动，避免与页内横滑手势（滑块/轮播）冲突。
+    val pagerState = rememberPagerState(pageCount = { topLevelTabs.size })
+    val navScope = rememberCoroutineScope()
+    // targetPage：动画一开始就指向目的地，底栏 pill 即时跟手（与旧行为一致）。
+    // 注：Compose 1.11 的 PagerState.targetPage 直接就是 Int。
+    val selectedTabIndex by remember {
+        derivedStateOf { pagerState.targetPage }
+    }
 
     // NavHost / AnimatedVisibility 的 enter/exit 均为非 Composable lambda，
     // 不能在其中读取 CompositionLocal —— 先在 Composable 作用域取出曲线值
@@ -361,36 +378,44 @@ fun AppNav(
                 },
             ) {
                 composable(Routes.OVERVIEW) {
-                    OverviewScreen(
-                        viewModel = viewModel,
-                        onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
-                        onOpenDeepDetail = { key -> navController.navigate(Routes.deepDetail(key)) },
-                    )
-                }
-                composable(Routes.DEEP) {
-                    DeepMetricsScreen(viewModel = viewModel)
-                }
-                composable(Routes.SETTINGS) {
-                    SettingsScreen(
-                        viewModel = viewModel,
-                        onRequestOverlayPermission = onRequestOverlayPermission,
-                        onOpenOverlayCustomizer = {
-                            navController.navigate(Routes.OVERLAY_CUSTOMIZER)
-                        },
-                    )
+                    // 1.0.48：四个主页面全部住进这一页的 HorizontalPager（beyondViewport
+                    // 常驻，切 tab 状态不丢）；压栈子页（详情/反馈/定制器）仍走 NavHost。
+                    HorizontalPager(
+                        state = pagerState,
+                        beyondViewportPageCount = topLevelTabs.size,
+                        userScrollEnabled = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { page ->
+                        when (page) {
+                            0 -> OverviewScreen(
+                                viewModel = viewModel,
+                                onOpenDetail = { id -> navController.navigate(Routes.detail(id.name)) },
+                                onOpenDeepDetail = { key -> navController.navigate(Routes.deepDetail(key)) },
+                            )
+
+                            1 -> DeepMetricsScreen(viewModel = viewModel)
+
+                            2 -> SettingsScreen(
+                                viewModel = viewModel,
+                                onRequestOverlayPermission = onRequestOverlayPermission,
+                                onOpenOverlayCustomizer = {
+                                    navController.navigate(Routes.OVERLAY_CUSTOMIZER)
+                                },
+                            )
+
+                            else -> AccountScreen(
+                                viewModel = viewModel,
+                                locked = false,
+                                onFeedback = { navController.navigate(Routes.FEEDBACK) },
+                                onLogout = { accountManager.logout() },
+                            )
+                        }
+                    }
                 }
                 composable(Routes.OVERLAY_CUSTOMIZER) {
                     OverlayCustomizerScreen(
                         viewModel = viewModel,
                         onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(Routes.ACCOUNT) {
-                    AccountScreen(
-                        viewModel = viewModel,
-                        locked = false,
-                        onFeedback = { navController.navigate(Routes.FEEDBACK) },
-                        onLogout = { accountManager.logout() },
                     )
                 }
                 composable(Routes.FEEDBACK) {
@@ -427,21 +452,11 @@ fun AppNav(
                 exit = fadeOut(animationSpec = fadeSpec),
             ) {
                 BottomNavBar(
-                    currentRoute = currentRoute,
-                    // 幂等导航：重复 navigate 到当前页不会堆实例（launchSingleTop +
-                    // popUpTo 起始目的地）。Kyant0 catalog 的 demo 里 onTabSelected
-                    // 写的是 `{ selectedTabIndex = it }` 这种纯 setter；我们必须把
-                    // 「先判断再跳」的逻辑留在 Stack 外——组件内部的 LaunchedEffect
-                    // 只捕获第一次组合的 lambda，里面读到的 currentRoute 永远是陈旧的，
-                    //   于是拖动 pill 回第一个 tab 时它自己把调用吞掉了（表观：拖回去没反应）。
-                    onSelect = { route ->
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                    // 1.0.48：选中态由 pager 驱动（targetPage 动画一开始就到位）；
+                    // 点 tab / 拖 pill 落定后 animateScrollToPage，页面滑过去。
+                    selectedTab = selectedTabIndex,
+                    onSelectTab = { index ->
+                        navScope.launch { pagerState.animateScrollToPage(index) }
                     },
                 )
             }
@@ -535,31 +550,16 @@ private fun RestrictionBanner(note: String, onDismiss: () -> Unit, modifier: Mod
  */
 @Composable
 internal fun BottomNavBar(
-    currentRoute: String?,
-    onSelect: (String) -> Unit,
+    // 1.0.48：选中态单一真相源移到 pager（targetPage），底栏变成纯受控组件——
+    // 点击/拖动 pill → onSelectTab(index) → pager.animateScrollToPage，页面滑过去。
+    selectedTab: Int,
+    onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = rememberHaptics()
     val cs = MaterialTheme.colorScheme
     val capsule = RoundedCornerShape(DesignTokens.Radius.PILL.dp)
-    // 1.0.45 关键修复：非顶层页（feedback / overlayCustomizer / detail 等）返回 -1，
-    // 不再 coerceAtLeast(0)。原因：以前 coerce 归 0 后，点「意见反馈 / 定制悬浮窗」
-    // 的瞬间 currentRoute 变成子页路由 → routeIndex 归 0 → selectedTab 被写成 0 →
-    // LiquidBottomTabs 内部 snapshotFlow{currentIndex} 触发 onTabSelected(0) →
-    // 组件把「总览」当作用户选择又导航了一次——于是第一次点击总是先跳到总览页，
-    // 要再点一次子页才真正打开。索引语义：-1 = 当前不在任何顶层 tab（保持原选中）。
-    val routeIndex = topLevelTabs.indexOfFirst { it.route == currentRoute }
 
-    // 选中态单一真相源：selectedTab 直接持有「绝对索引」，照搬 Kyant0 catalog demo
-    // 的写法（GlassComponentsRenderTest 里的官方用法）。点击 / 拖动都先把它同步写成
-    // 目标索引——这一步是同步、即时的，pill 立刻跟过去，不再依赖导航把路由带过来
-    // 的那一帧延迟。导航交给 onSelect；路由因其它原因变化（如从详情页返回总览）时，
-    // 下方 LaunchedEffect(routeIndex) 再把 selectedTab 拉回当前页面（只在合法的
-    // 顶层 tab 路由上拉回，见 1.0.45 修复说明），保证「pill 停留位置 == 当前页面」。
-    var selectedTab by remember { mutableIntStateOf(routeIndex.coerceAtLeast(0)) }
-    LaunchedEffect(routeIndex) { if (routeIndex >= 0) selectedTab = routeIndex }
-
-    val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnSelect by rememberUpdatedState(onSelectTab)
 
     // 主窗口（backdrop 非 null）走 catalog LiquidBottomTabs（见下方 glassOn 分支）；
     // 悬浮窗 / 无玻璃保留自绘路径：Surface + 投影 + 描边 + 弹簧滑动指示器。
@@ -606,9 +606,7 @@ internal fun BottomNavBar(
                             selected = selected,
                             onSelect = {
                                 if (!selected) {
-                                    haptics.select()
-                                    selectedTab = i
-                                    onSelect(tab.route)
+                                    onSelectTab(i)
                                 }
                             },
                             modifier = Modifier.weight(1f),
@@ -629,10 +627,8 @@ internal fun BottomNavBar(
             LiquidBottomTabs(
                 selectedTabIndex = { selectedTab },
                 onTabSelected = { index ->
-                    // 拖动 pill 落定：写 selectedTab + 走同一条幂等导航链路
-                    haptics.select()
-                    selectedTab = index
-                    currentOnSelect(topLevelTabs[index].route)
+                    // 拖动 pill 落定：pager 滑到目标页（连续滑过中间页）
+                    currentOnSelect(index)
                 },
                 backdrop = backdrop,
                 tabsCount = topLevelTabs.size,
@@ -641,9 +637,7 @@ internal fun BottomNavBar(
                 topLevelTabs.forEachIndexed { i, tab ->
                     LiquidBottomTab(
                         onClick = {
-                            haptics.select()
-                            selectedTab = i
-                            currentOnSelect(tab.route)
+                            currentOnSelect(i)
                         },
                     ) {
                         // 图标/文字用统一内容色：选中感由滑动玻璃 pill 提供（官方 demo 同款），

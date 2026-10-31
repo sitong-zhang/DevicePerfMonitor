@@ -87,9 +87,8 @@ fun OverviewScreen(
             .fillMaxSize(),
         contentPadding = PaddingValues(
             start = 16.dp,
-            // 顶部 72dp：给壁纸右上角的公司 logo 角标留位（角标占 10~60dp，
-            // 见 AppNav.drawBrandWallpaper），首屏不重叠。
-            top = 72.dp,
+            // 1.0.48：顶部留白从 72dp 收回 24dp（原为公司 logo 角标让位，角标已移除）
+            top = 24.dp,
             end = 16.dp,
             // 底部必须给浮动胶囊底栏让出空间（底栏高度 + 下边距 + 一点呼吸），
             // 否则最后一张卡片会被底栏压住——1.0.9 之前没留，列表滚到底也看不见末尾。
@@ -112,35 +111,86 @@ fun OverviewScreen(
             }
         }
 
-        itemsIndexed(items = visible, key = { _, r -> r.id.name }) { index, reading ->
-            val mode = settings.metricViewModes[reading.id]
-                ?: defaultMetricViewModes()[reading.id]
-                ?: MetricViewMode.NUMBER
-            EnterStagger(index = index + 1) {
-                MetricCard(
-                    reading = reading,
-                    mode = effectiveMode(reading.id, mode),
-                    history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
-                    tickMs = viewModel.tickMs(),
-                    onClick = { onOpenDetail(reading.id) },
-                )
+        // 1.0.48 Bento 重排（参考开源 Bento Grid 仪表盘范式）：核心指标两列
+        // 网格（卡片大小反映优先级：综合评判 Hero 全宽 → 核心指标半宽小卡），
+        // 统一间距与圆角；单数落单的最后一张占满整行。
+        val coreRows = visible.chunked(2)
+        itemsIndexed(
+            items = coreRows,
+            key = { _, row -> row.joinToString("_") { it.id.name } },
+        ) { rowIndex, row ->
+            if (row.size == 2) {
+                Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp)) {
+                    row.forEachIndexed { col, reading ->
+                        val mode = settings.metricViewModes[reading.id]
+                            ?: defaultMetricViewModes()[reading.id]
+                            ?: MetricViewMode.NUMBER
+                        Box(Modifier.weight(1f)) {
+                            EnterStagger(index = rowIndex * 2 + col + 1) {
+                                MetricCard(
+                                    reading = reading,
+                                    mode = effectiveMode(reading.id, mode),
+                                    history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
+                                    tickMs = viewModel.tickMs(),
+                                    compact = true,
+                                    onClick = { onOpenDetail(reading.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                val reading = row.first()
+                val mode = settings.metricViewModes[reading.id]
+                    ?: defaultMetricViewModes()[reading.id]
+                    ?: MetricViewMode.NUMBER
+                EnterStagger(index = rowIndex * 2 + 1) {
+                    MetricCard(
+                        reading = reading,
+                        mode = effectiveMode(reading.id, mode),
+                        history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
+                        tickMs = viewModel.tickMs(),
+                        onClick = { onOpenDetail(reading.id) },
+                    )
+                }
             }
         }
 
-        // 深度指标卡（1.0.42 全量版）：监测页能采到的所有指标，以与核心指标
-        // 完全一致的卡片形式（大数字 + 波形）进总览，全部可点击进详情。
-        // 采不到的同样不占位。
-        itemsIndexed(items = deepCards, key = { _, c -> "deep-${c.key}" }) { index, card ->
-            EnterStagger(index = index + 1 + visible.size) {
-                DeepCard(
-                    card = card,
-                    history = if (card.value != null) {
-                        viewModel.deepHistory(card.key, CARD_WINDOW_SEC)
-                    } else {
-                        emptyList()
-                    },
-                    onClick = { onOpenDeepDetail(card.key) },
-                )
+        // 深度指标卡：同样两列 Bento（数值小卡），落单的占满整行。
+        val deepRows = deepCards.chunked(2)
+        itemsIndexed(items = deepRows, key = { _, c -> "deep-${c.first().key}" }) { rowIndex, row ->
+            if (row.size == 2) {
+                Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp)) {
+                    row.forEachIndexed { col, card ->
+                        Box(Modifier.weight(1f)) {
+                            EnterStagger(index = rowIndex * 2 + col + 1 + visible.size) {
+                                DeepCard(
+                                    card = card,
+                                    history = if (card.value != null) {
+                                        viewModel.deepHistory(card.key, CARD_WINDOW_SEC)
+                                    } else {
+                                        emptyList()
+                                    },
+                                    compact = true,
+                                    onClick = { onOpenDeepDetail(card.key) },
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                val card = row.first()
+                EnterStagger(index = rowIndex * 2 + 1 + visible.size) {
+                    DeepCard(
+                        card = card,
+                        history = if (card.value != null) {
+                            viewModel.deepHistory(card.key, CARD_WINDOW_SEC)
+                        } else {
+                            emptyList()
+                        },
+                        onClick = { onOpenDeepDetail(card.key) },
+                    )
+                }
             }
         }
 
@@ -213,11 +263,95 @@ private fun DeepCard(
     card: DeepCardData,
     history: List<Float>,
     onClick: () -> Unit,
+    compact: Boolean = false,
 ) {
     val colors = LocalTokenColors.current
     val accent = metricColor(card.colorKey)
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
+
+    if (compact) {
+        // 1.0.48 Bento 半宽紧凑卡：标签 + 大数字 + 迷你波形，纵向堆叠
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(124.dp)
+                .pressScale(interactionSource),
+            shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+            onClick = {
+                haptics.tick()
+                onClick()
+            },
+            interactionSource = interactionSource,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = card.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = when {
+                            card.estimated -> "推算"
+                            card.value != null -> "波形"
+                            else -> "实时"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent.copy(alpha = 0.75f),
+                    )
+                }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = card.display,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (card.unit.isNotBlank()) {
+                        Text(
+                            text = " ${card.unit}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
+                }
+                if (card.value != null) {
+                    Sparkline(
+                        points = history,
+                        color = accent,
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .fillMaxWidth()
+                            .height(34.dp),
+                    )
+                } else if (card.estimated && !card.note.isNullOrBlank()) {
+                    Text(
+                        text = "推算：${card.note}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+        }
+        return
+    }
 
     GlassCard(
         modifier = Modifier
@@ -503,12 +637,88 @@ private fun MetricCard(
     history: List<HistoryPoint>,
     tickMs: Long,
     onClick: () -> Unit,
+    compact: Boolean = false,
 ) {
     val colors = LocalTokenColors.current
     val accent = metricColor(reading.id.source.colorKey)
     val values = history.map { it.value }
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
+
+    if (compact) {
+        // 1.0.48 Bento 半宽紧凑卡：标签 + 大数字 + 底部迷你图，纵向堆叠
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(148.dp)
+                .pressScale(interactionSource),
+            shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+            onClick = {
+                haptics.tick()
+                onClick()
+            },
+            interactionSource = interactionSource,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    text = reading.id.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    when (mode) {
+                        MetricViewMode.RING -> ProgressRing(
+                            progress = (reading.value ?: 0f) / 100f,
+                            centerText = reading.value?.let { "${it.toInt()}" } ?: "",
+                            caption = reading.id.unit,
+                            color = accent,
+                            trackColor = accent.copy(alpha = 0.18f),
+                            modifier = Modifier.size(64.dp),
+                            strokeWidth = 7.dp,
+                        )
+
+                        else -> ValueText(
+                            reading,
+                            tickMs,
+                            accent,
+                            MaterialTheme.typography.displaySmall,
+                        )
+                    }
+                }
+                if (mode == MetricViewMode.WAVE || mode == MetricViewMode.BARS) {
+                    if (mode == MetricViewMode.WAVE) {
+                        Sparkline(
+                            points = values,
+                            color = accent,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                        )
+                    } else {
+                        BarSeries(
+                            points = values,
+                            color = accent,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
 
     // 固定高度：见 HealthCard 注释——LazyColumn item 的无界约束下 heightIn(min)
     // 会让 fillMaxSize 全部退化成 wrap，数字/图表顶到卡顶（1.0.14 修复）。
