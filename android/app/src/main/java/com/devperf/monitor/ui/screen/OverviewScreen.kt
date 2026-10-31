@@ -31,6 +31,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
 import com.devperf.monitor.core.MetricViewMode
@@ -105,9 +106,22 @@ fun OverviewScreen(
             return@LazyColumn
         }
 
+        // 1.0.49：补上信息层级——Bento 网格只是排布，真正让画面「有设计感」的
+        // 是分区标题带来的节奏（大 Hero → 分区小标 → 卡片群）。小标用次级色
+        // 的小字号 + 字距，不抢卡片戏份（Apple HIG 的 section header 做法）。
+        item(key = "cap_hero") {
+            OverviewSectionCaption(text = "综合评判")
+        }
+
         item(key = "health") {
             EnterStagger(index = 0) {
                 HealthCard(result = focused.health)
+            }
+        }
+
+        if (visible.isNotEmpty()) {
+            item(key = "cap_core") {
+                OverviewSectionCaption(text = "核心指标", topExtra = true)
             }
         }
 
@@ -158,6 +172,11 @@ fun OverviewScreen(
 
         // 深度指标卡：同样两列 Bento（数值小卡），落单的占满整行。
         val deepRows = deepCards.chunked(2)
+        if (deepRows.isNotEmpty()) {
+            item(key = "cap_deep") {
+                OverviewSectionCaption(text = "深度指标", topExtra = true)
+            }
+        }
         itemsIndexed(items = deepRows, key = { _, c -> "deep-${c.first().key}" }) { rowIndex, row ->
             if (row.size == 2) {
                 Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp)) {
@@ -562,6 +581,21 @@ private fun EmptyState() {
 // 综合评判
 // ---------------------------------------------------------------------------
 
+/** 分区小标题：给 Bento 卡片群分组，制造视觉节奏（Apple HIG 的 section header 做法）。 */
+@Composable
+private fun OverviewSectionCaption(text: String, topExtra: Boolean = false) {
+    val colors = LocalTokenColors.current
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.6.sp),
+        color = colors.textSecondary,
+        modifier = Modifier.padding(
+            start = 4.dp,
+            top = if (topExtra) 22.dp else 2.dp,
+            bottom = 2.dp,
+        ),
+    )
+}
 @Composable
 private fun HealthCard(result: FocusedHealth.Result) {
     val colors = LocalTokenColors.current

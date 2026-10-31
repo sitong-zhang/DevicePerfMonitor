@@ -52,8 +52,13 @@ import com.kyant.backdrop.catalog.components.LiquidSlider
 import com.kyant.backdrop.catalog.components.LiquidToggle
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.opacity
 import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -650,7 +655,17 @@ internal fun Modifier.glassSurface(
     effects = {
         vibrancy()
         lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
+        // 1.0.49：把上游 effects 里此前没用上的两项接进来——
+        //  colorControls 提一点点饱和与亮度（白底的通透感，不偏色）；
+        //  opacity 把采样层压到 0.92，字就不被背景纹理吃掉（黑白高级感的关键）。
+        colorControls(saturation = 1.12f, brightness = 0.03f)
+        opacity(0.92f)
     },
+    // 高光/外阴影走库默认；内阴影是 1.0.49 新启用的——卡片边缘一圈极淡描边，
+    // 让玻璃「有厚度」，这正是上游 demo 里差别明显的一层。
+    highlight = { Highlight.Default },
+    shadow = { Shadow.Default },
+    innerShadow = { InnerShadow.Default },
     onDrawSurface = {
         drawRect(color = tint, alpha = 0.4f)
     },

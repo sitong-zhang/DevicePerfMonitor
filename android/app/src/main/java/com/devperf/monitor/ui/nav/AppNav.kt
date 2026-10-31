@@ -54,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import kotlinx.coroutines.launch
@@ -94,6 +95,7 @@ import com.devperf.monitor.ui.screen.AccountScreen
 import com.devperf.monitor.ui.screen.DeepDetailScreen
 import com.devperf.monitor.ui.screen.DeepMetricsScreen
 import com.devperf.monitor.ui.screen.FeedbackScreen
+import com.devperf.monitor.ui.screen.GlassLabScreen
 import com.devperf.monitor.ui.screen.MetricDetailScreen
 import com.devperf.monitor.ui.screen.OverviewScreen
 import com.devperf.monitor.ui.screen.OverlayCustomizerScreen
@@ -122,6 +124,8 @@ object Routes {
     const val DEEP_DETAIL = "deepDetail/{deepKey}"
     /** 悬浮窗定制器（1.0.44）：自由增删 + 拖拽排序 + 实时预览。 */
     const val OVERLAY_CUSTOMIZER = "overlayCustomizer"
+    /** 玻璃实验室（1.0.49）：上游 Kyant0/AndroidLiquidGlass 组件与效果全景演示。 */
+    const val GLASS_LAB = "glassLab"
 
     fun detail(metricId: String) = "detail/$metricId"
 
@@ -185,10 +189,15 @@ fun AppNav(
     // userScrollEnabled=false：页面只由底栏驱动，避免与页内横滑手势（滑块/轮播）冲突。
     val pagerState = rememberPagerState(pageCount = { topLevelTabs.size })
     val navScope = rememberCoroutineScope()
-    // targetPage：动画一开始就指向目的地，底栏 pill 即时跟手（与旧行为一致）。
-    // 注：Compose 1.11 的 PagerState.targetPage 直接就是 Int。
-    val selectedTabIndex by remember {
-        derivedStateOf { pagerState.targetPage }
+    // 1.0.49 修复：选中态不能用 derivedStateOf 读 targetPage——
+    // PagerState.targetPage 在本版 Compose 里不是可靠的 snapshot 观察目标，
+    // derivedStateOf 失效后重组不到，表现就是「页面滑过去了、底栏 pill 不动」。
+    // 改为两级写：①点击/拖 pill 的瞬间同步写 selectedTab（pill 立即跟手）；
+    // ②再用 snapshotFlow 观察 pager 实际页下标持续校正，保证 pill 与页面永远一致。
+    var selectedTab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }
+            .collect { page -> if (page != selectedTab) selectedTab = page }
     }
 
     // NavHost / AnimatedVisibility 的 enter/exit 均为非 Composable lambda，
@@ -401,6 +410,7 @@ fun AppNav(
                                 onOpenOverlayCustomizer = {
                                     navController.navigate(Routes.OVERLAY_CUSTOMIZER)
                                 },
+                                onOpenGlassLab = { navController.navigate(Routes.GLASS_LAB) },
                             )
 
                             else -> AccountScreen(
@@ -420,6 +430,10 @@ fun AppNav(
                 }
                 composable(Routes.FEEDBACK) {
                     FeedbackScreen(onBack = { navController.popBackStack() })
+                }
+                // 玻璃实验室（1.0.49）：上游液态玻璃组件全景演示
+                composable(Routes.GLASS_LAB) {
+                    GlassLabScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Routes.DETAIL) { entry ->
                     val coreId = entry.arguments?.getString("metricId")
@@ -454,8 +468,9 @@ fun AppNav(
                 BottomNavBar(
                     // 1.0.48：选中态由 pager 驱动（targetPage 动画一开始就到位）；
                     // 点 tab / 拖 pill 落定后 animateScrollToPage，页面滑过去。
-                    selectedTab = selectedTabIndex,
+                    selectedTab = selectedTab,
                     onSelectTab = { index ->
+                        selectedTab = index // 同步写：pill 立刻跟过去，不等 pager 回调
                         navScope.launch { pagerState.animateScrollToPage(index) }
                     },
                 )

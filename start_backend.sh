@@ -43,13 +43,17 @@ CUR=$(gh api "repos/$REPO/contents/backend-host.txt?ref=backend-host" --jq '.con
       | base64 -d 2>/dev/null | tr -d '[:space:]')
 
 echo "==> [2/3] 隧道自愈"
-if [ -n "$CUR" ] && curl -s -o /dev/null --max-time 8 "$CUR/admin"; then
+# 注意：必须用 http_code 判断而不是 curl 退出码——隧道断了时域名仍解析、
+# 握手成功但返回 502，curl 不加 -f 照样退出 0（1.0.49 前就是这里误判成
+# 「可达」，于是永远不重连，用户侧一直「网络错误 (502)」）。
+probe() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null; }
+if [ -n "$CUR" ] && [ "$(probe "$CUR/health")" = "200" ]; then
   echo "    公网可达：$CUR（无需重启隧道）"
 else
-  echo "    公网不可达，重连隧道…"
+  echo "    公网不可达（$(probe "$CUR/health")），重连隧道…"
   SELF=$$
   # 杀掉旧隧道：过滤掉脚本自身 bash 进程，避免 pkill 自杀
-  for p in $(pgrep -f "localhost.run -p 22"); do
+  for p in $(pgrep -f "localhost[.]run"); do
     [ "$p" != "$SELF" ] && kill "$p" 2>/dev/null
   done
   sleep 1

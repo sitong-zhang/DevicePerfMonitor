@@ -99,6 +99,8 @@ fun SettingsScreen(
     onRequestOverlayPermission: () -> Unit,
     /** 打开「悬浮窗定制器」独立页（1.0.44）：自由增删 + 拖拽排序 + 实时预览。 */
     onOpenOverlayCustomizer: () -> Unit,
+    /** 打开「玻璃实验室」（1.0.49）：上游液态玻璃组件与效果全景演示。 */
+    onOpenGlassLab: () -> Unit = {},
 ) {
     val colors = LocalTokenColors.current
     val context = LocalContext.current
@@ -578,6 +580,18 @@ fun SettingsScreen(
                     },
                 )
             }
+
+            // ================= 玻璃实验室（1.0.49） =================
+            // 集中演示上游 Kyant0/AndroidLiquidGlass 的全部库级组件与效果。
+            GlassSectionHeader(text = "实验室")
+            GlassInfoRow(
+                label = "玻璃实验室",
+                value = "查看全部液态玻璃组件 →",
+                onClick = {
+                    haptics.tick()
+                    onOpenGlassLab()
+                },
+            )
 
             // ================= 关于 =================
             GlassSectionHeader(text = "关于")

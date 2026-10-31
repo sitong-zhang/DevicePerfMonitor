@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.devperf.monitor.data.CollectionService
+import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
@@ -99,8 +100,12 @@ class MainActivity : ComponentActivity() {
             }
             // 未登录时的三态：登录 / 注册 / 找回密码
             var authScreen by remember { mutableStateOf(0) } // 0=登录 1=注册 2=找回密码
-            DevicePerfTheme(settings.themeMode) {
-                if (session == null) {
+            if (session == null) {
+                // 登录 / 注册 / 找回密码：强制浅色（纸白背景 + 墨黑文字）。
+                // 用户要求这一段跟 Apple 账户界面一致的「黑白高级感」——不跟随系统
+                // 深色模式、也不跟随用户在设置里选的主题，任何时候进来都是白底黑字。
+                // 登录成功后回到主界面才切回用户自己的主题。
+                DevicePerfTheme(ThemeMode.LIGHT) {
                     when (authScreen) {
                         1 -> RegisterScreen(
                             accountManager = accountManager,
@@ -119,7 +124,9 @@ class MainActivity : ComponentActivity() {
                             onOpenForgotPassword = { authScreen = 2 },
                         )
                     }
-                } else {
+                }
+            } else {
+                DevicePerfTheme(settings.themeMode) {
                     AppNav(
                         viewModel = viewModel,
                         onRequestOverlayPermission = {
