@@ -13,6 +13,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +29,7 @@ import com.devperf.monitor.ui.kit.GlassButtonVariant
 import com.devperf.monitor.ui.kit.GlassInfoRow
 import com.devperf.monitor.ui.kit.GlassPanel
 import com.devperf.monitor.ui.kit.GlassSectionHeader
+import com.devperf.monitor.ui.kit.LiquidDialog
 import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
@@ -53,6 +57,8 @@ fun AccountScreen(
     val remote by viewModel.remoteState.collectAsState()
     val status = remote?.status ?: "normal"
     val note = (remote?.restrictionNote ?: "").trim()
+    // 1.0.51：退出登录前先弹玻璃确认（LiquidDialog），防误触
+    var showLogoutConfirm by remember { mutableStateOf(false) }
 
     EnterStagger(index = 0) {
         Column(
@@ -107,7 +113,7 @@ fun AccountScreen(
                 )
                 GlassButton(
                     text = "退出登录",
-                    onClick = { haptics.tick(); accountManager.logout() },
+                    onClick = { haptics.tick(); showLogoutConfirm = true },
                     variant = GlassButtonVariant.DANGER,
                 )
                 return@Column
@@ -176,8 +182,30 @@ fun AccountScreen(
             )
             GlassButton(
                 text = "退出登录",
-                onClick = { haptics.tick(); accountManager.logout() },
+                onClick = { haptics.tick(); showLogoutConfirm = true },
                 variant = GlassButtonVariant.DANGER,
+            )
+        }
+    }
+
+    if (showLogoutConfirm) {
+        LiquidDialog(
+            title = "退出登录",
+            confirmText = "退出",
+            dismissText = "取消",
+            onConfirm = {
+                showLogoutConfirm = false
+                haptics.tick()
+                accountManager.logout()
+            },
+            onDismiss = { showLogoutConfirm = false },
+            dismissible = true,
+        ) {
+            Text(
+                "退出后将停止数据采集与上传，重新登录即可恢复。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(horizontal = 28.dp),
             )
         }
     }

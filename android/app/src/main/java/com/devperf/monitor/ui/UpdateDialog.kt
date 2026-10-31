@@ -20,13 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -199,8 +196,8 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
  * 对话框外壳：状态图标 + 标题 + 副标题 + 内容槽 + 按钮行。
  * [dismissible] 为 false 时背景点击与返回键都无效。
  *
- * 1.0.47 起按用户要求移除顶部公司 logo（原为白底板圆角 logo），
- * 状态图标（刷新 / 完成 / 警告）直接放 AlertDialog 的 icon 槽。
+ * 1.0.51：AlertDialog → LiquidDialog（上游 catalog Dialog 同款玻璃形态，
+ * 用户对照截图第 4 张点名要的弹窗）。图标 / 标题 / 副标题槽位保持原语义。
  */
 @Composable
 private fun UpdateDialogShell(
@@ -214,45 +211,18 @@ private fun UpdateDialogShell(
     onDismiss: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = { if (dismissible) onDismiss?.invoke() },
-        icon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32f.dp),
-            )
-        },
-        title = {
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (subtitle.isNotBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4f.dp),
-                    )
-                }
-            }
-        },
-        text = { Column { content() } },
-        confirmButton = {
-            if (confirmText.isNotBlank()) {
-                Button(onClick = onConfirm) { Text(confirmText) }
-            }
-        },
-        dismissButton = {
-            if (dismissText != null && onDismiss != null) {
-                OutlinedButton(onClick = onDismiss) { Text(dismissText) }
-            }
-        },
-    )
+    LiquidDialog(
+        title = title,
+        subtitle = subtitle.ifBlank { null },
+        icon = icon,
+        confirmText = confirmText,
+        onConfirm = onConfirm.takeIf { confirmText.isNotBlank() },
+        dismissText = dismissText,
+        onDismiss = onDismiss,
+        dismissible = dismissible,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 28.dp)) { content() }
+    }
 }
 
 /** 版本对照：当前 → 目标，两个药丸标签。 */

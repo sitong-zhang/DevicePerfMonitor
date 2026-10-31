@@ -318,11 +318,10 @@ fun GlassTabs(
     if (backdrop != null) {
         // 每个选项一颗独立的 LiquidButton 玻璃胶囊（官方组件：vibrancy + blur +
         // lens + InteractiveHighlight 按压反馈）。
-        // 1.0.48 可读性修复（用户反馈「按钮字体看不清」）：不再用半透明 accent 染
-        // 玻璃（白底上淡紫玻璃里的 accent 文字对比度不足），改用主题语义色——
-        // 选中 = primary 实底 + onPrimary 文字；未选 = onSurface 6% 浅灰底 +
-        // onSurface 文字。深浅主题都满足对比度要求。
-        val cs = MaterialTheme.colorScheme
+        // 1.0.50 黑白定版（用户反馈「黑色字体完全看不清」）：此前用主题语义色，
+        // 主题/背景一翻转就出现「深底配深字」。现在直接钉死 Apple 式黑白——
+        // 选中 = 墨黑 #1D1D1F 实底 + 纯白文字；未选 = 白 72% 实底 + 墨黑文字。
+        // 任何主题、任何壁纸下都满足对比度，不再随 token 翻车。
         Row(
             modifier = modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -336,9 +335,9 @@ fun GlassTabs(
                     isInteractive = true,
                     tint = Color.Transparent,
                     surfaceColor = if (selected) {
-                        cs.primary.copy(alpha = 0.88f)
+                        Color(0xFF1D1D1F).copy(alpha = 0.88f)
                     } else {
-                        cs.onSurface.copy(alpha = 0.06f)
+                        Color.White.copy(alpha = 0.72f)
                     },
                 ) {
                     Text(
@@ -346,29 +345,29 @@ fun GlassTabs(
                         style = MaterialTheme.typography.labelLarge,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
-                        color = if (selected) cs.onPrimary else cs.onSurface,
+                        color = if (selected) Color.White else Color(0xFF1D1D1F),
                     )
                 }
             }
         }
         return
     }
-    // 悬浮窗 / 无玻璃（backdrop 为 null）：MD3 标准分段按钮（同样换语义色）
-    val segColors = SegmentedButtonDefaults.colors(
-        activeContainerColor = MaterialTheme.colorScheme.primary,
-        activeContentColor = MaterialTheme.colorScheme.onPrimary,
-        activeBorderColor = MaterialTheme.colorScheme.primary,
-        inactiveContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-        inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-    )
+    // 悬浮窗 / 无玻璃（backdrop 为 null）：同样黑白定版
     SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
+            val selected = index == selectedIndex
             SegmentedButton(
-                selected = index == selectedIndex,
+                selected = selected,
                 onClick = { onSelect(index) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                colors = segColors,
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = Color(0xFF1D1D1F),
+                    activeContentColor = Color.White,
+                    activeBorderColor = Color(0xFF1D1D1F),
+                    inactiveContainerColor = Color.White,
+                    inactiveContentColor = Color(0xFF1D1D1F),
+                    inactiveBorderColor = Color(0xFF1D1D1F).copy(alpha = 0.2f),
+                ),
                 label = {
                     Text(
                         text = option,
@@ -741,11 +740,10 @@ fun GlassCard(
 }
 
 /**
- * 「请务必记好您的密码」提醒弹窗（1.0.46）。
+ * 「请务必记好您的密码」提醒弹窗（1.0.46，1.0.51 重排为统一 LiquidDialog 形态）。
  *
  * 注册成功后弹出，用户确认后才进入主界面。玻璃质感与上游
- * Kyant0/AndroidLiquidGlass 官方 demo 一致：drawBackdrop(vibrancy + blur + lens)
- * 采样应用级 [LocalBackdrop]，按钮直接走 catalog 的 LiquidButton（经 [GlassButton]）。
+ * Kyant0/AndroidLiquidGlass catalog 的 Dialog demo 完全一致（LiquidDialog 内部实现）。
  */
 @Composable
 fun PasswordSavedDialog(
@@ -754,40 +752,13 @@ fun PasswordSavedDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    if (!show) return
-    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .then(
-                    if (backdrop != null) {
-                        Modifier.drawBackdrop(
-                            backdrop = backdrop,
-                            shape = { RoundedCornerShape(DesignTokens.Radius.CARD.dp) },
-                            effects = {
-                                vibrancy()
-                                blur(20f.dp.toPx())
-                                lens(10f.dp.toPx(), 20f.dp.toPx())
-                            },
-                            onDrawSurface = {
-                                drawRect(Color.White.copy(alpha = 0.10f))
-                            },
-                        )
-                    } else {
-                        Modifier.background(MaterialTheme.colorScheme.surface)
-                    }
-                )
-                .fillMaxWidth()
-                .padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+    if (show) {
+        LiquidDialog(
+            title = "请务必记好您的密码",
+            confirmText = "我已记好密码",
+            onConfirm = onConfirm,
+            dismissible = false,
         ) {
-            Text(
-                "请务必记好您的密码",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
             Text(
                 "账号「$account」的密码是登录本账户的唯一凭证，请务必牢记并妥善保管：\n" +
                     "• 不要与他人共享，也不要使用其他网站用过的密码；\n" +
@@ -795,12 +766,7 @@ fun PasswordSavedDialog(
                     "• 一旦忘记，只能通过注册邮箱接收验证码来重置。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(4.dp))
-            GlassButton(
-                text = "我已记好密码",
-                onClick = onConfirm,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.padding(horizontal = 28.dp),
             )
         }
     }

@@ -238,3 +238,38 @@ fun BarSeries(
         }
     }
 }
+
+/**
+ * 电平条（iOS 信号格样式，1.0.51 总览多形态新增）：把最近一个值映射到
+ * 分段格子上，格子高度逐级抬升、按值逐级点亮——和波形/柱状完全不同的
+ * 表达形态，专给「当前档位感」强的指标（温度这类）。
+ */
+@Composable
+fun LevelBars(
+    points: List<Float>,
+    color: Color,
+    modifier: Modifier = Modifier,
+    segments: Int = 5,
+) {
+    Canvas(modifier = modifier) {
+        if (points.isEmpty() || segments <= 0) return@Canvas
+        val range_ = autoRange(points)
+        val lo = range_.start
+        val span = (range_.endInclusive - lo).takeIf { it > 0.0001f } ?: 1f
+        val v = points.last()
+        val frac = ((v - lo) / span).coerceIn(0f, 1f)
+        val lit = (frac * segments).toInt().coerceIn(0, segments - 1) + 1
+        val gap = 3.dp.toPx()
+        val barW = ((size.width - gap * (segments - 1)) / segments).coerceAtLeast(2f)
+        for (i in 0 until segments) {
+            val left = i * (barW + gap)
+            val segH = size.height * (0.38f + 0.62f * (i + 1) / segments)
+            drawRoundRect(
+                color = if (i < lit) color else color.copy(alpha = 0.16f),
+                topLeft = Offset(left, size.height - segH),
+                size = Size(barW, segH),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 3f, barW / 3f),
+            )
+        }
+    }
+}

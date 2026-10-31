@@ -2,12 +2,11 @@ package com.devperf.monitor.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -16,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.devperf.monitor.ui.kit.LiquidDialog
 
 /**
  * 公告弹窗（1.0.22 新增）：从 [MonitorViewModel.announcementState] 取状态。
@@ -49,24 +49,23 @@ private fun AnnouncementDialogContent(
             scrollState.maxValue == 0 || scrollState.value >= scrollState.maxValue - 24
         }
     }
-    AlertDialog(
-        onDismissRequest = { /* 不可关闭：必须读完点确认 */ },
-        title = { Text(title.ifBlank { "公告" }) },
-        text = {
-            Text(
-                text = content,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Start,
-                modifier = Modifier
-                    .heightIn(max = 320.dp)
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm, enabled = reachedBottom) {
-                Text(if (reachedBottom) "我已知晓" else "请先滑到最底部")
-            }
-        },
-    )
+    // 1.0.51：AlertDialog → LiquidDialog（上游 catalog Dialog 同款玻璃形态）。
+    LiquidDialog(
+        title = title.ifBlank { "公告" },
+        confirmText = if (reachedBottom) "我已知晓" else "请先滑到最底部",
+        onConfirm = onConfirm.takeIf { reachedBottom },
+        confirmEnabled = reachedBottom,
+        dismissible = false,
+    ) {
+        Text(
+            text = content,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Start,
+            modifier = Modifier
+                .padding(horizontal = 28.dp)
+                .heightIn(max = 320.dp)
+                .fillMaxWidth()
+                .verticalScroll(scrollState),
+        )
+    }
 }

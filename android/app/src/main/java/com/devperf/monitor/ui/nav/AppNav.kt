@@ -576,6 +576,17 @@ internal fun BottomNavBar(
 
     val currentOnSelect by rememberUpdatedState(onSelectTab)
 
+    // 1.0.50 关键修复（用户反馈：点击 tab 页面切了、滑块不跳）：上游
+    // LiquidBottomTabs 内部用 remember(selectedTabIndex) 持有 currentIndex——
+    // key 是这个 lambda 对象本身！此前每次重组都传新 lambda 字面量，导致：
+    // ① remember 反复重算；② LaunchedEffect(selectedTabIndex) 反复重启。
+    // 点击后重组恰好发生在 pill 弹簧动画起步的同一帧，重启的 collectLatest
+    // 取消了刚启动的 animateToValue，滑块就停在原地。现在用 rememberUpdatedState
+    // + remember 包出「实例稳定、读取实时」的 provider：lambda 永远是同一个对象，
+    // 上游 snapshotFlow { selectedTabIndex() } 靠读取 State 感知变化，动画不再被取消。
+    val currentSelectedTab by rememberUpdatedState(selectedTab)
+    val selectedIndexProvider = remember { { currentSelectedTab } }
+
     // 主窗口（backdrop 非 null）走 catalog LiquidBottomTabs（见下方 glassOn 分支）；
     // 悬浮窗 / 无玻璃保留自绘路径：Surface + 投影 + 描边 + 弹簧滑动指示器。
     val backdrop = LocalBackdrop.current
@@ -640,7 +651,7 @@ internal fun BottomNavBar(
             // 选中项内容（官方 demo 同款结构）。高度由组件内部的 64dp 行驱动。
             // selectedTabIndex 直接用 { selectedTab }（点击/拖动都已先写它），pill 跟随。
             LiquidBottomTabs(
-                selectedTabIndex = { selectedTab },
+                selectedTabIndex = selectedIndexProvider,
                 onTabSelected = { index ->
                     // 拖动 pill 落定：pager 滑到目标页（连续滑过中间页）
                     currentOnSelect(index)

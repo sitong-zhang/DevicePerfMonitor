@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +44,7 @@ import com.devperf.monitor.ui.kit.BarSeries
 import com.devperf.monitor.ui.kit.EnterStagger
 import com.devperf.monitor.ui.kit.enterSpec
 import com.devperf.monitor.ui.kit.GlassCard
+import com.devperf.monitor.ui.kit.LevelBars
 import com.devperf.monitor.ui.kit.ProgressRing
 import com.devperf.monitor.ui.kit.Sparkline
 import com.devperf.monitor.ui.kit.metricColor
@@ -119,34 +121,35 @@ fun OverviewScreen(
             }
         }
 
+        // 1.0.51 多形态 Bento（不再全是同款半宽卡）：
+        // - 首个可见指标 → 全宽「特性卡」：大数字 + 面积波形 + 最值标注；
+        // - 其余指标 → 半宽小卡，按指标类型分配专属形态：
+        //   内存 → 环形 / 温度 → 电平条 / 刷新率 → 柱状 / 帧率 → 波形；
+        // - 落单的最后一张占满整行。
         if (visible.isNotEmpty()) {
-            item(key = "cap_core") {
-                OverviewSectionCaption(text = "核心指标", topExtra = true)
+            item(key = "feature") {
+                EnterStagger(index = 1) {
+                    FeatureMetricCard(
+                        reading = visible.first(),
+                        history = viewModel.history(visible.first().id.source, CARD_WINDOW_SEC),
+                        onClick = { onOpenDetail(visible.first().id) },
+                    )
+                }
             }
         }
-
-        // 1.0.48 Bento 重排（参考开源 Bento Grid 仪表盘范式）：核心指标两列
-        // 网格（卡片大小反映优先级：综合评判 Hero 全宽 → 核心指标半宽小卡），
-        // 统一间距与圆角；单数落单的最后一张占满整行。
-        val coreRows = visible.chunked(2)
+        val rest = visible.drop(1)
         itemsIndexed(
-            items = coreRows,
+            items = rest.chunked(2),
             key = { _, row -> row.joinToString("_") { it.id.name } },
         ) { rowIndex, row ->
             if (row.size == 2) {
                 Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp)) {
                     row.forEachIndexed { col, reading ->
-                        val mode = settings.metricViewModes[reading.id]
-                            ?: defaultMetricViewModes()[reading.id]
-                            ?: MetricViewMode.NUMBER
                         Box(Modifier.weight(1f)) {
-                            EnterStagger(index = rowIndex * 2 + col + 1) {
-                                MetricCard(
+                            EnterStagger(index = rowIndex * 2 + col + 2) {
+                                HalfMetricCard(
                                     reading = reading,
-                                    mode = effectiveMode(reading.id, mode),
                                     history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
-                                    tickMs = viewModel.tickMs(),
-                                    compact = true,
                                     onClick = { onOpenDetail(reading.id) },
                                 )
                             }
@@ -155,15 +158,10 @@ fun OverviewScreen(
                 }
             } else {
                 val reading = row.first()
-                val mode = settings.metricViewModes[reading.id]
-                    ?: defaultMetricViewModes()[reading.id]
-                    ?: MetricViewMode.NUMBER
-                EnterStagger(index = rowIndex * 2 + 1) {
-                    MetricCard(
+                EnterStagger(index = rowIndex * 2 + 2) {
+                    HalfMetricCard(
                         reading = reading,
-                        mode = effectiveMode(reading.id, mode),
                         history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
-                        tickMs = viewModel.tickMs(),
                         onClick = { onOpenDetail(reading.id) },
                     )
                 }
@@ -609,53 +607,124 @@ private fun HealthCard(result: FocusedHealth.Result) {
 
     // 固定高度：LazyColumn 的 item 同样拿到无界高度约束，heightIn(min) 会让
     // 卡片按内容收缩、fillMaxSize 退化成 wrap、内容顶到卡顶（1.0.14 修复）。
+    // 1.0.51 增高到 216dp：右侧环形下方补三维度档位条（多形态，不只是环）。
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(176.dp),
+            .height(216.dp),
         shape = RoundedCornerShape(DesignTokens.Radius.LARGE.dp),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProgressRing(
-                progress = (total ?: 0f) / 100f,
-                // 三个维度全采不到就不给分：圆环留空、不写占位数字
-                centerText = total?.let { "${it.toInt()}" } ?: "",
-                caption = result.grade?.label ?: "采集中",
-                color = accent,
-                trackColor = accent.copy(alpha = 0.18f),
-                modifier = Modifier.size(128.dp),
-            )
-            Column(
-                modifier = Modifier
-                    .padding(start = 18.dp)
-                    .weight(1f),
-                verticalArrangement = Arrangement.Center,
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "综合评判",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = colors.textPrimary,
+                ProgressRing(
+                    progress = (total ?: 0f) / 100f,
+                    // 三个维度全采不到就不给分：圆环留空、不写占位数字
+                    centerText = total?.let { "${it.toInt()}" } ?: "",
+                    caption = result.grade?.label ?: "采集中",
+                    color = accent,
+                    trackColor = accent.copy(alpha = 0.18f),
+                    modifier = Modifier.size(118.dp),
                 )
-                Text(
-                    text = result.summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textSecondary,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                result.weakest?.let { weakest ->
+                Column(
+                    modifier = Modifier
+                        .padding(start = 18.dp)
+                        .weight(1f),
+                ) {
                     Text(
-                        text = "最短板：${weakest.label}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = accent,
-                        modifier = Modifier.padding(top = 8.dp),
+                        text = "综合评判",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.textPrimary,
                     )
+                    Text(
+                        text = result.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    result.weakest?.let { weakest ->
+                        Text(
+                            text = "最短板：${weakest.label}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = accent,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
                 }
             }
+            // 1.0.51：三维度分数档位条——Hero 不再只是「环 + 一句话」
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                DimensionBar(
+                    label = "流畅",
+                    score = result.smoothnessScore,
+                    color = colors.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                DimensionBar(
+                    label = "温度",
+                    score = result.temperatureScore,
+                    color = colors.warning,
+                    modifier = Modifier.weight(1f),
+                )
+                DimensionBar(
+                    label = "内存",
+                    score = result.memoryScore,
+                    color = colors.success,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/** 维度档位条：0~100 分映射到一条圆角横条 + 分数。分数缺失时只画空轨道。 */
+@Composable
+private fun DimensionBar(
+    label: String,
+    score: Float?,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalTokenColors.current
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = score?.let { "${it.toInt()}" } ?: "—",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (score != null) color else colors.textSecondary,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .fillMaxWidth()
+                .height(5.dp)
+                .background(color.copy(alpha = 0.16f), RoundedCornerShape(3.dp)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth((score ?: 0f) / 100f)
+                    .fillMaxHeight()
+                    .background(color, RoundedCornerShape(3.dp)),
+            )
         }
     }
 }
@@ -664,14 +733,15 @@ private fun HealthCard(result: FocusedHealth.Result) {
 // 指标卡
 // ---------------------------------------------------------------------------
 
+/**
+ * 全宽「特性卡」（1.0.51 多形态重排）：大数字 + 面积波形 + 最值标注。
+ * 给「当前值最重要」的第一个可见指标，视觉权重最高。
+ */
 @Composable
-private fun MetricCard(
+private fun FeatureMetricCard(
     reading: MonitorViewModel.CoreReading,
-    mode: MetricViewMode,
     history: List<HistoryPoint>,
-    tickMs: Long,
     onClick: () -> Unit,
-    compact: Boolean = false,
 ) {
     val colors = LocalTokenColors.current
     val accent = metricColor(reading.id.source.colorKey)
@@ -679,88 +749,10 @@ private fun MetricCard(
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
 
-    if (compact) {
-        // 1.0.48 Bento 半宽紧凑卡：标签 + 大数字 + 底部迷你图，纵向堆叠
-        GlassCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(148.dp)
-                .pressScale(interactionSource),
-            shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
-            onClick = {
-                haptics.tick()
-                onClick()
-            },
-            interactionSource = interactionSource,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    text = reading.id.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    when (mode) {
-                        MetricViewMode.RING -> ProgressRing(
-                            progress = (reading.value ?: 0f) / 100f,
-                            centerText = reading.value?.let { "${it.toInt()}" } ?: "",
-                            caption = reading.id.unit,
-                            color = accent,
-                            trackColor = accent.copy(alpha = 0.18f),
-                            modifier = Modifier.size(64.dp),
-                            strokeWidth = 7.dp,
-                        )
-
-                        else -> ValueText(
-                            reading,
-                            tickMs,
-                            accent,
-                            MaterialTheme.typography.displaySmall,
-                        )
-                    }
-                }
-                if (mode == MetricViewMode.WAVE || mode == MetricViewMode.BARS) {
-                    if (mode == MetricViewMode.WAVE) {
-                        Sparkline(
-                            points = values,
-                            color = accent,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(36.dp),
-                        )
-                    } else {
-                        BarSeries(
-                            points = values,
-                            color = accent,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(36.dp),
-                        )
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    // 固定高度：见 HealthCard 注释——LazyColumn item 的无界约束下 heightIn(min)
-    // 会让 fillMaxSize 全部退化成 wrap，数字/图表顶到卡顶（1.0.14 修复）。
-    // 120dp = 标签行 ~20 + 上下内边距 24 + 环形 72，四种显示模式都放得下。
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(168.dp)
             .pressScale(interactionSource),
         shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
         onClick = {
@@ -780,119 +772,175 @@ private fun MetricCard(
             ) {
                 Text(
                     text = reading.id.label,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = colors.textSecondary,
                     modifier = Modifier.weight(1f),
                 )
-                // 右上角的模式标识，点进详情页可切换
                 Text(
-                    text = mode.label,
+                    text = "60 秒",
                     style = MaterialTheme.typography.labelSmall,
                     color = accent.copy(alpha = 0.75f),
                 )
             }
+            Row(verticalAlignment = Alignment.Bottom) {
+                AnimatedNumber(
+                    value = reading.value ?: 0f,
+                    intervalMs = 0L,
+                    decimals = reading.id.decimals,
+                    color = accent,
+                    style = MaterialTheme.typography.displaySmall,
+                )
+                Text(
+                    text = " ${reading.id.unit}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            if (values.size >= 2) {
+                Sparkline(
+                    points = values,
+                    color = accent,
+                    fillAlpha = 0.26f,
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .fillMaxWidth()
+                        .weight(1f),
+                )
+                val lo = values.min()
+                val hi = values.max()
+                Text(
+                    text = "低 $lo · 高 $hi",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
 
-            // 模式切换时交叉淡入，避免布局硬切
-            Crossfade(
-                targetState = mode,
-                animationSpec = enterSpec(),
-                label = "metricMode",
-            ) { currentMode ->
-                Box(modifier = Modifier.fillMaxSize()) {
-                    when (currentMode) {
-                        MetricViewMode.NUMBER -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.CenterStart,
-                            ) {
-                                ValueText(
-                                    reading,
-                                    tickMs,
-                                    accent,
-                                    MaterialTheme.typography.displaySmall,
-                                )
-                            }
-                        }
+/**
+ * 半宽小卡（1.0.51 多形态重排）：按指标类型分配专属可视化形态——
+ * 内存 → 环形仪表 / 温度 → 分段电平条 / 刷新率 → 柱状 / 帧率 → 波形线。
+ * 同一屏四种形态混排，不再全是「数字 + 小波形」的复制粘贴。
+ */
+@Composable
+private fun HalfMetricCard(
+    reading: MonitorViewModel.CoreReading,
+    history: List<HistoryPoint>,
+    onClick: () -> Unit,
+) {
+    val colors = LocalTokenColors.current
+    val accent = metricColor(reading.id.source.colorKey)
+    val values = history.map { it.value }
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
 
-                        MetricViewMode.RING -> {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                ProgressRing(
-                                    progress = (reading.value ?: 0f) / 100f,
-                                    centerText = reading.value?.let { "${it.toInt()}" } ?: "",
-                                    caption = reading.id.unit,
-                                    color = accent,
-                                    trackColor = accent.copy(alpha = 0.18f),
-                                    modifier = Modifier.size(72.dp),
-                                    strokeWidth = 8.dp,
-                                )
-                                Text(
-                                    text = "占用越高越吃力",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.textSecondary,
-                                    modifier = Modifier.padding(start = 14.dp),
-                                )
-                            }
-                        }
-
-                        MetricViewMode.WAVE -> {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(0.42f)
-                                        .fillMaxHeight(),
-                                    contentAlignment = Alignment.CenterStart,
-                                ) {
-                                    ValueText(
-                                        reading,
-                                        tickMs,
-                                        accent,
-                                        MaterialTheme.typography.headlineSmall,
-                                    )
-                                }
-                                Sparkline(
-                                    points = values,
-                                    color = accent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                )
-                            }
-                        }
-
-                        MetricViewMode.BARS -> {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(0.42f)
-                                        .fillMaxHeight(),
-                                    contentAlignment = Alignment.CenterStart,
-                                ) {
-                                    ValueText(
-                                        reading,
-                                        tickMs,
-                                        accent,
-                                        MaterialTheme.typography.headlineSmall,
-                                    )
-                                }
-                                BarSeries(
-                                    points = values,
-                                    color = accent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                )
-                            }
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(148.dp)
+            .pressScale(interactionSource),
+        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        onClick = {
+            haptics.tick()
+            onClick()
+        },
+        interactionSource = interactionSource,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = reading.id.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                when (reading.id) {
+                    CoreMetricId.MEMORY_RATIO -> Text("环形", style = MaterialTheme.typography.labelSmall, color = accent.copy(alpha = 0.75f))
+                    CoreMetricId.DEVICE_TEMP -> Text("档位", style = MaterialTheme.typography.labelSmall, color = accent.copy(alpha = 0.75f))
+                    CoreMetricId.REFRESH_RATE -> Text("分布", style = MaterialTheme.typography.labelSmall, color = accent.copy(alpha = 0.75f))
+                    else -> Text("波形", style = MaterialTheme.typography.labelSmall, color = accent.copy(alpha = 0.75f))
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                when (reading.id) {
+                    // 内存：有界 0~100，环形仪表最直观
+                    CoreMetricId.MEMORY_RATIO -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        ProgressRing(
+                            progress = (reading.value ?: 0f) / 100f,
+                            centerText = reading.value?.let { "${it.toInt()}" } ?: "",
+                            caption = "%",
+                            color = accent,
+                            trackColor = accent.copy(alpha = 0.18f),
+                            modifier = Modifier.size(58.dp),
+                            strokeWidth = 7.dp,
+                        )
+                        Column(Modifier.padding(start = 12.dp)) {
+                            AnimatedNumber(
+                                value = reading.value ?: 0f,
+                                intervalMs = 0L,
+                                decimals = reading.id.decimals,
+                                color = accent,
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
+                            Text(
+                                text = "占用越高越吃力",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.textSecondary,
+                            )
                         }
                     }
+
+                    else -> AnimatedNumber(
+                        value = reading.value ?: 0f,
+                        intervalMs = 0L,
+                        decimals = reading.id.decimals,
+                        color = accent,
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                }
+            }
+            when (reading.id) {
+                CoreMetricId.DEVICE_TEMP -> LevelBars(
+                    points = values,
+                    color = accent,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp),
+                )
+
+                CoreMetricId.REFRESH_RATE -> BarSeries(
+                    points = values,
+                    color = accent,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp),
+                )
+
+                else -> if (reading.id != CoreMetricId.MEMORY_RATIO && values.isNotEmpty()) {
+                    Sparkline(
+                        points = values,
+                        color = accent,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(30.dp),
+                    )
                 }
             }
         }

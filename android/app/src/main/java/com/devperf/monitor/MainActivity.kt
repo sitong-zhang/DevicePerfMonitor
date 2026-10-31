@@ -8,22 +8,31 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import com.devperf.monitor.data.CollectionService
 import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
+import com.devperf.monitor.ui.kit.LocalBackdrop
+import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.nav.AppNav
 import com.devperf.monitor.ui.screen.ForgotPasswordScreen
 import com.devperf.monitor.ui.screen.LoginScreen
 import com.devperf.monitor.ui.screen.RegisterScreen
 import com.devperf.monitor.ui.theme.DevicePerfTheme
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnRequestPermissionResultListener
 
@@ -101,28 +110,39 @@ class MainActivity : ComponentActivity() {
             // 未登录时的三态：登录 / 注册 / 找回密码
             var authScreen by remember { mutableStateOf(0) } // 0=登录 1=注册 2=找回密码
             if (session == null) {
-                // 登录 / 注册 / 找回密码：强制浅色（纸白背景 + 墨黑文字）。
-                // 用户要求这一段跟 Apple 账户界面一致的「黑白高级感」——不跟随系统
-                // 深色模式、也不跟随用户在设置里选的主题，任何时候进来都是白底黑字。
-                // 登录成功后回到主界面才切回用户自己的主题。
-                DevicePerfTheme(ThemeMode.LIGHT) {
-                    when (authScreen) {
-                        1 -> RegisterScreen(
-                            accountManager = accountManager,
-                            onRegistered = { authScreen = 0 },
-                            onBackToLogin = { authScreen = 0 },
-                        )
+                // 登录 / 注册 / 找回密码：强制浅色（纸白背景 + 墨黑文字）+ 应用级玻璃
+                // 采样层（1.0.50）。此前登录流程没有 LocalBackdrop，「请务必记好您的
+                // 密码」弹窗、按钮、输入框全部回落成不透明 Material 卡片——用户截图
+                // 反馈「这不是液态玻璃弹窗」的根因就在这。现在与主界面同一套结构：
+                // 纸白 Canvas 录进 backdrop，玻璃件（弹窗 / GlassButton / GlassTextField）
+                // 采样它，真玻璃。录制子树只放纯视觉层，内容是其兄弟节点（避免
+                // LayerBackdrop 自指采样闪退，规则与 AppNav 相同）。
+                val authBackdrop = rememberLayerBackdrop()
+                CompositionLocalProvider(LocalBackdrop provides authBackdrop) {
+                    Box(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().appLayerBackdrop(authBackdrop)) {
+                            Canvas(Modifier.fillMaxSize()) { drawRect(Color.White) }
+                        }
+                        DevicePerfTheme(ThemeMode.LIGHT) {
+                            when (authScreen) {
+                                1 -> RegisterScreen(
+                                    accountManager = accountManager,
+                                    onRegistered = { authScreen = 0 },
+                                    onBackToLogin = { authScreen = 0 },
+                                )
 
-                        2 -> ForgotPasswordScreen(
-                            accountManager = accountManager,
-                            onBackToLogin = { authScreen = 0 },
-                        )
+                                2 -> ForgotPasswordScreen(
+                                    accountManager = accountManager,
+                                    onBackToLogin = { authScreen = 0 },
+                                )
 
-                        else -> LoginScreen(
-                            accountManager = accountManager,
-                            onOpenRegister = { authScreen = 1 },
-                            onOpenForgotPassword = { authScreen = 2 },
-                        )
+                                else -> LoginScreen(
+                                    accountManager = accountManager,
+                                    onOpenRegister = { authScreen = 1 },
+                                    onOpenForgotPassword = { authScreen = 2 },
+                                )
+                            }
+                        }
                     }
                 }
             } else {

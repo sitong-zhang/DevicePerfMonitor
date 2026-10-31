@@ -68,7 +68,7 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 
 /**
- * 玻璃实验室（1.0.49）：把上游 Kyant0/AndroidLiquidGlass 的全部库级能力集中演示一遍。
+ * 玻璃实验室（1.0.49，1.0.51 补全）：把上游 Kyant0/AndroidLiquidGlass 的全部库级能力集中演示一遍。
  *
  * 目的不是做样子，而是把此前用户端没用上的 API 真正调起来验证：
  *  - 4 个成品组件：LiquidButton / LiquidToggle / LiquidSlider / LiquidBottomTabs(+Tab)
@@ -79,7 +79,10 @@ import com.kyant.backdrop.shadow.Shadow
  *  - 阴影：Shadow / InnerShadow
  *  - Backdrop 四种创建：rememberCanvasBackdrop / rememberCombinedBackdrop /
  *                       emptyBackdrop（+ 全局 rememberLayerBackdrop）
- *  - 工具：InteractiveHighlight（按压跟随高光）/ DampedDragAnimation（阻尼拖拽）
+ *  - 工具：InteractiveHighlight / DampedDragAnimation / UISensor / ProgressConverter /
+ *          SdfShader / Ripple（1.0.51 起全部 vendor）
+ *  - 体验级五页（1.0.51，GlassLabStages.kt）：放大镜 / 控制中心 / 锁屏时钟 /
+ *    渐进模糊 / 玻璃游乐园
  */
 @Composable
 fun GlassLabScreen(onBack: () -> Unit) {
@@ -317,9 +320,28 @@ fun GlassLabScreen(onBack: () -> Unit) {
         DampedTile(backdrop)
         LabGap()
 
+        // -------------------------------------------------------------------
+        // 1.0.51：上游 demo App 的五个「体验级」页面整体移植（GlassLabStages.kt）
+        // -------------------------------------------------------------------
+        LabMagnifier(backdrop)
+        LabGap()
+
+        LabControlCenter(backdrop)
+        LabGap()
+
+        LabLockScreen(backdrop)
+        LabGap()
+
+        LabProgressiveBlur(backdrop)
+        LabGap()
+
+        LabPlayground(backdrop)
+        LabGap()
+
         Text(
-            "上游 Block / Ripple / SdfShader / UISensor 属于其 demo App 自带的 KMP 演示脚手架" +
-                "（非可复用库），未 vendor；其能力已由上面的库级组件与工具等价覆盖。",
+            "以上体验各代表一种上游交互范式：放大镜 = CombinedBackdrop 叠层采样，" +
+                "控制中心 = UISensor 重力高光，锁屏 = SdfShader 距离场折射，" +
+                "渐进模糊 = AGSL 蒙版，游乐园 = 手势变换 + exportedBackdrop 玻璃嵌玻璃。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),

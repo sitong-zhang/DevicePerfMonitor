@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 49
-        versionName = "1.0.49"
+        versionCode = 51
+        versionName = "1.0.51"
         vectorDrawables.useSupportLibrary = true
 
         // 液态玻璃开关。1.0.13~1.0.15 曾用 productFlavors 出「玻璃 / 无玻璃」双包，
