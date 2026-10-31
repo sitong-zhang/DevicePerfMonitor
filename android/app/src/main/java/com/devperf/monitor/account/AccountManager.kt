@@ -71,25 +71,22 @@ class AccountManager(context: Context) {
     // ------------------------------------------------------------------
 
     /**
-     * 注册并登录。所有字段必填；返回 null 表示成功，
-     * 否则为可直接展示给用户的错误提示。
+     * 注册并登录。手机号自 1.0.46 起不再收集（用户要求去掉该步骤），
+     * 其余字段必填；返回 null 表示成功，否则为可直接展示给用户的错误提示。
      */
     suspend fun register(
         email: String,
         code: String,
-        phone: String,
         account: String,
         password: String,
         nickname: String,
     ): String? = withContext(Dispatchers.IO) {
         val e = email.trim()
         val c = code.trim()
-        val p = phone.trim()
         val a = account.trim()
         val n = nickname.trim()
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()) return@withContext "邮箱格式不正确"
         if (c.isEmpty()) return@withContext "请填写邮箱验证码"
-        if (p.length != 11 || !p.all { it.isDigit() }) return@withContext "手机号须为 11 位数字"
         if (a.length < 3) return@withContext "账号至少 3 个字符"
         if (password.length < 6) return@withContext "密码至少 6 位"
         if (n.isEmpty()) return@withContext "请填写昵称"
@@ -99,7 +96,7 @@ class AccountManager(context: Context) {
             JSONObject()
                 .put("email", e)
                 .put("code", c)
-                .put("phone", p)
+                // 手机号：1.0.46 起彻底不再收集，不再向服务端发送该字段
                 .put("account", a)
                 .put("password", password)
                 .put("nickname", n),
@@ -114,11 +111,44 @@ class AccountManager(context: Context) {
                 account = data.optJSONObject("user")?.optString("account") ?: a,
                 nickname = data.optJSONObject("user")?.optString("nickname") ?: n,
                 email = data.optJSONObject("user")?.optString("email") ?: e,
-                phone = data.optJSONObject("user")?.optString("phone") ?: p,
+                phone = data.optJSONObject("user")?.optString("phone") ?: "",
                 createdAt = data.optJSONObject("user")?.optLong("created_at") ?: System.currentTimeMillis(),
             ),
         )
         null
+    }
+
+    // ------------------------------------------------------------------
+    // 找回密码（1.0.46）：邮箱验证码校验通过后重设密码
+    // ------------------------------------------------------------------
+
+    /**
+     * 通过邮箱验证码重设密码。返回 null 表示成功，否则为错误提示。
+     * 成功后服务端会作废该用户全部登录 token，需要用新密码重新登录。
+     */
+    suspend fun resetPassword(
+        email: String,
+        code: String,
+        newPassword: String,
+    ): String? = withContext(Dispatchers.IO) {
+        val e = email.trim()
+        val c = code.trim()
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()) return@withContext "邮箱格式不正确"
+        if (c.isEmpty()) return@withContext "请填写邮箱验证码"
+        if (newPassword.length < 6) return@withContext "新密码至少 6 位"
+
+        val res = ApiClientHolder.api.post(
+            "/api/reset_password",
+            JSONObject()
+                .put("email", e)
+                .put("code", c)
+                .put("new_password", newPassword),
+        )
+        if (!res.ok) {
+            res.msg ?: "密码重置失败，请稍后再试"
+        } else {
+            null
+        }
     }
 
     // ------------------------------------------------------------------

@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,15 +27,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.account.AccountManager
+import com.devperf.monitor.ui.kit.GlassButton
 import com.devperf.monitor.ui.kit.GlassTextField
+import com.devperf.monitor.ui.kit.PasswordSavedDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 注册页：邮箱（真实验证码）+ 手机号 + 账号 + 密码 + 昵称，全字段必填。
+ * 注册页：邮箱（真实验证码）+ 账号 + 密码 + 确认密码 + 昵称。
  *
+ * 1.0.46 起不再收集手机号（用户要求去掉该步骤）；
+ * 密码需填写两遍，两次不一致会拦截；
  * 验证码由后端真实 SMTP 发送（QQ 企业邮箱通道），60 秒内不可重发；
- * 全部校验通过后调 /api/register，成功即登录并进入主界面。
+ * 全部校验通过后调 /api/register，成功后先弹「请务必记好您的密码」提醒，
+ * 用户确认后才进入主界面。
  */
 @Composable
 fun RegisterScreen(
@@ -47,15 +50,17 @@ fun RegisterScreen(
 ) {
     var email by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
     var account by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var messageError by remember { mutableStateOf(true) }
     var countdown by remember { mutableIntStateOf(0) }
     var sending by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
+    // 注册成功后弹出「务必记好密码」提醒，用户确认后才真正进入主界面
+    var showPasswordReminder by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // 验证码倒计时
@@ -108,9 +113,14 @@ fun RegisterScreen(
                     keyboardType = KeyboardType.Number,
                     modifier = Modifier.weight(1f),
                 )
-                Button(
+                GlassButton(
+                    text = when {
+                        sending -> "发送中…"
+                        countdown > 0 -> "${countdown}s"
+                        else -> "发送验证码"
+                    },
                     onClick = {
-                        if (sending || countdown > 0) return@Button
+                        if (sending || countdown > 0) return@GlassButton
                         scope.launch {
                             sending = true
                             val result = accountManager.sendCode(email)
@@ -133,25 +143,10 @@ fun RegisterScreen(
                     },
                     enabled = !sending && countdown <= 0 && email.isNotBlank(),
                     modifier = Modifier.padding(top = 22.dp),
-                    colors = ButtonDefaults.buttonColors(),
-                ) {
-                    Text(
-                        when {
-                            sending -> "发送中…"
-                            countdown > 0 -> "${countdown}s"
-                            else -> "发送验证码"
-                        },
-                    )
-                }
+                    compact = true,
+                )
             }
 
-            GlassTextField(
-                value = phone,
-                onValueChange = { if (it.length <= 11) phone = it.filter { c -> c.isDigit() } },
-                placeholder = "手机号 *",
-                label = "手机号",
-                keyboardType = KeyboardType.Phone,
-            )
             GlassTextField(
                 value = account,
                 onValueChange = { account = it },
@@ -163,6 +158,14 @@ fun RegisterScreen(
                 onValueChange = { password = it },
                 placeholder = "密码（至少 6 位）*",
                 label = "密码",
+                isPassword = true,
+                keyboardType = KeyboardType.Password,
+            )
+            GlassTextField(
+                value = passwordConfirm,
+                onValueChange = { passwordConfirm = it },
+                placeholder = "请再次输入密码 *",
+                label = "确认密码",
                 isPassword = true,
                 keyboardType = KeyboardType.Password,
             )
@@ -185,15 +188,22 @@ fun RegisterScreen(
                 )
             }
 
-            Button(
+            GlassButton(
+                text = if (submitting) "注册中…" else "注册并登录",
                 onClick = {
-                    if (submitting) return@Button
+                    if (submitting) return@GlassButton
+                    if (password != passwordConfirm) {
+                        messageError = true
+                        message = "两次输入的密码不一致，请重新确认"
+                        return@GlassButton
+                    }
                     scope.launch {
                         submitting = true
-                        val err = accountManager.register(email, code, phone, account, password, nickname)
+                        val err = accountManager.register(email, code, account, password, nickname)
                         submitting = false
                         if (err == null) {
-                            onRegistered()
+                            // 注册成功：先弹「务必记好密码」提醒，确认后再进入
+                            showPasswordReminder = true
                         } else {
                             messageError = true
                             message = err
@@ -202,9 +212,7 @@ fun RegisterScreen(
                 },
                 enabled = !submitting,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (submitting) "注册中…" else "注册并登录")
-            }
+            )
 
             TextButton(onClick = onBackToLogin) {
                 Text("已有账号？返回登录")
@@ -218,4 +226,15 @@ fun RegisterScreen(
             )
         }
     }
+
+    // 「请务必记好您的密码」提醒：液态玻璃弹窗，确认后才进入主界面
+    PasswordSavedDialog(
+        show = showPasswordReminder,
+        account = account.ifBlank { email },
+        onConfirm = {
+            showPasswordReminder = false
+            onRegistered()
+        },
+        onDismiss = { showPasswordReminder = false },
+    )
 }

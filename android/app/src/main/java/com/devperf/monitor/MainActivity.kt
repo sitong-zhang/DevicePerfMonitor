@@ -19,6 +19,7 @@ import com.devperf.monitor.overlay.OverlayPermissions
 import com.devperf.monitor.overlay.OverlayService
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.nav.AppNav
+import com.devperf.monitor.ui.screen.ForgotPasswordScreen
 import com.devperf.monitor.ui.screen.LoginScreen
 import com.devperf.monitor.ui.screen.RegisterScreen
 import com.devperf.monitor.ui.theme.DevicePerfTheme
@@ -96,19 +97,26 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(session?.token) {
                 if (session != null) syncManager.start() else syncManager.stop()
             }
-            var showRegister by remember { mutableStateOf(false) }
+            // 未登录时的三态：登录 / 注册 / 找回密码
+            var authScreen by remember { mutableStateOf(0) } // 0=登录 1=注册 2=找回密码
             DevicePerfTheme(settings.themeMode) {
                 if (session == null) {
-                    if (showRegister) {
-                        RegisterScreen(
+                    when (authScreen) {
+                        1 -> RegisterScreen(
                             accountManager = accountManager,
-                            onRegistered = { showRegister = false },
-                            onBackToLogin = { showRegister = false },
+                            onRegistered = { authScreen = 0 },
+                            onBackToLogin = { authScreen = 0 },
                         )
-                    } else {
-                        LoginScreen(
+
+                        2 -> ForgotPasswordScreen(
                             accountManager = accountManager,
-                            onOpenRegister = { showRegister = true },
+                            onBackToLogin = { authScreen = 0 },
+                        )
+
+                        else -> LoginScreen(
+                            accountManager = accountManager,
+                            onOpenRegister = { authScreen = 1 },
+                            onOpenForgotPassword = { authScreen = 2 },
                         )
                     }
                 } else {

@@ -60,14 +60,17 @@ fun defaultOverlayItems(): List<String> = listOf(
  */
 
 /**
- * 1.0.26 壁纸选择：内置三张（浅色基调，适配深色主题罩层）+ 用户相册自定义。
+ * 1.0.26 壁纸选择：1.0.47 起新增「纯白」并作为初始壁纸（用户要求：初始背景
+ * 白色，想换再自己换）+ 内置三张（浅色基调，适配深色主题罩层）+ 用户相册自定义。
  *
  * 自定义图不在 DataStore 里存位图——只存「选了自定义」这个事实，
  * 图片字节由设置页复制到 `filesDir/wallpaper_custom.jpg`（见
  * [com.devperf.monitor.ui.wallpaper.Wallpapers]），路径随设置一起持久化。
- * 文件缺失（被清理）时读取侧回落到 [LIGHT_TEAL]，不白屏。
+ * 文件缺失（被清理）时读取侧回落到 [WHITE]，不白屏异常。壁纸选择与自定义图
+ * 路径都在 DataStore 持久化：杀掉后台进程重进仍是上次选的壁纸。
  */
 enum class WallpaperId(val label: String) {
+    WHITE("纯白"),
     LIGHT_TEAL("青蓝"),
     AURORA("极光"),
     MINT("薄荷"),
@@ -143,9 +146,9 @@ data class MonitorSettings(
     val alertsEnabled: Boolean = true,
     val alertByNotification: Boolean = true,
     val alertByOverlayPopup: Boolean = true,
-    val themeMode: ThemeMode = ThemeMode.DARK,
-    /** 当前壁纸（1.0.26 新增）；CUSTOM 表示用 [wallpaperCustomPath] 的图片。 */
-    val wallpaper: WallpaperId = WallpaperId.LIGHT_TEAL,
+    val themeMode: ThemeMode = ThemeMode.LIGHT,
+    /** 当前壁纸（1.0.47 起默认纯白）；CUSTOM 表示用 [wallpaperCustomPath] 的图片。 */
+    val wallpaper: WallpaperId = WallpaperId.WHITE,
     /** 自定义壁纸文件绝对路径（wallpaper = CUSTOM 时有效）。 */
     val wallpaperCustomPath: String? = null,
 )
@@ -198,10 +201,10 @@ class SettingsRepository(private val context: Context) {
             alertByOverlayPopup = prefs[KEY_ALERT_POPUP] ?: true,
             themeMode = prefs[KEY_THEME]?.let { name ->
                 runCatching { ThemeMode.valueOf(name) }.getOrNull()
-            } ?: ThemeMode.DARK,
+            } ?: ThemeMode.LIGHT,
             wallpaper = prefs[KEY_WALLPAPER]?.let { name ->
                 runCatching { WallpaperId.valueOf(name) }.getOrNull()
-            } ?: WallpaperId.LIGHT_TEAL,
+            } ?: WallpaperId.WHITE,
             wallpaperCustomPath = prefs[KEY_WALLPAPER_CUSTOM],
         )
     }

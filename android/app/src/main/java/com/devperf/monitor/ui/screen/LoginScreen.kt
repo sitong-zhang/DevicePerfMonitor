@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     accountManager: AccountManager,
     onOpenRegister: () -> Unit = {},
+    onOpenForgotPassword: () -> Unit = {},
 ) {
     var account by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -103,6 +104,11 @@ fun LoginScreen(
 
             TextButton(onClick = onOpenRegister) {
                 Text("没有账号？注册一个")
+            }
+
+            // 1.0.46：找回密码入口（邮箱验证码 → 设置新密码）
+            TextButton(onClick = onOpenForgotPassword) {
+                Text("忘记密码？")
             }
 
             Spacer(Modifier.height(8.dp))

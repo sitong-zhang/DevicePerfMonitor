@@ -56,18 +56,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
+import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.MonitorApp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -224,20 +221,22 @@ fun AppNav(
             null
         }
         if (backdrop != null) {
-            // 背景层：品牌壁纸（1.0.26 起可在设置页切换：青蓝 / 极光 / 薄荷 /
-            // 相册自定义）+ 暗色罩层 + 右上角公司 logo 角标。
-            // 罩层的理由：内置壁纸是浅色的，而 App 是深色主题（浅色文字），
-            // 直接铺浅色壁纸所有文字都会糊；角标位置与各页顶部留白见
-            // drawBrandWallpaper。
+            // 背景层：壁纸（1.0.26 起可在设置页切换：纯白（初始）/ 青蓝 / 极光 /
+            // 薄荷 / 相册自定义）。1.0.47 起不再画公司 logo 角标（用户要求全部去掉）；
+            // 纯白壁纸不画罩层直接白底，图片壁纸在深色主题下仍压一层竖向罩层保文字可读。
             val wallpaper = rememberWallpaperImage(settings)
-            val logo = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
+            val dark = when (settings.themeMode) {
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+                ThemeMode.AUTO -> isSystemInDarkTheme()
+            }
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .appLayerBackdrop(backdrop),
             ) {
                 Canvas(Modifier.matchParentSize()) {
-                    drawBrandWallpaper(wallpaper, logo)
+                    drawAppBackground(wallpaper, dark)
                 }
             }
         }
@@ -748,90 +747,47 @@ private fun NavBarItem(
 }
 
 // ---------------------------------------------------------------------------
-// 背景品牌壁纸：浅蓝绿抽象壁纸 + 暗色罩层 + 右上角公司 logo 角标（1.0.25 起）
+// 背景壁纸层：纯白（1.0.47 初始）/ 内置三张 / 相册自定义
 //
-// 这是 App 根背景层要录进 backdrop 的内容。玻璃元素折射/模糊采样它，所以画面要有
-// 亮度层次：原壁纸本身是浅色蓝绿曲线（明暗都有），叠一层竖向黑色罩层把整体压暗
-// 到深色主题可用的程度——上（状态栏区）/下（浮动底栏区）加重，中部略轻（中部是
-// 玻璃卡片区，卡片自带 tint）。右上角是「分子智能科技」logo 白板角标：选右上是
-// 因为各页左上角是返回键 / 标题；Overview / Settings / 详情页顶部留出 72dp 空白
-// 就是给它让的位置（角标占 10~60dp）。
+// 这是 App 根背景层要录进 backdrop 的内容。玻璃元素折射/模糊采样它。
+// 1.0.47 变更（用户要求）：
+// - 初始壁纸改为纯白：wallpaper 为 null 时直接铺白色，无罩层、无任何装饰；
+// - 公司 logo 角标整体删除（连同各页顶部为它让位的说明，72dp 顶部留白保留，
+//   仅作呼吸空间）；
+// - 图片壁纸在深色主题下仍画竖向罩层保文字可读（浅色主题不压暗）。
+// internal 是为了无头渲染冒烟测试（BackdropDrawingRenderTest 等）能直接驱动。
 // ---------------------------------------------------------------------------
-// 1.0.25 起：浅色抽象壁纸满铺 + 竖向黑色罩层（浅壁纸 × 深色主题的必选项）+
-// 右上角公司 logo 角标。internal 是为了无头渲染冒烟测试（GlassComponentsRenderTest）
-// 能直接驱动这份生产代码路径。
-internal fun DrawScope.drawBrandWallpaper(wallpaper: ImageBitmap, logo: ImageBitmap) {
+internal fun DrawScope.drawAppBackground(wallpaper: ImageBitmap?, dark: Boolean) {
     val w = size.width
     val h = size.height
 
-    // 1. 壁纸满铺（center-crop：按屏幕与壁纸的较大缩放比铺，长边溢出裁掉，不变形）
-    val scale = maxOf(w / wallpaper.width, h / wallpaper.height)
-    val dw = wallpaper.width * scale
-    val dh = wallpaper.height * scale
+    // 1. 纯白壁纸（初始）：直接白底返回，不画图、不画罩层
+    val wallpaperBitmap = wallpaper ?: run {
+        drawRect(Color.White)
+        return
+    }
+
+    // 2. 图片壁纸满铺（center-crop：按屏幕与壁纸的较大缩放比铺，长边溢出裁掉，不变形）
+    val scale = maxOf(w / wallpaperBitmap.width, h / wallpaperBitmap.height)
+    val dw = wallpaperBitmap.width * scale
+    val dh = wallpaperBitmap.height * scale
     drawImage(
-        image = wallpaper,
+        image = wallpaperBitmap,
         dstOffset = IntOffset(((w - dw) / 2f).roundToInt(), ((h - dh) / 2f).roundToInt()),
         dstSize = IntSize(dw.roundToInt(), dh.roundToInt()),
     )
 
-    // 2. 暗色罩层：浅色壁纸 + 深色主题的必选项，但 1.0.25 压得太暗（用户反馈壁纸
-    //    看不清），1.0.26 调轻——上（状态栏区）/下（浮动底栏区）略重，中部最轻
-    //    （中部是玻璃卡片区，卡片自带 tint）。亮度回归见 BackdropDrawingRenderTest。
-    drawRect(
-        brush = Brush.verticalGradient(
-            0.00f to Color.Black.copy(alpha = 0.30f),
-            0.50f to Color.Black.copy(alpha = 0.16f),
-            1.00f to Color.Black.copy(alpha = 0.34f),
-        ),
-    )
-
-    // 3. 公司 logo 角标：右上角白底板 + 圆角 + 轻投影（假阴影：下移 2dp、外扩 2dp
-    //    的黑色圆角板）。尺寸 88×50dp，距顶 10dp、距右 14dp。
-    val badgeW = 88f.dp.toPx()
-    val badgeH = badgeW * logo.height / logo.width
-    val left = w - 14f.dp.toPx() - badgeW
-    val top = 10f.dp.toPx()
-    val corner = CornerRadius(10f.dp.toPx())
-    val shadowInset = 2f.dp.toPx()
-    // 投影
-    drawPath(
-        path = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = left - shadowInset,
-                    top = top - shadowInset + 2f.dp.toPx(),
-                    right = left + badgeW + shadowInset,
-                    bottom = top + badgeH + shadowInset + 2f.dp.toPx(),
-                    topLeftCornerRadius = corner,
-                    topRightCornerRadius = corner,
-                    bottomRightCornerRadius = corner,
-                    bottomLeftCornerRadius = corner,
-                ),
-            )
-        },
-        color = Color.Black.copy(alpha = 0.28f),
-    )
-    // logo 白板（圆角裁剪）
-    clipPath(
-        path = Path().apply {
-            addRoundRect(
-                RoundRect(
-                    left = left,
-                    top = top,
-                    right = left + badgeW,
-                    bottom = top + badgeH,
-                    topLeftCornerRadius = corner,
-                    topRightCornerRadius = corner,
-                    bottomRightCornerRadius = corner,
-                    bottomLeftCornerRadius = corner,
-                ),
-            )
-        },
-    ) {
-        drawImage(
-            image = logo,
-            dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-            dstSize = IntSize(badgeW.roundToInt(), badgeH.roundToInt()),
+    // 3. 暗色罩层：仅深色主题需要（浅色壁纸 × 浅色文字的必选项），浅色主题不压暗。
+    //    1.0.25 压得太暗（用户反馈壁纸看不清），1.0.26 调轻——上（状态栏区）/
+    //    下（浮动底栏区）略重，中部最轻（中部是玻璃卡片区，卡片自带 tint）。
+    //    亮度回归见 BackdropDrawingRenderTest。
+    if (dark) {
+        drawRect(
+            brush = Brush.verticalGradient(
+                0.00f to Color.Black.copy(alpha = 0.30f),
+                0.50f to Color.Black.copy(alpha = 0.16f),
+                1.00f to Color.Black.copy(alpha = 0.34f),
+            ),
         )
     }
 }

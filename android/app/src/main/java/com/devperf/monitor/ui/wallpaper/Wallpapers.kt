@@ -41,6 +41,7 @@ object Wallpapers {
 
     @DrawableRes
     fun drawableRes(id: WallpaperId): Int = when (id) {
+        WallpaperId.WHITE -> R.drawable.wallpaper_light // 占位：WHITE 无图，背景画纯白
         WallpaperId.LIGHT_TEAL -> R.drawable.wallpaper_light
         WallpaperId.AURORA -> R.drawable.wallpaper_aurora
         WallpaperId.MINT -> R.drawable.wallpaper_mint
@@ -94,13 +95,16 @@ object Wallpapers {
 /**
  * 按当前设置解析背景壁纸（Composable，供 AppNav / OverlayService 直接调用）。
  *
+ * 1.0.47：返回值改为可空——[WallpaperId.WHITE]（初始壁纸）返回 null，
+ * 调用方直接铺纯白色即可，不走图片解码。
  * 自定义图走 [produceState] 在 IO 线程解码，解码完成前先用内置青蓝顶住
  * （一帧的事，用户无感）；失败同样回落，不会黑屏。
  */
 @Composable
-fun rememberWallpaperImage(settings: MonitorSettings): ImageBitmap {
+fun rememberWallpaperImage(settings: MonitorSettings): ImageBitmap? {
+    if (settings.wallpaper == WallpaperId.WHITE) return null
     val builtIn = when (settings.wallpaper) {
-        WallpaperId.LIGHT_TEAL, WallpaperId.CUSTOM -> R.drawable.wallpaper_light
+        WallpaperId.WHITE, WallpaperId.LIGHT_TEAL, WallpaperId.CUSTOM -> R.drawable.wallpaper_light
         WallpaperId.AURORA -> R.drawable.wallpaper_aurora
         WallpaperId.MINT -> R.drawable.wallpaper_mint
     }

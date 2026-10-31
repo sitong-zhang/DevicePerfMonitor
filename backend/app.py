@@ -730,18 +730,17 @@ def register():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip()
     code = (data.get("code") or "").strip()
-    phone = (data.get("phone") or "").strip()
     account = (data.get("account") or "").strip()
     password = data.get("password") or ""
     nickname = (data.get("nickname") or "").strip()
 
-    # 全字段必填校验
+    # 全字段必填校验。
+    # 手机号：1.0.46 起彻底不再收集（用户要求），注册接口不再接收该字段，
+    # 库中 phone 列仍保留仅为兼容历史数据，新账号一律写空串。
     if not is_email(email):
         return json_err("请填写正确的邮箱")
     if not code:
         return json_err("请填写邮箱验证码")
-    if not is_phone(phone):
-        return json_err("请填写正确的手机号")
     if len(account) < 3:
         return json_err("账号至少 3 个字符")
     if len(password) < 6:
@@ -782,7 +781,8 @@ def register():
     cur = conn.execute(
         "INSERT INTO users(account, email, phone, nickname, pw_hash, pw_salt, created_at) "
         "VALUES(?,?,?,?,?,?,?)",
-        (account, email, phone, nickname, pw_hash, salt.hex(), now_ms()),
+        # phone 不再收集，统一留空（字段保留以兼容旧库/旧数据）
+        (account, email, "", nickname, pw_hash, salt.hex(), now_ms()),
     )
     user_id = cur.lastrowid
     # 消费验证码并清零错误计数
@@ -799,6 +799,59 @@ def register():
     # 注册是低频但最关键的操作：立刻异步落仓，避免"刚注册完后端就重启"导致账号丢失
     push_async("注册新账号")
     return json_ok(token=token, user=user_public(_reload_user(user_id)))
+
+
+@app.route("/api/reset_password", methods=["POST", "OPTIONS"])
+def reset_password():
+    """找回密码：邮箱验证码校验通过后重设密码。
+
+    请求体：email / code / new_password。
+    校验通过后：更新 pw_hash + 换新盐、消费掉验证码、作废该用户全部登录 token
+    （强制已登录设备重新登录），返回 ok。
+    """
+    if request.method == "OPTIONS":
+        return json_ok()
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    code = (data.get("code") or "").strip()
+    new_password = data.get("new_password") or ""
+
+    if not is_email(email):
+        return json_err("请填写正确的邮箱")
+    if not code:
+        return json_err("请填写邮箱验证码")
+    if len(new_password) < 6:
+        return json_err("新密码至少 6 位")
+
+    conn = db()
+    c = conn.execute("SELECT code, created_at FROM codes WHERE email=?", (email,)).fetchone()
+    if not c or not hmac.compare_digest(c["code"], code):
+        conn.close()
+        return json_err("验证码错误")
+    if now_ms() - c["created_at"] > CODE_TTL * 1000:
+        conn.execute("DELETE FROM codes WHERE email=?", (email,))
+        conn.commit()
+        conn.close()
+        return json_err("验证码已过期，请重新获取")
+
+    u = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+    if not u:
+        conn.close()
+        return json_err("该邮箱尚未注册，请先注册账号")
+
+    salt = new_salt()
+    pw_hash = hash_pw(new_password, salt)
+    conn.execute(
+        "UPDATE users SET pw_hash=?, pw_salt=? WHERE id=?",
+        (pw_hash, salt.hex(), u["id"]),
+    )
+    # 消费验证码 + 作废该用户所有登录态（改密后旧 token 不应继续可用）
+    conn.execute("DELETE FROM codes WHERE email=?", (email,))
+    conn.execute("DELETE FROM user_tokens WHERE user_id=?", (u["id"],))
+    conn.commit()
+    conn.close()
+    push_async("用户重置密码")
+    return json_ok(msg="密码已重置，请使用新密码登录")
 
 
 @app.route("/api/login", methods=["POST", "OPTIONS"])

@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
@@ -582,50 +583,15 @@ fun SettingsScreen(
 
             // ================= 关于 =================
             GlassSectionHeader(text = "关于")
-            // 品牌卡：出品方「分子智能科技」logo + 公司名 + 官方宣传语 + 版权落款。
-            // 宣传语「用心感知设备的每一次跳动」为官方 slogan；logo 白底垫块避免深
-            // 色主题下出现突兀白边。
-            GlassPanel {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.brand_logo),
-                        contentDescription = "分子智能科技 Molecule Technology",
-                        contentScale = ContentScale.FillWidth,
-                        modifier = Modifier
-                            .fillMaxWidth(0.66f)
-                            .clip(RoundedCornerShape(DesignTokens.Radius.SMALL.dp))
-                            .background(androidx.compose.ui.graphics.Color.White)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    )
-                    Text(
-                        text = "分子智能科技",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.textPrimary,
-                    )
-                    Text(
-                        text = "用心感知设备的每一次跳动",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary,
-                    )
-                    Text(
-                        text = "© 2026 分子智能科技 Molecule Technology. 保留所有权利。",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.textSecondary,
-                    )
-                }
-            }
+            // 1.0.47：按用户要求移除公司品牌卡（logo / 公司名 / slogan / 版权）。
             // 应用简介：客观描述产品定位与数据处理方式，非营销话术。
             GlassPanel {
                     Text(
-                        text = "PulseGuard 由分子智能科技出品，提供 CPU、内存、电池、" +
+                        text = "PulseGuard 提供 CPU、内存、电池、" +
                             "网络等设备的实时性能监测与历史记录，帮助你了解设备的运行状态。" +
                             "监测数据在本机采集，并按小时自动、在关键操作时实时同步到管理端。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textSecondary,
                 )
             }
             // 公司信息：官网 / 联系 / 隐私 / 协议 / 版本。点击可打开对应页面或邮件，
@@ -709,6 +675,14 @@ internal fun WallpaperPicker(
         Triple(WallpaperId.MINT, R.drawable.wallpaper_thumb_mint, "薄荷"),
     )
     LazyRow(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S8.dp)) {
+        // 1.0.47 初始壁纸「纯白」：无图，画纯白色块，放在最前
+        item(key = "white") {
+            WhiteWallpaperThumb(
+                label = "纯白",
+                selected = settings.wallpaper == WallpaperId.WHITE,
+                onClick = { onSelectBuiltIn(WallpaperId.WHITE) },
+            )
+        }
         if (settings.wallpaper == WallpaperId.CUSTOM) {
             item(key = "custom") {
                 CustomWallpaperThumb(
@@ -728,6 +702,52 @@ internal fun WallpaperPicker(
         item(key = "gallery") {
             GalleryTile(onClick = onPickFromGallery)
         }
+    }
+}
+
+/** 纯白壁纸缩略图：纯白色块 + 底部名称；选中样式与图片缩略图一致。 */
+@Composable
+private fun WhiteWallpaperThumb(label: String, selected: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(14.dp)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(ThumbWidth, ThumbHeight)
+                .clip(shape)
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) cs.primary else cs.outline.copy(alpha = 0.4f),
+                    shape = shape,
+                )
+                .background(Color.White)
+                .clickable(onClick = onClick),
+        ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(cs.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "已选中",
+                        tint = cs.onPrimary,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) cs.primary else cs.onSurfaceVariant,
+        )
     }
 }
 

@@ -4,16 +4,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,19 +38,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.devperf.monitor.BuildConfig
-import com.devperf.monitor.R
 import java.io.File
 
 /**
@@ -203,11 +196,11 @@ fun UpdateDialog(viewModel: MonitorViewModel) {
 }
 
 /**
- * 对话框外壳：公司 logo + 状态图标 + 标题 + 副标题 + 内容槽 + 按钮行。
+ * 对话框外壳：状态图标 + 标题 + 副标题 + 内容槽 + 按钮行。
  * [dismissible] 为 false 时背景点击与返回键都无效。
  *
- * 1.0.25 起顶部放公司 logo（分子智能科技，白底板圆角）——公告与更新弹窗都带
- * 品牌标识；状态图标（刷新 / 完成 / 警告）移到标题行左侧，不再单独占一行。
+ * 1.0.47 起按用户要求移除顶部公司 logo（原为白底板圆角 logo），
+ * 状态图标（刷新 / 完成 / 警告）直接放 AlertDialog 的 icon 槽。
  */
 @Composable
 private fun UpdateDialogShell(
@@ -221,34 +214,23 @@ private fun UpdateDialogShell(
     onDismiss: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    val logo = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
     AlertDialog(
         onDismissRequest = { if (dismissible) onDismiss?.invoke() },
         icon = {
-            Image(
-                bitmap = logo,
-                contentDescription = "分子智能科技",
-                modifier = Modifier
-                    .width(84f.dp)
-                    .clip(RoundedCornerShape(10f.dp)),
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32f.dp),
             )
         },
         title = {
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20f.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6f.dp))
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
                 if (subtitle.isNotBlank()) {
                     Text(
                         text = subtitle,

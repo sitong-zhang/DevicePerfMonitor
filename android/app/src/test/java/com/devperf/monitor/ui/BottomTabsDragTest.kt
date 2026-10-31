@@ -26,7 +26,7 @@ import com.devperf.monitor.data.ThemeMode
 import com.devperf.monitor.ui.kit.LocalBackdrop
 import com.devperf.monitor.ui.kit.appLayerBackdrop
 import com.devperf.monitor.ui.nav.BottomNavBar
-import com.devperf.monitor.ui.nav.drawBrandWallpaper
+import com.devperf.monitor.ui.nav.drawAppBackground
 import com.devperf.monitor.ui.theme.DevicePerfTheme
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import org.junit.Assert.assertEquals
@@ -62,14 +62,13 @@ class BottomTabsDragTest {
                 val backdrop = rememberLayerBackdrop()
                 val wallpaper: ImageBitmap =
                     ImageBitmap.imageResource(R.drawable.wallpaper_light)
-                val logo: ImageBitmap = ImageBitmap.imageResource(R.drawable.wallpaper_logo)
                 val navController = rememberNavController()
                 val backStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = backStackEntry?.destination?.route
                 Box(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.matchParentSize().appLayerBackdrop(backdrop)) {
                         Canvas(modifier = Modifier.matchParentSize()) {
-                            drawBrandWallpaper(wallpaper, logo)
+                            drawAppBackground(wallpaper, true)
                         }
                     }
                     CompositionLocalProvider(LocalBackdrop provides backdrop) {

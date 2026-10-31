@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -719,6 +720,72 @@ fun GlassCard(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
                 content()
             }
+        }
+    }
+}
+
+/**
+ * 「请务必记好您的密码」提醒弹窗（1.0.46）。
+ *
+ * 注册成功后弹出，用户确认后才进入主界面。玻璃质感与上游
+ * Kyant0/AndroidLiquidGlass 官方 demo 一致：drawBackdrop(vibrancy + blur + lens)
+ * 采样应用级 [LocalBackdrop]，按钮直接走 catalog 的 LiquidButton（经 [GlassButton]）。
+ */
+@Composable
+fun PasswordSavedDialog(
+    show: Boolean,
+    account: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!show) return
+    val backdrop = if (BuildConfig.LIQUID_GLASS) LocalBackdrop.current else null
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .then(
+                    if (backdrop != null) {
+                        Modifier.drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { RoundedCornerShape(DesignTokens.Radius.CARD.dp) },
+                            effects = {
+                                vibrancy()
+                                blur(20f.dp.toPx())
+                                lens(10f.dp.toPx(), 20f.dp.toPx())
+                            },
+                            onDrawSurface = {
+                                drawRect(Color.White.copy(alpha = 0.10f))
+                            },
+                        )
+                    } else {
+                        Modifier.background(MaterialTheme.colorScheme.surface)
+                    }
+                )
+                .fillMaxWidth()
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                "请务必记好您的密码",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "账号「$account」的密码是登录本账户的唯一凭证，请务必牢记并妥善保管：\n" +
+                    "• 不要与他人共享，也不要使用其他网站用过的密码；\n" +
+                    "• 建议抄写一份保存在安全的地方；\n" +
+                    "• 一旦忘记，只能通过注册邮箱接收验证码来重置。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            GlassButton(
+                text = "我已记好密码",
+                onClick = onConfirm,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

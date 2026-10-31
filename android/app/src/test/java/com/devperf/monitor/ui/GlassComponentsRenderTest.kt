@@ -32,7 +32,7 @@ import com.devperf.monitor.ui.kit.GlassSlider
 import com.devperf.monitor.ui.kit.GlassSwitch
 import com.devperf.monitor.ui.kit.LocalBackdrop
 import com.devperf.monitor.ui.kit.appLayerBackdrop
-import com.devperf.monitor.ui.nav.drawBrandWallpaper
+import com.devperf.monitor.ui.nav.drawAppBackground
 import com.devperf.monitor.ui.theme.DevicePerfTheme
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.catalog.components.LiquidBottomTab
@@ -75,8 +75,6 @@ class GlassComponentsRenderTest {
                 val backdrop = rememberLayerBackdrop()
                 val wallpaper: ImageBitmap =
                     ImageBitmap.imageResource(R.drawable.wallpaper_light)
-                val logo: ImageBitmap =
-                    ImageBitmap.imageResource(R.drawable.wallpaper_logo)
                 Box(modifier = Modifier.fillMaxSize()) {
                     Box(
                         modifier = Modifier
@@ -84,7 +82,7 @@ class GlassComponentsRenderTest {
                             .appLayerBackdrop(backdrop),
                     ) {
                         Canvas(modifier = Modifier.matchParentSize()) {
-                            drawBrandWallpaper(wallpaper, logo)
+                            drawAppBackground(wallpaper, true)
                         }
                     }
                     CompositionLocalProvider(LocalBackdrop provides backdrop) {
