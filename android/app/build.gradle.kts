@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 51
-        versionName = "1.0.51"
+        versionCode = 52
+        versionName = "1.0.52"
         vectorDrawables.useSupportLibrary = true
 
         // 液态玻璃开关。1.0.13~1.0.15 曾用 productFlavors 出「玻璃 / 无玻璃」双包，
@@ -163,6 +163,9 @@ dependencies {
     // 底栏 NavigationBar 的图标走 material-icons-core（bom 管版本，仅 Home/Settings 两个，
     // R8 + 资源压缩会把其余图标裁掉；material-icons-extended 体积过大，不引）
     implementation(libs.compose.material.icons.core)
+    // 账号中心部分图标（Shield / PhoneAndroid / ChevronRight 等）仅在 extended 提供；
+    // R8 在 release 仅保留实际引用的图标对象，不会显著增大包体。
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 

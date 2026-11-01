@@ -152,6 +152,90 @@ class AccountManager(context: Context) {
     }
 
     // ------------------------------------------------------------------
+    // 资料 / 安全（账号中心：头像卡 + 安全中心）
+    // ------------------------------------------------------------------
+
+    /** 修改昵称；返回 null 表示成功，否则为错误提示。成功会同步更新本地会话。 */
+    suspend fun updateProfile(nickname: String): String? = withContext(Dispatchers.IO) {
+        val session = _session.value ?: return@withContext "未登录"
+        val n = nickname.trim()
+        if (n.isEmpty()) return@withContext "昵称不能为空"
+        if (n.length > 24) return@withContext "昵称过长（最多 24 字）"
+        val res = ApiClientHolder.api.post(
+            "/api/update_profile",
+            JSONObject().put("nickname", n),
+            mapOf("Authorization" to "Bearer ${session.token}"),
+        )
+        if (!res.ok) {
+            return@withContext res.msg ?: "更新失败，请稍后再试"
+        }
+        setSession(session.copy(nickname = n))
+        null
+    }
+
+    /** 修改登录密码（须校验当前密码）；返回 null 表示成功，否则为错误提示。 */
+    suspend fun changePassword(oldPassword: String, newPassword: String): String? =
+        withContext(Dispatchers.IO) {
+            val session = _session.value ?: return@withContext "未登录"
+            if (oldPassword.isEmpty() || newPassword.isEmpty()) {
+                return@withContext "请填写当前密码与新密码"
+            }
+            if (newPassword.length < 6) return@withContext "新密码至少 6 位"
+            val res = ApiClientHolder.api.post(
+                "/api/change_password",
+                JSONObject()
+                    .put("old_password", oldPassword)
+                    .put("new_password", newPassword),
+                mapOf("Authorization" to "Bearer ${session.token}"),
+            )
+            if (!res.ok) res.msg ?: "修改失败，请稍后再试" else null
+        }
+
+    /** 单条登录会话（安全中心「登录设备」列表项）。 */
+    data class SessionInfo(
+        val token: String,
+        val masked: String,
+        val createdAt: Long,
+        val current: Boolean,
+    )
+
+    /** 会话列表结果：error 非空即失败。 */
+    data class SessionsResult(val sessions: List<SessionInfo>, val error: String?)
+
+    /** 拉取当前用户的所有登录会话；error 非空即失败。 */
+    suspend fun listSessions(): SessionsResult = withContext(Dispatchers.IO) {
+        val session = _session.value ?: return@withContext SessionsResult(emptyList(), "未登录")
+        val res = ApiClientHolder.api.get(
+            "/api/sessions",
+            mapOf("Authorization" to "Bearer ${session.token}"),
+        )
+        if (!res.ok || res.data == null) {
+            return@withContext SessionsResult(emptyList(), res.msg ?: "加载失败")
+        }
+        val arr = res.data.optJSONArray("sessions") ?: org.json.JSONArray()
+        val list = List(arr.length()) { i ->
+            val o = arr.optJSONObject(i)
+            SessionInfo(
+                token = o.optString("token"),
+                masked = o.optString("masked"),
+                createdAt = o.optLong("created_at"),
+                current = o.optBoolean("current"),
+            )
+        }
+        SessionsResult(list, null)
+    }
+
+    /** 吊销某一登录会话；返回 null 表示成功，否则为错误提示。吊销当前会话后须主动登出。 */
+    suspend fun revokeSession(token: String): String? = withContext(Dispatchers.IO) {
+        val session = _session.value ?: return@withContext "未登录"
+        val res = ApiClientHolder.api.delete(
+            "/api/sessions/$token",
+            mapOf("Authorization" to "Bearer ${session.token}"),
+        )
+        if (!res.ok) res.msg ?: "操作失败，请稍后再试" else null
+    }
+
+    // ------------------------------------------------------------------
     // 登录 / 登出
     // ------------------------------------------------------------------
 

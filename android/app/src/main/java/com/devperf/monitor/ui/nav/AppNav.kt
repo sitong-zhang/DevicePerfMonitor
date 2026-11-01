@@ -92,6 +92,10 @@ import com.devperf.monitor.ui.kit.pressScale
 import com.devperf.monitor.ui.kit.rememberAppBackdrop
 import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.screen.AccountScreen
+import com.devperf.monitor.ui.screen.DevicesScreen
+import com.devperf.monitor.ui.screen.ProfileScreen
+import com.devperf.monitor.ui.screen.SecurityCenterScreen
+import com.devperf.monitor.ui.screen.SubscriptionScreen
 import com.devperf.monitor.ui.screen.DeepDetailScreen
 import com.devperf.monitor.ui.screen.DeepMetricsScreen
 import com.devperf.monitor.ui.screen.FeedbackScreen
@@ -126,6 +130,11 @@ object Routes {
     const val OVERLAY_CUSTOMIZER = "overlayCustomizer"
     /** 玻璃实验室（1.0.49）：上游 Kyant0/AndroidLiquidGlass 组件与效果全景演示。 */
     const val GLASS_LAB = "glassLab"
+    /** 账号中心子页（1.0.52）：头像卡 / 安全中心 / 我的设备 / 订阅。 */
+    const val ACCOUNT_PROFILE = "accountProfile"
+    const val ACCOUNT_SECURITY = "accountSecurity"
+    const val ACCOUNT_DEVICES = "accountDevices"
+    const val ACCOUNT_SUBSCRIPTION = "accountSubscription"
 
     fun detail(metricId: String) = "detail/$metricId"
 
@@ -317,6 +326,7 @@ fun AppNav(
                     } else {
                         AccountScreen(
                             viewModel = viewModel,
+                            navController = navController,
                             locked = true,
                             onFeedback = { showFeedback = true },
                             onLogout = { accountManager.logout() },
@@ -415,6 +425,7 @@ fun AppNav(
 
                             else -> AccountScreen(
                                 viewModel = viewModel,
+                                navController = navController,
                                 locked = false,
                                 onFeedback = { navController.navigate(Routes.FEEDBACK) },
                                 onLogout = { accountManager.logout() },
@@ -454,6 +465,27 @@ fun AppNav(
                         deepKey = entry.arguments?.getString("deepKey"),
                         onBack = { navController.popBackStack() },
                     )
+                }
+
+                // 账号中心子页（1.0.52）：头像卡 / 安全中心 / 我的设备 / 订阅
+                composable(Routes.ACCOUNT_PROFILE) {
+                    ProfileScreen(
+                        accountManager = accountManager,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.ACCOUNT_SECURITY) {
+                    SecurityCenterScreen(
+                        accountManager = accountManager,
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.ACCOUNT_DEVICES) {
+                    DevicesScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Routes.ACCOUNT_SUBSCRIPTION) {
+                    SubscriptionScreen(onBack = { navController.popBackStack() })
                 }
             }
             }

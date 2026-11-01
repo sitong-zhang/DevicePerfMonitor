@@ -108,6 +108,10 @@ object ApiClient {
     fun post(path: String, body: JSONObject?, extraHeaders: Map<String, String> = emptyMap()): Result =
         request("POST", path, body, extraHeaders)
 
+    /** DELETE 请求（如吊销登录会话）。 */
+    fun delete(path: String, extraHeaders: Map<String, String> = emptyMap()): Result =
+        request("DELETE", path, null, extraHeaders)
+
     private fun request(
         method: String,
         path: String,

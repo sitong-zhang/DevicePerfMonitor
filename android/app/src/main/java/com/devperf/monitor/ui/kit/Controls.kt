@@ -41,6 +41,8 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.devperf.monitor.BuildConfig
@@ -61,6 +63,16 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.LaunchedEffect
@@ -87,6 +99,9 @@ import androidx.compose.ui.semantics.Role
  *    ColorScheme，标准件自动跟随；
  * 4. 公开 API 名保留 GlassXxx，调用方（四个界面 + 悬浮窗）零改动。
  */
+
+import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 
 private val Pill = RoundedCornerShape(percent = 50)
 
@@ -548,6 +563,130 @@ fun GlassPanel(
             content = content,
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// 账号中心共享组件（头像卡 / 入口行 / 表单输入框）
+// ---------------------------------------------------------------------------
+
+/** 圆形头像：取昵称首字 + 由昵称哈希确定的稳定配色（无需服务端存头像）。 */
+@Composable
+fun AccountAvatar(
+    name: String,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 64.dp,
+) {
+    val palette = listOf(
+        0xFF0A84FF, 0xFF30D158, 0xFFBF5AF2, 0xFFFF9F0A,
+        0xFFFF375F, 0xFF5AC8FA, 0xFF64D2FF, 0xFFFF6482,
+    )
+    val bg = Color(palette[abs(name.hashCode()) % palette.size])
+    val initial = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(bg),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = initial,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = (size.value * 0.4f).sp,
+        )
+    }
+}
+
+/** 账号中心入口行：图标 + 标题 + 副标题 + 右箭头，点击进入子页。 */
+@Composable
+fun AccountEntryRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val colors = LocalTokenColors.current
+    val interaction = remember { MutableInteractionSource() }
+    GlassPanel(
+        modifier = modifier.clickable(interaction, null) { onClick() },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier.size(24.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.textPrimary,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
+            (trailing ?: {
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(20.dp),
+                )
+            })()
+        }
+    }
+}
+
+/** 表单输入框（昵称 / 密码等），风格与用户端对齐。 */
+@Composable
+fun GlassTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    placeholder: String? = null,
+    password: Boolean = false,
+    enabled: Boolean = true,
+    singleLine: Boolean = true,
+) {
+    val colors = LocalTokenColors.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        label = label?.let { { Text(text = it) } },
+        placeholder = placeholder?.let { { Text(text = it) } },
+        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+        singleLine = singleLine,
+        enabled = enabled,
+        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = colors.textPrimary.copy(alpha = 0.04f),
+            unfocusedContainerColor = colors.textPrimary.copy(alpha = 0.04f),
+            disabledContainerColor = colors.textPrimary.copy(alpha = 0.02f),
+            focusedTextColor = colors.textPrimary,
+            unfocusedTextColor = colors.textPrimary,
+            disabledTextColor = colors.textSecondary,
+            focusedLabelColor = colors.accent,
+            unfocusedLabelColor = colors.textSecondary,
+            focusedIndicatorColor = colors.accent,
+            unfocusedIndicatorColor = colors.textSecondary.copy(alpha = 0.4f),
+            cursorColor = colors.accent,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------------------

@@ -917,6 +917,100 @@ def me():
     )
 
 
+# ---------------------------------------------------------------------------
+# 用户接口：资料 / 安全（改密码 / 登录会话）
+# ---------------------------------------------------------------------------
+@app.route("/api/update_profile", methods=["POST", "OPTIONS"])
+def update_profile():
+    """修改昵称（账号邮箱等敏感字段不允许客户端自改，须经管理端）。"""
+    if request.method == "OPTIONS":
+        return json_ok()
+    u, err = require_user()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    nickname = (data.get("nickname") or "").strip()
+    if not nickname:
+        return json_err("昵称不能为空")
+    if len(nickname) > 24:
+        return json_err("昵称过长（最多 24 字）")
+    conn = db()
+    conn.execute("UPDATE users SET nickname=? WHERE id=?", (nickname, u["id"]))
+    conn.commit()
+    conn.close()
+    return json_ok(user=user_public(_reload_user(u["id"])))
+
+
+@app.route("/api/change_password", methods=["POST", "OPTIONS"])
+def change_password():
+    """修改登录密码：须校验当前密码，重算盐与哈希；其余会话保留。"""
+    if request.method == "OPTIONS":
+        return json_ok()
+    u, err = require_user()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    old_pw = data.get("old_password") or ""
+    new_pw = data.get("new_password") or ""
+    if not old_pw or not new_pw:
+        return json_err("请填写当前密码与新密码")
+    if len(new_pw) < 6:
+        return json_err("新密码至少 6 位")
+    salt = bytes.fromhex(u["pw_salt"])
+    if hash_pw(old_pw, salt) != u["pw_hash"]:
+        return json_err("当前密码错误")
+    ns = new_salt()
+    conn = db()
+    conn.execute(
+        "UPDATE users SET pw_hash=?, pw_salt=? WHERE id=?",
+        (hash_pw(new_pw, ns), ns.hex(), u["id"]),
+    )
+    conn.commit()
+    conn.close()
+    return json_ok()
+
+
+@app.route("/api/sessions", methods=["GET"])
+def list_sessions():
+    """当前用户的所有登录会话（按登录时间倒序），标记当前会话。"""
+    u, err = require_user()
+    if err:
+        return err
+    my_token = get_bearer()
+    conn = db()
+    rows = conn.execute(
+        "SELECT token, created_at FROM user_tokens WHERE user_id=? "
+        "ORDER BY created_at DESC",
+        (u["id"],),
+    ).fetchall()
+    conn.close()
+    return json_ok(sessions=[
+        {
+            "token": r["token"],
+            "masked": r["token"][:8] + "…" + r["token"][-4:],
+            "created_at": r["created_at"],
+            "current": r["token"] == my_token,
+        }
+        for r in rows
+    ])
+
+
+@app.route("/api/sessions/<token>", methods=["DELETE"])
+def revoke_session(token):
+    """吊销某一登录会话；若吊销的是当前会话，客户端须主动登出。"""
+    u, err = require_user()
+    if err:
+        return err
+    conn = db()
+    conn.execute(
+        "DELETE FROM user_tokens WHERE user_id=? AND token=?",
+        (u["id"], token),
+    )
+    conn.commit()
+    conn.close()
+    return json_ok()
+
+
 @app.route("/api/sync", methods=["POST", "OPTIONS"])
 def sync():
     if request.method == "OPTIONS":
