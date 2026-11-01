@@ -131,31 +131,32 @@ fun AccountScreen(
                 return@Column
             }
 
-            // 头像 + 昵称摘要
-            GlassPanel {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    AccountAvatar(
-                        name = account?.nickname?.ifBlank { account?.account } ?: "?",
-                        size = 80.dp,
+            // 头像 + 昵称摘要：头像是一个干净的圆，外面不套任何卡片/边框
+            // （用户要求：圆圈头像不要"筐一样的东西"包着）。
+            Column(
+                verticalArrangement = Arrangement.spacedBy(DesignTokens.Spacing.S12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 8.dp),
+            ) {
+                AccountAvatar(
+                    name = account?.nickname?.ifBlank { account?.account } ?: "?",
+                    size = 88.dp,
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = account?.nickname?.ifBlank { account?.account } ?: "未登录",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.textPrimary,
                     )
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (account != null) {
+                        val acc = account!!
                         Text(
-                            text = account?.nickname?.ifBlank { account?.account } ?: "未登录",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colors.textPrimary,
+                            text = acc.email.ifBlank { acc.account },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.textSecondary,
                         )
-                        if (account != null) {
-                            val acc = account!!
-                            Text(
-                                text = acc.email.ifBlank { acc.account },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.textSecondary,
-                            )
-                        }
                     }
                 }
             }

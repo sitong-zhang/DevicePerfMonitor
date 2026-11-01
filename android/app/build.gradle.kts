@@ -38,8 +38,8 @@ android {
         applicationId = "com.devperf.monitor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 53
-        versionName = "1.0.53"
+        versionCode = 54
+        versionName = "1.0.54"
         vectorDrawables.useSupportLibrary = true
 
         // 液态玻璃开关。1.0.13~1.0.15 曾用 productFlavors 出「玻璃 / 无玻璃」双包，
@@ -196,4 +196,6 @@ dependencies {
     // 2.0.0 正式版 AAR 要求 compileSdk 37 / AGP 9.1+，本工程 compileSdk 36 装不了。
     // shapes 仍走 Maven 1.2.0（提供 Capsule / RoundedRectangle，1.2.1 同样要 SDK 37）。
     implementation(libs.kyant.shapes)
+    // 总览卡片自定义：长按拖动/排序/缩放/切形态（Calvin-LL/Reorderable，Apache-2.0）
+    implementation(libs.reorderable)
 }

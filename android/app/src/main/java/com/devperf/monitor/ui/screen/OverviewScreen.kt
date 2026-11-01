@@ -1,7 +1,11 @@
 package com.devperf.monitor.ui.screen
 
-import androidx.compose.animation.Crossfade
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,20 +18,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,13 +48,13 @@ import androidx.compose.ui.unit.sp
 import com.devperf.monitor.analysis.FocusedHealth
 import com.devperf.monitor.core.CoreMetricId
 import com.devperf.monitor.core.MetricViewMode
-import com.devperf.monitor.data.defaultMetricViewModes
 import com.devperf.monitor.data.storage.HistoryPoint
 import com.devperf.monitor.ui.MonitorViewModel
 import com.devperf.monitor.ui.kit.AnimatedNumber
 import com.devperf.monitor.ui.kit.BarSeries
 import com.devperf.monitor.ui.kit.EnterStagger
-import com.devperf.monitor.ui.kit.enterSpec
+import com.devperf.monitor.ui.kit.GlassButton
+import com.devperf.monitor.ui.kit.GlassButtonVariant
 import com.devperf.monitor.ui.kit.GlassCard
 import com.devperf.monitor.ui.kit.LevelBars
 import com.devperf.monitor.ui.kit.ProgressRing
@@ -53,16 +65,23 @@ import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.kit.shimmer
 import com.devperf.monitor.ui.theme.DesignTokens
 import com.devperf.monitor.ui.theme.LocalTokenColors
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyGridState
 
 /** 卡片上的迷你轨迹看最近 1 分钟。 */
 private const val CARD_WINDOW_SEC = 60
 
 /**
- * 主界面：综合评判 + 四个核心指标。
+ * 主界面：综合评判（固定 HERO）+ 一组可自由自定义的指标卡。
  *
- * 两条硬规则：
- * 1. 只显示这四个指标，其余一概不进界面；
- * 2. 采不到的指标不占位、不显示 0——没数据就当它不存在。
+ * 自定义能力（长按任意卡片进入编辑态）：
+ * 1. 拖动排序（任意卡片长按抓手拖动）；
+ * 2. 切换尺寸：半宽(1×1) ↔ 全宽(2×1)；
+ * 3. 切换显示形态：数字 / 波形 / 环形 / 柱状；
+ * 4. 一键重置单卡到默认。
+ * 顺序与每卡配置持久化到 SharedPreferences，重启保留。
+ *
+ * 两条硬规则保持不变：只显示能读到的指标；采不到的不占位、不显示 0。
  */
 @Composable
 fun OverviewScreen(
@@ -72,152 +91,535 @@ fun OverviewScreen(
     modifier: Modifier = Modifier,
 ) {
     val focused by viewModel.focused.collectAsState()
-    val settings by viewModel.settings.collectAsState()
-    // 深度指标卡（1.0.42 全量版）：这台设备能读到的所有深度指标全部进总览
     val deep by viewModel.deep.collectAsState()
     val deepCards = remember(deep) { buildDeepCards(deep) }
     val colors = LocalTokenColors.current
+    val context = LocalContext.current
 
     val visible = focused.readings.filter { it.available }
-    // 首帧还没采上来：先给骨架，别让界面先闪一下空白再跳成有内容
     val awaitingFirstSample = focused.updatedAtMs <= 0L && visible.isEmpty()
 
-    // 1.0.24：列表背景改为透明——壁纸（公司 logo）像 Kyant0 catalog demo 那样
-    // 直接可见，玻璃卡片浮在它上面。以前这里刷了一层不透明主题渐变，壁纸被完全
-    // 遮住，只能透过玻璃看见，logo 等于白换。
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            // 1.0.48：顶部留白从 72dp 收回 24dp（原为公司 logo 角标让位，角标已移除）
-            top = 24.dp,
-            end = 16.dp,
-            // 底部必须给浮动胶囊底栏让出空间（底栏高度 + 下边距 + 一点呼吸），
-            // 否则最后一张卡片会被底栏压住——1.0.9 之前没留，列表滚到底也看不见末尾。
-            // 同样处理底部安全区 inset。
-            bottom = DesignTokens.BottomBar.HEIGHT.dp +
-                DesignTokens.BottomBar.MARGIN_BOTTOM.dp + 16.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp),
-    ) {
+    // ---- 自定义布局（顺序 + 每卡尺寸/形态），持久化 ----
+    val allSlots: List<Slot> = remember(focused, deepCards) {
+        val core = CoreMetricId.ordered.map { id ->
+            Slot.Core(id, focused.readings.firstOrNull { it.id == id })
+        }
+        val deepSlots = deepCards.map { Slot.Deep(it) }
+        core + deepSlots
+    }
+    val existingKeys = allSlots.map { it.key }
+
+    val prefs = remember { OverviewLayoutPrefs.load(context) }
+    var order by remember {
+        mutableStateOf(syncOrder(prefs.order, existingKeys))
+    }
+    var config by remember { mutableStateOf(prefs.config) }
+    var editing by remember { mutableStateOf(false) }
+
+    fun persist() = OverviewLayoutPrefs.save(context, OverviewLayout(order, config))
+
+    val orderedSlots = remember(order, existingKeys) {
+        val orderSet = order.toSet()
+        (order.filter { it in existingKeys }) + existingKeys.filter { it !in orderSet }
+    }.mapNotNull { k -> allSlots.firstOrNull { it.key == k } }
+    val visibleSlots = orderedSlots.filter { slotAvailable(it) }
+
+    // onMove 闭包会被 reorderable 缓存，需用 State 持有最新 visibleSlots 避免用旧列表排序
+    val visibleSlotsState = rememberUpdatedState(visibleSlots)
+
+    val lazyGridState = rememberLazyGridState()
+    val reorderableState = rememberReorderableLazyGridState(lazyGridState) { from, to ->
+        // 网格第 0 项是固定的综合评判卡，可排卡片从索引 1 起；减去偏移得到 visibleSlots 下标
+        val vs = visibleSlotsState.value
+        val fromSlot = vs.getOrNull(from.index - 1) ?: return@rememberReorderableLazyGridState
+        val toSlot = vs.getOrNull(to.index - 1) ?: return@rememberReorderableLazyGridState
+        val newOrder = order.toMutableList()
+        val fi = newOrder.indexOf(fromSlot.key)
+        val ti = newOrder.indexOf(toSlot.key)
+        if (fi < 0 || ti < 0) return@rememberReorderableLazyGridState
+        newOrder.removeAt(fi)
+        newOrder.add(ti, fromSlot.key)
+        order = newOrder
+        persist()
+    }
+
+    fun updateConfig(key: String, transform: (CardConfig) -> CardConfig) {
+        val slot = allSlots.firstOrNull { it.key == key } ?: return
+        val base = config[key] ?: CardConfig(CardSize.HALF, defaultModeFor(slot))
+        config = config.toMutableMap().apply { put(key, transform(base)) }.toMap()
+        persist()
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
         if (awaitingFirstSample) {
-            items(count = 5, key = { "skeleton-$it" }) { index ->
-                SkeletonCard(index = index)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp, top = 24.dp, end = 16.dp,
+                    bottom = DesignTokens.BottomBar.HEIGHT.dp +
+                        DesignTokens.BottomBar.MARGIN_BOTTOM.dp + 16.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp),
+            ) {
+                item(span = { GridItemSpan(2) }) { SkeletonCard(index = 0, full = true) }
+                items(count = 4, key = { "sk-$it" }) { index -> SkeletonCard(index = index, full = false) }
             }
-            return@LazyColumn
-        }
-
-        // 1.0.49：补上信息层级——Bento 网格只是排布，真正让画面「有设计感」的
-        // 是分区标题带来的节奏（大 Hero → 分区小标 → 卡片群）。小标用次级色
-        // 的小字号 + 字距，不抢卡片戏份（Apple HIG 的 section header 做法）。
-        item(key = "cap_hero") {
-            OverviewSectionCaption(text = "综合评判")
-        }
-
-        item(key = "health") {
-            EnterStagger(index = 0) {
-                HealthCard(result = focused.health)
-            }
-        }
-
-        // 1.0.51 多形态 Bento（不再全是同款半宽卡）：
-        // - 首个可见指标 → 全宽「特性卡」：大数字 + 面积波形 + 最值标注；
-        // - 其余指标 → 半宽小卡，按指标类型分配专属形态：
-        //   内存 → 环形 / 温度 → 电平条 / 刷新率 → 柱状 / 帧率 → 波形；
-        // - 落单的最后一张占满整行。
-        if (visible.isNotEmpty()) {
-            item(key = "feature") {
-                EnterStagger(index = 1) {
-                    FeatureMetricCard(
-                        reading = visible.first(),
-                        history = viewModel.history(visible.first().id.source, CARD_WINDOW_SEC),
-                        onClick = { onOpenDetail(visible.first().id) },
-                    )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                state = lazyGridState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = if (editing) 56.dp else 24.dp,
+                    end = 16.dp,
+                    bottom = DesignTokens.BottomBar.HEIGHT.dp +
+                        DesignTokens.BottomBar.MARGIN_BOTTOM.dp + 16.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp),
+            ) {
+                // 综合评判：固定 HERO，不参与拖动/缩放
+                item(key = "health", span = { GridItemSpan(2) }) {
+                    EnterStagger(index = 0) { HealthCard(result = focused.health) }
                 }
-            }
-        }
-        val rest = visible.drop(1)
-        itemsIndexed(
-            items = rest.chunked(2),
-            key = { _, row -> row.joinToString("_") { it.id.name } },
-        ) { rowIndex, row ->
-            if (row.size == 2) {
-                Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp)) {
-                    row.forEachIndexed { col, reading ->
-                        Box(Modifier.weight(1f)) {
-                            EnterStagger(index = rowIndex * 2 + col + 2) {
-                                HalfMetricCard(
-                                    reading = reading,
-                                    history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
-                                    onClick = { onOpenDetail(reading.id) },
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                val reading = row.first()
-                EnterStagger(index = rowIndex * 2 + 2) {
-                    HalfMetricCard(
-                        reading = reading,
-                        history = viewModel.history(reading.id.source, CARD_WINDOW_SEC),
-                        onClick = { onOpenDetail(reading.id) },
-                    )
-                }
-            }
-        }
 
-        // 深度指标卡：同样两列 Bento（数值小卡），落单的占满整行。
-        val deepRows = deepCards.chunked(2)
-        if (deepRows.isNotEmpty()) {
-            item(key = "cap_deep") {
-                OverviewSectionCaption(text = "深度指标", topExtra = true)
-            }
-        }
-        itemsIndexed(items = deepRows, key = { _, c -> "deep-${c.first().key}" }) { rowIndex, row ->
-            if (row.size == 2) {
-                Row(horizontalArrangement = Arrangement.spacedBy(DesignTokens.Surface.GAP.dp)) {
-                    row.forEachIndexed { col, card ->
-                        Box(Modifier.weight(1f)) {
-                            EnterStagger(index = rowIndex * 2 + col + 1 + visible.size) {
-                                DeepCard(
-                                    card = card,
-                                    history = if (card.value != null) {
-                                        viewModel.deepHistory(card.key, CARD_WINDOW_SEC)
-                                    } else {
-                                        emptyList()
-                                    },
-                                    compact = true,
-                                    onClick = { onOpenDeepDetail(card.key) },
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                val card = row.first()
-                EnterStagger(index = rowIndex * 2 + 1 + visible.size) {
-                    DeepCard(
-                        card = card,
-                        history = if (card.value != null) {
-                            viewModel.deepHistory(card.key, CARD_WINDOW_SEC)
+                itemsIndexed(
+                    items = visibleSlots,
+                    key = { _, slot -> slot.key },
+                    span = { index, _ -> GridItemSpan(config[visibleSlots[index].key]?.size?.span ?: 1) },
+                ) { _, slot ->
+                    ReorderableItem(reorderableState, key = slot.key) { _ ->
+                        // draggableHandle / longPressDraggableHandle 是 ReorderableItem 作用域内的成员扩展，
+                        // 必须在此处创建再往下传：编辑态长按卡片即可拖动排序。
+                        val dragModifier = if (editing) {
+                            Modifier.longPressDraggableHandle()
                         } else {
-                            emptyList()
-                        },
-                        onClick = { onOpenDeepDetail(card.key) },
-                    )
+                            Modifier
+                        }
+                        val cfg = config[slot.key]
+                            ?: CardConfig(CardSize.HALF, defaultModeFor(slot))
+                        CustomizableMetricCard(
+                            slot = slot,
+                            cfg = cfg,
+                            editing = editing,
+                            dragModifier = dragModifier,
+                            viewModel = viewModel,
+                            onEnterEdit = { editing = true },
+                            onToggleSize = { updateConfig(slot.key) { c -> c.copy(size = if (c.size == CardSize.FULL) CardSize.HALF else CardSize.FULL) } },
+                            onCycleMode = { updateConfig(slot.key) { c -> c.copy(mode = cycleMode(c.mode)) } },
+                            onReset = { config = config - slot.key; persist() },
+                            onOpen = {
+                                when (slot) {
+                                    is Slot.Core -> slot.reading?.let { onOpenDetail(it.id) }
+                                    is Slot.Deep -> onOpenDeepDetail(slot.card.key)
+                                }
+                            },
+                        )
+                    }
+                }
+
+                if (visible.isEmpty()) {
+                    item(key = "empty", span = { GridItemSpan(2) }) { EmptyState() }
                 }
             }
         }
 
-        if (visible.isEmpty()) {
-            item(key = "empty") {
-                EmptyState()
+        // 右上角编辑开关（浮钮，不占网格索引，避免拖动下标错位）
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 10.dp, end = 14.dp),
+            contentAlignment = Alignment.TopEnd,
+        ) {
+            Column(horizontalAlignment = Alignment.End) {
+                GlassButton(
+                    text = if (editing) "完成" else "编辑",
+                    onClick = { editing = !editing },
+                    variant = GlassButtonVariant.SECONDARY,
+                    compact = true,
+                )
+                if (editing) {
+                    Text(
+                        text = "拖动排序 · 点把手缩放 · 点形态切换",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.padding(top = 6.dp, end = 4.dp),
+                    )
+                }
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// 自定义卡片模型 / 持久化
+// ---------------------------------------------------------------------------
+
+/** 总览里的一张可自定义卡片（核心指标或深度指标）。 */
+private sealed interface Slot {
+    val key: String
+    data class Core(val id: CoreMetricId, val reading: MonitorViewModel.CoreReading?) : Slot {
+        override val key get() = "core:${id.name}"
+    }
+    data class Deep(val card: DeepCardData) : Slot {
+        override val key get() = "deep:${card.key}"
+    }
+}
+
+private enum class CardSize(val span: Int) {
+    HALF(1), FULL(2)
+}
+
+private data class CardConfig(val size: CardSize, val mode: MetricViewMode)
+
+private data class OverviewLayout(
+    val order: List<String>,
+    val config: Map<String, CardConfig>,
+)
+
+/** 顺序对齐：保留已保存顺序，并把新出现的卡追加到末尾。 */
+private fun syncOrder(saved: List<String>, existing: List<String>): List<String> {
+    val savedSet = saved.toSet()
+    return (saved.filter { it in existing }) + existing.filter { it !in savedSet }
+}
+
+private fun slotAvailable(slot: Slot): Boolean = when (slot) {
+    is Slot.Core -> slot.reading?.available == true
+    is Slot.Deep -> slot.card.display.isNotBlank() && slot.card.display != "—"
+}
+
+private fun defaultModeFor(slot: Slot): MetricViewMode = when {
+    slot is Slot.Core && slot.reading != null -> when (slot.reading.id) {
+        CoreMetricId.MEMORY_RATIO -> MetricViewMode.RING
+        CoreMetricId.DEVICE_TEMP -> MetricViewMode.BARS
+        CoreMetricId.REFRESH_RATE -> MetricViewMode.BARS
+        CoreMetricId.FPS -> MetricViewMode.WAVE
+        else -> MetricViewMode.NUMBER
+    }
+    else -> MetricViewMode.NUMBER
+}
+
+/** 形态循环：数字 → 波形 → 环形 → 柱状 → 数字。 */
+private fun cycleMode(m: MetricViewMode): MetricViewMode = when (m) {
+    MetricViewMode.NUMBER -> MetricViewMode.WAVE
+    MetricViewMode.WAVE -> MetricViewMode.RING
+    MetricViewMode.RING -> MetricViewMode.BARS
+    MetricViewMode.BARS -> MetricViewMode.NUMBER
+}
+
+/** 环形只适用于 0~100 有界值，越界回落到数字。 */
+private fun resolveMode(m: MetricViewMode, value: Float?): MetricViewMode =
+    if (m == MetricViewMode.RING && (value == null || value < 0f || value > 100f)) {
+        MetricViewMode.NUMBER
+    } else {
+        m
+    }
+
+/**
+ * 自定义卡持久化：SharedPreferences，文本格式避免引入 JSON 库。
+ * order 用 '|' 连接；config 用 "key~SIZE~MODE" 再用 '|' 连接。
+ */
+private object OverviewLayoutPrefs {
+    private const val NAME = "overview_layout"
+    private const val K_ORDER = "order"
+    private const val K_CONFIG = "config"
+
+    fun load(context: Context): OverviewLayout {
+        val sp = context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+        val order = sp.getString(K_ORDER, null)
+            ?.split('|')?.filter { it.isNotEmpty() } ?: emptyList()
+        val config = sp.getString(K_CONFIG, null)
+            ?.split('|')?.filter { it.isNotEmpty() }?.mapNotNull { part ->
+                val seg = part.split('~')
+                if (seg.size == 3) {
+                    val size = if (seg[1] == "FULL") CardSize.FULL else CardSize.HALF
+                    val mode = runCatching { MetricViewMode.valueOf(seg[2]) }
+                        .getOrNull() ?: MetricViewMode.NUMBER
+                    seg[0] to CardConfig(size, mode)
+                } else {
+                    null
+                }
+            }?.toMap() ?: emptyMap()
+        return OverviewLayout(order, config)
+    }
+
+    fun save(context: Context, layout: OverviewLayout) {
+        val sp = context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+        sp.edit().apply {
+            putString(K_ORDER, layout.order.joinToString("|"))
+            putString(
+                K_CONFIG,
+                layout.config.entries.joinToString("|") { (k, c) ->
+                    "$k~${c.size.name}~${c.mode.name}"
+                },
+            )
+        }.apply()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 可自定义指标卡
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun CustomizableMetricCard(
+    slot: Slot,
+    cfg: CardConfig,
+    editing: Boolean,
+    dragModifier: Modifier = Modifier,
+    viewModel: MonitorViewModel,
+    onEnterEdit: () -> Unit,
+    onToggleSize: () -> Unit,
+    onCycleMode: () -> Unit,
+    onReset: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    val colors = LocalTokenColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+
+    val data = when (slot) {
+        is Slot.Core -> {
+            // 仅在可见槽位（已采到）渲染，reading 必非空
+            val r = slot.reading!!
+            val history = viewModel.history(r.id.source, CARD_WINDOW_SEC).map { it.value }
+            CardData(
+                label = r.id.label,
+                unit = r.id.unit,
+                value = r.value,
+                display = r.value?.let { "%.${r.id.decimals}f".format(it) } ?: "—",
+                accent = metricColor(r.id.source.colorKey),
+                history = history,
+                decimals = r.id.decimals,
+                isText = false,
+            )
+        }
+        is Slot.Deep -> {
+            val c = slot.card
+            CardData(
+                label = c.label,
+                unit = c.unit,
+                value = c.value,
+                display = c.display,
+                accent = metricColor(c.colorKey),
+                history = viewModel.deepHistory(c.key, CARD_WINDOW_SEC),
+                decimals = 0,
+                isText = c.value == null,
+            )
+        }
+    }
+
+    val mode = resolveMode(cfg.mode, data.value)
+    val isFull = cfg.size == CardSize.FULL
+    val baseHeight = if (isFull) 184.dp else 156.dp
+    val height = if (editing) baseHeight + 26.dp else baseHeight
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .pressScale(interactionSource)
+            .then(dragModifier),
+        shape = RoundedCornerShape(DesignTokens.Radius.CARD.dp),
+        onClick = { if (!editing) { haptics.tick(); onOpen() } },
+        interactionSource = interactionSource,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { },
+                    onLongClick = onEnterEdit,
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = data.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textSecondary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (editing) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DragHandle(
+                            modifier = Modifier.padding(end = 8.dp),
+                            tint = colors.textSecondary,
+                        )
+                        PillButton(
+                            text = if (isFull) "全宽" else "半宽",
+                            onClick = onToggleSize,
+                            tint = colors.textSecondary,
+                        )
+                        PillButton(text = mode.label, onClick = onCycleMode, tint = colors.textSecondary)
+                        PillButton(text = "重置", onClick = onReset, tint = colors.danger)
+                    }
+                } else {
+                    Text(
+                        text = mode.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = data.accent.copy(alpha = 0.75f),
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                when (mode) {
+                    MetricViewMode.RING -> if (data.value != null && data.value in 0f..100f) {
+                        ProgressRing(
+                            progress = data.value / 100f,
+                            centerText = data.value.toInt().toString(),
+                            caption = data.unit,
+                            color = data.accent,
+                            trackColor = data.accent.copy(alpha = 0.18f),
+                            modifier = Modifier.size(if (isFull) 96.dp else 72.dp),
+                        )
+                    } else {
+                        NumberContent(data)
+                    }
+                    MetricViewMode.WAVE -> if (data.history.size >= 2) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Sparkline(
+                                points = data.history,
+                                color = data.accent,
+                                fillAlpha = 0.26f,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                            )
+                            MiniValue(data)
+                        }
+                    } else {
+                        NumberContent(data)
+                    }
+                    MetricViewMode.BARS -> if (data.history.size >= 2) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            BarSeries(
+                                points = data.history,
+                                color = data.accent,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                            )
+                            MiniValue(data)
+                        }
+                    } else {
+                        NumberContent(data)
+                    }
+                    else -> NumberContent(data)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NumberContent(data: CardData) {
+    if (data.isText) {
+        Text(
+            text = data.display,
+            style = if (data.display.length <= 8) {
+                MaterialTheme.typography.headlineSmall
+            } else {
+                MaterialTheme.typography.bodyMedium
+            },
+            color = data.accent,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+    } else {
+        Row(verticalAlignment = Alignment.Bottom) {
+            AnimatedNumber(
+                value = data.value ?: 0f,
+                intervalMs = 0L,
+                decimals = data.decimals,
+                color = data.accent,
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            if (data.unit.isNotBlank()) {
+                Text(
+                    text = " ${data.unit}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LocalTokenColors.current.textSecondary,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniValue(data: CardData) {
+    if (data.isText) return
+    Text(
+        text = data.display + if (data.unit.isNotBlank()) " ${data.unit}" else "",
+        style = MaterialTheme.typography.labelSmall,
+        color = LocalTokenColors.current.textSecondary.copy(alpha = 0.8f),
+    )
+}
+
+@Composable
+private fun PillButton(text: String, onClick: () -> Unit, tint: Color) {
+    Box(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .background(
+                LocalTokenColors.current.surface.copy(alpha = 0.5f),
+                RoundedCornerShape(8.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(text = text, style = MaterialTheme.typography.labelSmall, color = tint)
+    }
+}
+
+@Composable
+private fun DragHandle(modifier: Modifier, tint: Color) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        repeat(2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(3) {
+                    Box(
+                        Modifier
+                            .size(4.dp)
+                            .background(tint.copy(alpha = 0.5f), CircleShape),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class CardData(
+    val label: String,
+    val unit: String,
+    val value: Float?,
+    val display: String,
+    val accent: Color,
+    val history: List<Float>,
+    val decimals: Int,
+    val isText: Boolean,
+)
 
 // ---------------------------------------------------------------------------
 // 深度指标卡（1.0.42 全量版）
@@ -491,15 +893,15 @@ private fun effectiveMode(id: CoreMetricId, mode: MetricViewMode): MetricViewMod
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun SkeletonCard(index: Int) {
+private fun SkeletonCard(index: Int, full: Boolean) {
     val colors = LocalTokenColors.current
     val shape = RoundedCornerShape(
-        (if (index == 0) DesignTokens.Radius.LARGE else DesignTokens.Radius.CARD).dp,
+        (if (full) DesignTokens.Radius.LARGE else DesignTokens.Radius.CARD).dp,
     )
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (index == 0) 190.dp else 132.dp)
+            .height(if (full) 190.dp else 132.dp)
             .background(
                 color = colors.surface.copy(alpha = 0.42f),
                 shape = shape,
@@ -514,7 +916,7 @@ private fun SkeletonCard(index: Int) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(if (index == 0) 128.dp else 76.dp)
+                    .size(if (full) 128.dp else 76.dp)
                     .background(
                         color = colors.textSecondary.copy(alpha = 0.18f),
                         shape = RoundedCornerShape(DesignTokens.Radius.PILL.dp),
@@ -594,6 +996,7 @@ private fun OverviewSectionCaption(text: String, topExtra: Boolean = false) {
         ),
     )
 }
+
 @Composable
 private fun HealthCard(result: FocusedHealth.Result) {
     val colors = LocalTokenColors.current
@@ -730,7 +1133,7 @@ private fun DimensionBar(
 }
 
 // ---------------------------------------------------------------------------
-// 指标卡
+// 指标卡（历史遗留：原 Bento 多形态实现，保留以兼容监测/详情页引用）
 // ---------------------------------------------------------------------------
 
 /**

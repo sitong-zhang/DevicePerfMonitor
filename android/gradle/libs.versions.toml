@@ -30,6 +30,10 @@ shizuku = "13.1.5"      # Apache-2.0(?) 见 README，全局 FPS 提权通道（�
 # AAR metadata 是 minCompileSdk=37、要 AGP 9.1+，本工程 AGP 8.13.2 + compileSdk 36
 # 装不了 SDK 37。vendor 的是纯 androidx.compose.* 源码，无 JB Compose 专有 API。
 kyantShapes = "1.2.0"
+# 总览卡片自定义（长按拖动/排序/缩放/切形态）：Calvin-LL/Reorderable
+# 高质量开源拖拽排序库（Lawnchair/ProtonVPN/bilibili漫画等在用，Apache-2.0），
+# 原生支持 LazyVerticalGrid 不同 span（launcher 式 1x1→2x2 缩放）。
+reorderable = "3.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -59,6 +63,7 @@ vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", ve
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 kyant-shapes = { group = "io.github.kyant0", name = "shapes", version.ref = "kyantShapes" }
+reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 
 [plugins]
 android-application = { id = "com.android.application" }

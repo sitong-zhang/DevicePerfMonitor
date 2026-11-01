@@ -1,6 +1,17 @@
 package com.devperf.monitor.ui.screen
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
+import android.os.BatteryManager
+import android.os.StatFs
+import android.telephony.TelephonyManager
+import android.util.DisplayMetrics
+import android.view.WindowManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +64,9 @@ import com.devperf.monitor.ui.kit.rememberHaptics
 import com.devperf.monitor.ui.theme.LocalTokenColors
 import com.devperf.monitor.ui.theme.DesignTokens
 import kotlinx.coroutines.launch
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -515,6 +529,8 @@ fun DevicesScreen(
     val colors = LocalTokenColors.current
     val context = LocalContext.current
     val app = context.applicationContext as MonitorApp
+    // 一次采集这台设备能读到的所有信息（分组），展示时逐项列出
+    val sections = remember { collectDeviceInfo(context) }
 
     EnterStagger(index = 0) {
         Column(
@@ -533,25 +549,13 @@ fun DevicesScreen(
         ) {
             AccountTopBar(title = "我的设备", onBack = onBack)
 
-            GlassSectionHeader(text = "当前设备")
-            GlassPanel {
-                GlassInfoRow(label = "型号", value = "${Build.MANUFACTURER} ${Build.MODEL}")
-                GlassInfoRow(label = "系统", value = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-                GlassInfoRow(label = "应用版本", value = BuildConfig.VERSION_NAME)
-            }
-
-            GlassSectionHeader(text = "数据上报")
-            GlassPanel {
-                Text(
-                    text = "本机性能数据由后台每小时自动同步一次；" +
-                        "总览 / 监测页实时采集，管理端可下发管控与公告。",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.textSecondary,
-                    modifier = Modifier.padding(
-                        horizontal = DesignTokens.Spacing.S12.dp,
-                        vertical = DesignTokens.Spacing.S8.dp,
-                    ),
-                )
+            sections.forEach { section ->
+                GlassSectionHeader(text = section.first)
+                GlassPanel {
+                    section.second.forEach { (label, value) ->
+                        GlassInfoRow(label = label, value = value)
+                    }
+                }
             }
 
             GlassSectionHeader(text = "账号")
@@ -561,6 +565,183 @@ fun DevicesScreen(
             }
         }
     }
+}
+
+/**
+ * 采集这台设备能读到的全部信息：标识 / 系统 / 芯片与内存 / 屏幕 / 电池 / 网络。
+ * 每一项都来自公开 API，读不到的字段如实留空或跳过——不编造。
+ */
+private fun collectDeviceInfo(context: android.content.Context): List<Pair<String, List<Pair<String, String>>>> {
+    val abis = Build.SUPPORTED_ABIS?.joinToString(", ") ?: "—"
+    val buildDate = try {
+        SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(Build.TIME))
+    } catch (_: Exception) {
+        "—"
+    }
+    val kernel = readKernelVersion()
+
+    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+    val memInfo = android.app.ActivityManager.MemoryInfo()
+    am?.getMemoryInfo(memInfo)
+    val ramGB = if (memInfo.totalMem > 0) {
+        "%.2f GB".format(memInfo.totalMem / 1024.0 / 1024.0 / 1024.0)
+    } else {
+        "读取失败"
+    }
+
+    val stat = try {
+        StatFs(context.filesDir.absolutePath)
+    } catch (_: Exception) {
+        null
+    }
+    val totalStorage = stat?.let {
+        val bytes = it.blockCountLong * it.blockSizeLong
+        "%.1f GB".format(bytes / 1024.0 / 1024.0 / 1024.0)
+    } ?: "读取失败"
+    val freeStorage = stat?.let {
+        val bytes = it.availableBlocksLong * it.blockSizeLong
+        "%.1f GB".format(bytes / 1024.0 / 1024.0 / 1024.0)
+    } ?: "—"
+
+    // 屏幕：真实分辨率 + 密度 + 刷新率（display 在新版本被标记过时但依旧可用）
+    val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+    val metrics = DisplayMetrics()
+    var refreshRate = 0f
+    @Suppress("DEPRECATION")
+    wm?.defaultDisplay?.apply {
+        getRealMetrics(metrics)
+        refreshRate = this.refreshRate
+    }
+    val density = when (metrics.densityDpi) {
+        in 0..120 -> "ldpi"
+        in 121..160 -> "mdpi"
+        in 161..240 -> "hdpi"
+        in 241..320 -> "xhdpi"
+        in 321..480 -> "xxhdpi"
+        in 481..640 -> "xxxhdpi"
+        else -> "${metrics.densityDpi} dpi"
+    }
+    val resolution = if (metrics.widthPixels > 0) {
+        "${metrics.widthPixels} × ${metrics.heightPixels}（${density}）"
+    } else {
+        "读取失败"
+    }
+
+    // 电池：粘性广播读当前电量与状态
+    val battery = runCatching {
+        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+        val statusText = when (status) {
+            BatteryManager.BATTERY_STATUS_CHARGING -> "充电中"
+            BatteryManager.BATTERY_STATUS_FULL -> "已充满"
+            BatteryManager.BATTERY_STATUS_DISCHARGING -> "放电中"
+            BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "未充电"
+            else -> "未知"
+        }
+        val plugText = when (plugged) {
+            0 -> ""
+            BatteryManager.BATTERY_PLUGGED_AC -> "（电源）"
+            BatteryManager.BATTERY_PLUGGED_USB -> "（USB）"
+            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "（无线）"
+            else -> ""
+        }
+        "$pct% · $statusText$plugText"
+    }.getOrDefault("读取失败")
+
+    // 网络：当前连接类型
+    val network = runCatching {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val caps = cm?.getNetworkCapabilities(cm.activeNetwork)
+        when {
+            caps == null -> "未连接"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                "移动数据（${networkTypeName(tm?.dataNetworkType ?: 0)}）"
+            }
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "以太网"
+            else -> "其他"
+        }
+    }.getOrDefault("读取失败")
+
+    val socModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Build.SOC_MODEL.takeIf { it.isNotBlank() } ?: "—"
+    } else {
+        "—"
+    }
+
+    return listOf(
+        "设备标识" to listOf(
+            "品牌" to (Build.BRAND.takeIf { it.isNotBlank() } ?: "—"),
+            "厂商" to (Build.MANUFACTURER.takeIf { it.isNotBlank() } ?: "—"),
+            "型号" to (Build.MODEL.takeIf { it.isNotBlank() } ?: "—"),
+            "产品名" to (Build.PRODUCT.takeIf { it.isNotBlank() } ?: "—"),
+            "设备名" to (Build.DEVICE.takeIf { it.isNotBlank() } ?: "—"),
+            "主板" to (Build.BOARD.takeIf { it.isNotBlank() } ?: "—"),
+            "硬件" to (Build.HARDWARE.takeIf { it.isNotBlank() } ?: "—"),
+        ),
+        "系统与内核" to listOf(
+            "Android 版本" to "Android ${Build.VERSION.RELEASE}",
+            "API 级别" to "${Build.VERSION.SDK_INT}",
+            "安全补丁" to (Build.VERSION.SECURITY_PATCH.takeIf { it.isNotBlank() } ?: "—"),
+            "内核版本" to kernel,
+            "构建号" to (Build.DISPLAY.takeIf { it.isNotBlank() } ?: "—"),
+            "构建时间" to buildDate,
+            "系统语言" to Locale.getDefault().displayLanguage,
+            "指令集(ABI)" to abis,
+        ),
+        "芯片与存储" to listOf(
+            "SoC 型号" to socModel,
+            "运行内存(RAM)" to ramGB,
+            "可用存储" to freeStorage,
+            "存储总容量" to totalStorage,
+        ),
+        "屏幕" to listOf(
+            "分辨率" to resolution,
+            "刷新率" to if (refreshRate > 0) "%.0f Hz".format(refreshRate) else "读取失败",
+        ),
+        "电池" to listOf(
+            "电量与状态" to battery,
+        ),
+        "网络" to listOf(
+            "当前连接" to network,
+        ),
+        "应用" to listOf(
+            "应用版本" to BuildConfig.VERSION_NAME,
+            "构建类型" to BuildConfig.BUILD_TYPE,
+        ),
+    )
+}
+
+/** 读 /proc/version 拿内核版本（读不到回退到指纹里的内核串）。 */
+private fun readKernelVersion(): String {
+    return runCatching {
+        val f = File("/proc/version")
+        if (f.exists()) {
+            BufferedReader(FileReader(f)).use { it.readLine()?.trim() ?: "—" }
+        } else {
+            "—"
+        }
+    }.getOrDefault("—")
+}
+
+/** 移动网络类型名（粗略映射）。 */
+private fun networkTypeName(type: Int): String = when (type) {
+    1 -> "2G(GPRS)"
+    2 -> "2G(EDGE)"
+    3 -> "3G(UMTS)"
+    8 -> "3G(HSDPA)"
+    9 -> "HSUPA"
+    10 -> "HSPA"
+    13 -> "4G(LTE)"
+    14 -> "eHRPD"
+    15 -> "HSPA+"
+    20 -> "4G(LTE_CA)"
+    else -> if (type > 0) "NR(5G?)" else "未知"
 }
 
 // ---------------------------------------------------------------------------
